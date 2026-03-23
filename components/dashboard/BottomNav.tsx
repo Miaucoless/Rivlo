@@ -14,13 +14,13 @@ import {
 import { cn } from '@/lib/utils'
 
 const NAV_ITEMS = [
-  { label: 'Home',       href: '/dashboard',  icon: LayoutDashboard },
-  { label: 'Meals',      href: '/meals',       icon: Apple },
-  { label: 'Workouts',   href: '/workouts',    icon: Dumbbell },
-  { label: 'Tracking',   href: '/tracking',    icon: BarChart3 },
-  { label: 'Calendar',   href: '/calendar',    icon: Calendar },
-  { label: 'Journal',    href: '/journal',     icon: BookOpen },
-  { label: 'Supps',      href: '/supplements', icon: Pill },
+  { label: 'Home',       href: '/dashboard/dashboard',  icon: LayoutDashboard },
+  { label: 'Meals',      href: '/dashboard/meals',       icon: Apple },
+  { label: 'Workouts',   href: '/dashboard/workouts',    icon: Dumbbell },
+  { label: 'Tracking',   href: '/dashboard/tracking',    icon: BarChart3 },
+  { label: 'Calendar',   href: '/dashboard/calendar',    icon: Calendar },
+  { label: 'Journal',    href: '/dashboard/journal',     icon: BookOpen },
+  { label: 'Supps',      href: '/dashboard/supplements', icon: Pill },
 ]
 
 export function BottomNav() {

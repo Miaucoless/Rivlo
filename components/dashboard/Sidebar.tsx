@@ -23,13 +23,13 @@ import { useAppStore } from '@/store/useAppStore'
 import { toast } from 'sonner'
 
 const NAV_ITEMS = [
-  { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { label: 'Meals', href: '/meals', icon: Apple },
-  { label: 'Workouts', href: '/workouts', icon: Dumbbell },
-  { label: 'Tracking', href: '/tracking', icon: BarChart3 },
-  { label: 'Calendar', href: '/calendar', icon: Calendar },
-  { label: 'Journal', href: '/journal', icon: BookOpen },
-  { label: 'Supplements', href: '/supplements', icon: Pill },
+  { label: 'Dashboard', href: '/dashboard/dashboard', icon: LayoutDashboard },
+  { label: 'Meals', href: '/dashboard/meals', icon: Apple },
+  { label: 'Workouts', href: '/dashboard/workouts', icon: Dumbbell },
+  { label: 'Tracking', href: '/dashboard/tracking', icon: BarChart3 },
+  { label: 'Calendar', href: '/dashboard/calendar', icon: Calendar },
+  { label: 'Journal', href: '/dashboard/journal', icon: BookOpen },
+  { label: 'Supplements', href: '/dashboard/supplements', icon: Pill },
 ]
 
 export function Sidebar() {
@@ -59,7 +59,7 @@ export function Sidebar() {
         'flex items-center h-16 px-4 border-b border-border flex-shrink-0',
         sidebarCollapsed ? 'justify-center' : 'justify-between'
       )}>
-        <Link href="/dashboard" className="flex items-center gap-2.5">
+        <Link href="/dashboard/dashboard" className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center shadow-md shadow-emerald-500/20 flex-shrink-0">
             <Zap className="w-4 h-4 text-white" strokeWidth={2.5} />
           </div>
@@ -158,11 +158,11 @@ export function Sidebar() {
 
         {/* Settings */}
         <Link
-          href="/settings"
+          href="/dashboard/settings"
           className={cn(
             'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 text-muted-foreground hover:bg-accent hover:text-foreground',
             sidebarCollapsed ? 'justify-center' : '',
-            pathname === '/settings' ? 'bg-primary/10 text-primary' : ''
+            pathname === '/dashboard/settings' ? 'bg-primary/10 text-primary' : ''
           )}
           title={sidebarCollapsed ? 'Settings' : undefined}
         >

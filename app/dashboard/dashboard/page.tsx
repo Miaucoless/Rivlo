@@ -245,7 +245,7 @@ export default function DashboardPage() {
               <Badge
                 variant="outline"
                 className="text-[10px] border-emerald-500/40 bg-emerald-500/10 text-emerald-300 cursor-pointer hover:bg-emerald-500/20"
-                onClick={() => router.push('/workouts?resume=1')}
+                onClick={() => router.push('/dashboard/workouts?resume=1')}
               >
                 Paused workout ready
               </Badge>
@@ -259,7 +259,7 @@ export default function DashboardPage() {
               size="sm"
               variant="brand"
               className="gap-1.5 text-xs"
-              onClick={() => router.push('/workouts?resume=1')}
+              onClick={() => router.push('/dashboard/workouts?resume=1')}
             >
               <Dumbbell className="w-3.5 h-3.5" /> Continue Workout
             </Button>
@@ -268,7 +268,7 @@ export default function DashboardPage() {
               size="sm"
               variant="brand"
               className="gap-1.5 text-xs"
-              onClick={() => router.push('/workouts')}
+              onClick={() => router.push('/dashboard/workouts')}
             >
               <Plus className="w-3.5 h-3.5" /> Log Workout
             </Button>
@@ -508,7 +508,7 @@ export default function DashboardPage() {
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-sm font-semibold">Today&apos;s Workouts</CardTitle>
-                <a href="/workouts">
+                <a href="/dashboard/workouts">
                   <Button variant="outline" size="sm" className="gap-1.5">
                     <Plus className="w-3.5 h-3.5" />
                     Log Workout
@@ -869,10 +869,10 @@ export default function DashboardPage() {
               <p className="text-xs font-semibold mb-3">Quick Actions</p>
               <div className="grid grid-cols-2 gap-2">
                 {[
-                  { label: 'Meal Plan', icon: Apple, href: '/meals', color: 'text-emerald-500 bg-emerald-500/10' },
-                  { label: 'Log Weight', icon: BarChart3, href: '/tracking', color: 'text-emerald-500 bg-emerald-500/10' },
-                  { label: 'Calendar', icon: Calendar, href: '/calendar', color: 'text-emerald-500 bg-emerald-500/10' },
-                  { label: 'Journal', icon: BookOpen, href: '/journal', color: 'text-emerald-500 bg-emerald-500/10' },
+                  { label: 'Meal Plan', icon: Apple, href: '/dashboard/meals', color: 'text-emerald-500 bg-emerald-500/10' },
+                  { label: 'Log Weight', icon: BarChart3, href: '/dashboard/tracking', color: 'text-emerald-500 bg-emerald-500/10' },
+                  { label: 'Calendar', icon: Calendar, href: '/dashboard/calendar', color: 'text-emerald-500 bg-emerald-500/10' },
+                  { label: 'Journal', icon: BookOpen, href: '/dashboard/journal', color: 'text-emerald-500 bg-emerald-500/10' },
                 ].map((item) => {
                   const Icon = item.icon
                   return (

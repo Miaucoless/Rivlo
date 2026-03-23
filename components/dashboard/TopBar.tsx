@@ -34,14 +34,14 @@ const PAGE_TITLES: Record<string, string> = {
 }
 
 const SEARCH_ITEMS = [
-  { href: '/dashboard', title: 'Dashboard', description: 'See your daily overview, streaks, and progress snapshot.', keywords: ['home', 'overview', 'summary', 'stats'] },
-  { href: '/meals', title: 'Meal Planning', description: 'Log meals, search foods, and manage saved meal templates.', keywords: ['food', 'nutrition', 'calories', 'macros'] },
-  { href: '/workouts', title: 'Workouts', description: 'Search exercises, run sessions, and manage custom routines.', keywords: ['training', 'exercise', 'lift', 'gym'] },
-  { href: '/tracking', title: 'Progress Tracking', description: 'Track body metrics, habits, and long-term trends.', keywords: ['progress', 'metrics', 'body', 'check-in'] },
-  { href: '/calendar', title: 'Calendar', description: 'Review upcoming plans and your workout and meal activity by date.', keywords: ['schedule', 'planner', 'dates', 'timeline'] },
-  { href: '/journal', title: 'Journal', description: 'Write reflections and search past entries by mood or topic.', keywords: ['notes', 'mindset', 'mood', 'reflection'] },
-  { href: '/supplements', title: 'Supplements', description: 'Track vitamins, herbals, medications, and reminder schedules in one place.', keywords: ['vitamins', 'medicine', 'herbal', 'pills'] },
-  { href: '/settings', title: 'Settings', description: 'Update profile details, preferences, and reminder settings.', keywords: ['preferences', 'account', 'profile', 'notifications'] },
+  { href: '/dashboard/dashboard', title: 'Dashboard', description: 'See your daily overview, streaks, and progress snapshot.', keywords: ['home', 'overview', 'summary', 'stats'] },
+  { href: '/dashboard/meals', title: 'Meal Planning', description: 'Log meals, search foods, and manage saved meal templates.', keywords: ['food', 'nutrition', 'calories', 'macros'] },
+  { href: '/dashboard/workouts', title: 'Workouts', description: 'Search exercises, run sessions, and manage custom routines.', keywords: ['training', 'exercise', 'lift', 'gym'] },
+  { href: '/dashboard/tracking', title: 'Progress Tracking', description: 'Track body metrics, habits, and long-term trends.', keywords: ['progress', 'metrics', 'body', 'check-in'] },
+  { href: '/dashboard/calendar', title: 'Calendar', description: 'Review upcoming plans and your workout and meal activity by date.', keywords: ['schedule', 'planner', 'dates', 'timeline'] },
+  { href: '/dashboard/journal', title: 'Journal', description: 'Write reflections and search past entries by mood or topic.', keywords: ['notes', 'mindset', 'mood', 'reflection'] },
+  { href: '/dashboard/supplements', title: 'Supplements', description: 'Track vitamins, herbals, medications, and reminder schedules in one place.', keywords: ['vitamins', 'medicine', 'herbal', 'pills'] },
+  { href: '/dashboard/settings', title: 'Settings', description: 'Update profile details, preferences, and reminder settings.', keywords: ['preferences', 'account', 'profile', 'notifications'] },
 ] as const
 
 export function TopBar() {
@@ -394,14 +394,14 @@ export function TopBar() {
             {/* Nav items */}
             <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
               {[
-                { label: 'Dashboard',  href: '/dashboard',   icon: LayoutDashboard },
-                { label: 'Meals',      href: '/meals',        icon: Apple },
-                { label: 'Workouts',   href: '/workouts',     icon: Dumbbell },
-                { label: 'Tracking',   href: '/tracking',     icon: BarChart3 },
-                { label: 'Calendar',   href: '/calendar',     icon: Calendar },
-                { label: 'Journal',    href: '/journal',      icon: BookOpen },
-                { label: 'Supplements',href: '/supplements',  icon: Pill },
-                { label: 'Settings',   href: '/settings',     icon: Settings },
+                { label: 'Dashboard',  href: '/dashboard/dashboard',   icon: LayoutDashboard },
+                { label: 'Meals',      href: '/dashboard/meals',        icon: Apple },
+                { label: 'Workouts',   href: '/dashboard/workouts',     icon: Dumbbell },
+                { label: 'Tracking',   href: '/dashboard/tracking',     icon: BarChart3 },
+                { label: 'Calendar',   href: '/dashboard/calendar',     icon: Calendar },
+                { label: 'Journal',    href: '/dashboard/journal',      icon: BookOpen },
+                { label: 'Supplements',href: '/dashboard/supplements',  icon: Pill },
+                { label: 'Settings',   href: '/dashboard/settings',     icon: Settings },
               ].map(({ label, href, icon: Icon }) => {
                 const isActive = pathname === href || pathname.startsWith(href + '/')
                 return (
