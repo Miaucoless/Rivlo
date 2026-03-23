@@ -188,6 +188,7 @@ export interface WorkoutSet {
   resistance_level?: number
   watts?: number
   cadence_rpm?: number
+  interval_duration_sec?: number   // work duration per interval in seconds (sprint/HIIT mode)
   rest_seconds: number
   completed?: boolean
   actual_reps?: number
@@ -198,6 +199,7 @@ export interface WorkoutSet {
   actual_resistance_level?: number
   actual_watts?: number
   actual_cadence_rpm?: number
+  actual_interval_duration_sec?: number
 }
 
 export interface WorkoutExercise {

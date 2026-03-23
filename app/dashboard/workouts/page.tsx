@@ -64,7 +64,7 @@ interface MetProfile {
   gender: Gender
 }
 
-type ExerciseInputMode = 'strength' | 'treadmill' | 'run_walk' | 'bike' | 'rower' | 'level_cardio' | 'basic_cardio'
+type ExerciseInputMode = 'strength' | 'treadmill' | 'run_walk' | 'bike' | 'rower' | 'level_cardio' | 'basic_cardio' | 'interval'
 
 function isCardioExercise(exercise: WorkoutExercise['exercise']) {
   const name = exercise.name.toLowerCase()
@@ -86,6 +86,23 @@ function isTreadmillRunExercise(exercise: WorkoutExercise['exercise']) {
   return isTreadmillExercise(exercise) && exercise.name.toLowerCase().includes('run')
 }
 
+function isIntervalExercise(exercise: WorkoutExercise['exercise']) {
+  const name = exercise.name.toLowerCase()
+  return (
+    name.includes('sprint') ||
+    name.includes('hiit') ||
+    name.includes('interval') ||
+    name.includes('tabata') ||
+    name.includes('amrap') ||
+    name.includes('emom')
+  )
+}
+
+function isRunningIntervalExercise(exercise: WorkoutExercise['exercise']) {
+  const name = exercise.name.toLowerCase()
+  return isIntervalExercise(exercise) && (name.includes('run') || name.includes('sprint') || isTreadmillExercise(exercise))
+}
+
 function isAssistedPullExercise(exercise: WorkoutExercise['exercise']) {
   const name = exercise.name.toLowerCase()
   return name.includes('assisted pull-up') || name.includes('assisted chin-up')
@@ -103,6 +120,7 @@ function getExerciseInputMode(exercise: WorkoutExercise['exercise']): ExerciseIn
   const name = exercise.name.toLowerCase()
   const equipment = exercise.equipment.toLowerCase()
 
+  if (isIntervalExercise(exercise)) return 'interval'
   if (isTreadmillExercise(exercise)) return 'treadmill'
   if (isCardioExercise(exercise) && (name.includes('run') || name.includes('walk'))) return 'run_walk'
   if (equipment.includes('bike') || equipment.includes('cycling')) return 'bike'
@@ -141,6 +159,13 @@ function getDefaultSetMetrics(exercise: WorkoutExercise['exercise']) {
     case 'basic_cardio':
       return {
         machine_level: 5,
+      }
+    case 'interval':
+      return {
+        reps: 6,
+        interval_duration_sec: 20,
+        rest_seconds: 40,
+        ...(isRunningIntervalExercise(exercise) ? { speed_mph: 10 } : {}),
       }
     default:
       return {}
@@ -726,6 +751,7 @@ function WorkoutBuilderModal({
               weight_kg: lastSet?.weight_kg ?? 0,
               speed_mph: lastSet?.speed_mph,
               incline_pct: lastSet?.incline_pct,
+              interval_duration_sec: lastSet?.interval_duration_sec,
               rest_seconds: lastSet?.rest_seconds ?? 60,
             },
           ],
@@ -910,7 +936,16 @@ function WorkoutBuilderModal({
                 </div>
 
                 <div className="space-y-2">
-                  {inputMode === 'treadmill' ? (
+                  {inputMode === 'interval' ? (
+                    <div className={`grid ${isRunningIntervalExercise(exercise.exercise) ? 'grid-cols-[80px_1fr_1fr_1fr_1fr_auto]' : 'grid-cols-[80px_1fr_1fr_1fr_auto]'} gap-2 px-1 text-[10px] uppercase tracking-[0.12em] text-muted-foreground`}>
+                      <span>Round</span>
+                      <span>Intervals</span>
+                      <span>Work (sec)</span>
+                      <span>Rest (sec)</span>
+                      {isRunningIntervalExercise(exercise.exercise) && <span>Speed MPH</span>}
+                      <span />
+                    </div>
+                  ) : inputMode === 'treadmill' ? (
                     <div className="grid grid-cols-[80px_1fr_1fr_1fr_1fr_auto] gap-2 px-1 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
                       <span>Set</span>
                       <span>Minutes</span>
@@ -952,7 +987,43 @@ function WorkoutBuilderModal({
                     </div>
                   )}
                   {exercise.sets.map((set, setIndex) => (
-                    inputMode === 'treadmill' ? (
+                    inputMode === 'interval' ? (
+                      <div key={`${exercise.instanceId}-${setIndex}`} className={`grid ${isRunningIntervalExercise(exercise.exercise) ? 'grid-cols-[80px_1fr_1fr_1fr_1fr_auto]' : 'grid-cols-[80px_1fr_1fr_1fr_auto]'} gap-2`}>
+                        <div className="flex items-center px-3 text-sm font-medium text-muted-foreground">Rnd {set.set_number}</div>
+                        <Input
+                          type="number"
+                          min={1}
+                          value={formatNumericInput(set.reps)}
+                          onChange={(e) => updateSetField(exercise.instanceId, setIndex, 'reps', e.target.value === '' ? 1 : Math.max(1, Number(e.target.value)))}
+                          placeholder="# intervals"
+                        />
+                        <Input
+                          type="number"
+                          min={1}
+                          value={set.interval_duration_sec ?? ''}
+                          onChange={(e) => updateSetField(exercise.instanceId, setIndex, 'interval_duration_sec', e.target.value === '' ? 0 : Number(e.target.value))}
+                          placeholder="e.g. 20"
+                        />
+                        <Input
+                          type="number"
+                          min={0}
+                          value={formatNumericInput(set.rest_seconds)}
+                          onChange={(e) => updateSetField(exercise.instanceId, setIndex, 'rest_seconds', e.target.value === '' ? 0 : Number(e.target.value))}
+                          placeholder="e.g. 40"
+                        />
+                        {isRunningIntervalExercise(exercise.exercise) && (
+                          <Input
+                            type="number"
+                            min={0}
+                            step={0.1}
+                            value={set.speed_mph ?? ''}
+                            onChange={(e) => updateSetField(exercise.instanceId, setIndex, 'speed_mph', e.target.value === '' ? 0 : Number(e.target.value))}
+                            placeholder="e.g. 10"
+                          />
+                        )}
+                        <Button variant="ghost" size="icon-sm" onClick={() => setExercises((current) => current.map((item) => item.instanceId === exercise.instanceId ? { ...item, sets: item.sets.filter((_, index) => index !== setIndex).map((s, i) => ({ ...s, set_number: i + 1 })) } : item))} disabled={exercise.sets.length <= 1}><X className="h-3.5 w-3.5" /></Button>
+                      </div>
+                    ) : inputMode === 'treadmill' ? (
                       <div key={`${exercise.instanceId}-${setIndex}`} className="grid grid-cols-[80px_1fr_1fr_1fr_1fr_auto] gap-2">
                         <div className="flex items-center px-3 text-sm font-medium text-muted-foreground">
                           Set {set.set_number}
@@ -1042,7 +1113,7 @@ function WorkoutBuilderModal({
 
                 <Button type="button" size="sm" variant="outline" className="mt-3" onClick={() => addSetToExercise(exercise.instanceId)}>
                   <Plus className="mr-1 h-3.5 w-3.5" />
-                  Add set
+                  {inputMode === 'interval' ? 'Add round' : 'Add set'}
                 </Button>
               </div>
             })}

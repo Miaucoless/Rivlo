@@ -8,7 +8,7 @@ import { format, startOfWeek } from 'date-fns'
 import {
   ChefHat, ShoppingCart, Clock, Users, Flame,
   CheckCircle, Circle, Download, Plus, Zap, Pencil, Trash2, X, CalendarDays,
-  Coffee, Soup, Moon, Cookie, GlassWater, Search, Loader2, Globe, BookOpen,
+  Coffee, Soup, Moon, Cookie, GlassWater, Search, Loader2, Globe, BookOpen, ChevronDown,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -1885,6 +1885,7 @@ export default function MealsPage() {
   const [customIngAmount, setCustomIngAmount] = useState('')
   const [customIngUnit, setCustomIngUnit] = useState('g')
   const [addMealMode, setAddMealMode] = useState<'recipe' | 'saved' | 'custom'>('recipe')
+  const [expandedMeals, setExpandedMeals] = useState<Record<string, boolean>>({})
 
   const grocery = groceryList
   const today = getTodayISO()
@@ -2165,8 +2166,13 @@ export default function MealsPage() {
       macros: meal.macros,
       time: format(new Date(), 'h:mm a'),
       recipe: null,
-      meal_items: [],
-      entry_source: 'manual',
+      meal_items: meal.items.map(item => ({
+        name: item.matched_name,
+        macros: { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 },
+        amount: item.amount,
+        unit: item.unit,
+      })),
+      entry_source: 'saved',
     })
     toast.success(`${meal.name} added to ${mealTypeLabel(selectedMealType).toLowerCase()}.`)
   }
@@ -2400,7 +2406,6 @@ export default function MealsPage() {
           {MEAL_TYPES.map((mealType) => {
             const meals = todayMealsByType[mealType]
             const theme = mealTypeTheme(mealType)
-            // Aggregate total macros for this meal type
             const totalMacros = meals.reduce(
               (acc, m) => ({
                 calories: acc.calories + m.macros.calories,
@@ -2411,15 +2416,33 @@ export default function MealsPage() {
               { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 }
             )
 
+            type MealItem = NonNullable<MealLogEntry['meal_items']>[number]
+            type FlatRow =
+              | { kind: 'meal'; meal: MealLogEntry; isExpandable: boolean }
+              | { kind: 'flat-item'; meal: MealLogEntry; item: MealItem; itemIdx: number }
+
+            const rows: FlatRow[] = meals.flatMap((meal): FlatRow[] => {
+              const isExpandable = !!meal.recipe || meal.entry_source === 'saved'
+              if (!isExpandable && meal.meal_items && meal.meal_items.length > 0) {
+                return meal.meal_items.map((item, itemIdx): FlatRow => ({
+                  kind: 'flat-item',
+                  meal,
+                  item,
+                  itemIdx,
+                }))
+              }
+              return [{ kind: 'meal', meal, isExpandable }]
+            })
+
             return (
-              <div key={mealType} className="bg-card border border-border/50 rounded-xl overflow-hidden">
-                {/* Section header with total macros */}
-                <div className="flex items-center justify-between px-4 py-3 border-b border-border/40">
+              <div key={mealType} className="bg-card border border-border/20 rounded-xl overflow-hidden">
+                {/* Section header */}
+                <div className="flex items-center justify-between px-4 py-3 border-b border-border/20">
                   <div className="flex items-center gap-3">
-                    <div className={`w-2 h-2 rounded-full ${theme.badge.replace('bg-', '').replace('/10', '').replace('text-', '')} ${theme.badge.split(' ')[0]}`} />
+                    <div className={`w-2 h-2 rounded-full ${theme.badge.split(' ')[0]}`} />
                     <span className="font-semibold text-sm">{mealTypeLabel(mealType)}</span>
                     {meals.length > 0 && (
-                      <span className="ml-2 font-data text-xs text-muted-foreground flex gap-2 items-center bg-muted/40 px-2 py-0.5 rounded">
+                      <span className="font-data text-xs text-muted-foreground/50 flex gap-1.5 items-center">
                         <span>{totalMacros.calories} kcal</span>
                         <span className="opacity-40">·</span>
                         <span>{totalMacros.protein_g}g P</span>
@@ -2447,95 +2470,107 @@ export default function MealsPage() {
                   </button>
                 ) : (
                   <div>
-                    {/* Expand/collapse state for saved meals managed at parent level */}
-                    {(() => {
-                      const [expandedMeals, setExpandedMeals] = React.useState<Record<string, boolean>>({});
-                      return meals.map((meal, i) => {
-                        // Only saved meals or recipes are expandable
-                        const isExpandable = !!meal.recipe;
-                        const expanded = expandedMeals[meal.id] || false;
-                        const toggleExpand = () => setExpandedMeals((prev) => ({ ...prev, [meal.id]: !prev[meal.id] }));
+                    {rows.map((row, rowIdx) => {
+                      const borderClass = rowIdx < rows.length - 1 ? 'border-b border-border/20' : ''
+
+                      if (row.kind === 'flat-item') {
                         return (
-                          <div key={meal.id} className={`flex flex-col px-4 py-3 hover:bg-muted/20 transition-colors group ${i < meals.length - 1 ? 'border-b border-border/30' : ''}`}>
-                            <div className="flex items-center gap-3">
-                              <div className="flex-1 min-w-0">
-                                <button
-                                  className={`text-base font-bold text-foreground truncate text-left ${isExpandable ? 'hover:underline' : ''}`}
-                                  style={{letterSpacing: '0.01em'}}
-                                  onClick={() => isExpandable && toggleExpand()}
-                                  tabIndex={isExpandable ? 0 : -1}
-                                >
-                                  {meal.name}
-                                  {isExpandable && (
-                                    <span className="ml-2 text-xs text-muted-foreground font-normal">{expanded ? '▲' : '▼'}</span>
-                                  )}
-                                </button>
-                                <div className="flex items-center gap-2 mt-0.5 text-muted-foreground text-xs font-data">
-                                  <span>{meal.macros.calories} kcal</span>
-                                  <span className="opacity-40">·</span>
-                                  <span>{meal.macros.protein_g}g P</span>
-                                  <span className="opacity-40">·</span>
-                                  <span>{meal.macros.carbs_g}g C</span>
-                                  <span className="opacity-40">·</span>
-                                  <span>{meal.macros.fat_g}g F</span>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <Button size="icon-sm" variant="ghost" className="h-7 w-7" onClick={() => openEdit(meal)}>
-                                  <Pencil className="w-3.5 h-3.5" />
-                                </Button>
-                                <Button size="icon-sm" variant="ghost" className="h-7 w-7 text-destructive/60 hover:text-destructive" onClick={() => handleDeleteMeal(meal.id)}>
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </Button>
+                          <div key={`${row.meal.id}-flat-${row.itemIdx}`} className={`flex items-center gap-3 px-4 py-2.5 hover:bg-muted/20 transition-colors group ${borderClass}`}>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-foreground leading-tight">{row.item.name}</p>
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                {row.item.amount != null && (
+                                  <>
+                                    <span className="text-[11px] font-data text-muted-foreground/40">{row.item.amount}{row.item.unit}</span>
+                                    <span className="text-[11px] text-border/40">·</span>
+                                  </>
+                                )}
+                                <span className="text-[11px] font-data text-muted-foreground/55">{row.item.macros.calories} kcal</span>
+                                <span className="text-[11px] text-border/40">·</span>
+                                <span className="text-[11px] font-data text-muted-foreground/55">{row.item.macros.protein_g}g P</span>
+                                <span className="text-[11px] text-border/40">·</span>
+                                <span className="text-[11px] font-data text-muted-foreground/55">{row.item.macros.carbs_g}g C</span>
+                                <span className="text-[11px] text-border/40">·</span>
+                                <span className="text-[11px] font-data text-muted-foreground/55">{row.item.macros.fat_g}g F</span>
                               </div>
                             </div>
-                            {/* Show all meal items for regular meals, expandable for saved/recipe meals */}
-                            {(!isExpandable && meal.meal_items && meal.meal_items.length > 0) && (
-                              <div className="mt-2 space-y-1.5 pl-2 border-l-2 border-muted">
-                                {meal.meal_items.map((item, itemIndex) => (
-                                  <div key={`${meal.id}-item-${itemIndex}`} className="text-xs">
-                                    <div className="flex items-center gap-2">
-                                      <span className="font-semibold text-foreground truncate">{item.name}</span>
-                                      <span className="font-data text-xs text-muted-foreground">{item.amount}{item.unit}</span>
-                                    </div>
-                                    <div className="flex items-center gap-2 mt-0.5 text-muted-foreground font-data">
-                                      <span>{item.macros.calories} kcal</span>
-                                      <span className="opacity-40">·</span>
-                                      <span>{item.macros.protein_g}g P</span>
-                                      <span className="opacity-40">·</span>
-                                      <span>{item.macros.carbs_g}g C</span>
-                                      <span className="opacity-40">·</span>
-                                      <span>{item.macros.fat_g}g F</span>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                            {isExpandable && expanded && meal.meal_items && meal.meal_items.length > 0 && (
-                              <div className="mt-2 space-y-1.5 pl-2 border-l-2 border-muted">
-                                {meal.meal_items.map((item, itemIndex) => (
-                                  <div key={`${meal.id}-item-${itemIndex}`} className="text-xs">
-                                    <div className="flex items-center gap-2">
-                                      <span className="font-semibold text-foreground truncate">{item.name}</span>
-                                      <span className="font-data text-xs text-muted-foreground">{item.amount}{item.unit}</span>
-                                    </div>
-                                    <div className="flex items-center gap-2 mt-0.5 text-muted-foreground font-data">
-                                      <span>{item.macros.calories} kcal</span>
-                                      <span className="opacity-40">·</span>
-                                      <span>{item.macros.protein_g}g P</span>
-                                      <span className="opacity-40">·</span>
-                                      <span>{item.macros.carbs_g}g C</span>
-                                      <span className="opacity-40">·</span>
-                                      <span>{item.macros.fat_g}g F</span>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
+                            <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <Button size="icon-sm" variant="ghost" className="h-7 w-7" onClick={() => openEdit(row.meal)}>
+                                <Pencil className="w-3.5 h-3.5" />
+                              </Button>
+                              <Button size="icon-sm" variant="ghost" className="h-7 w-7 text-destructive/60 hover:text-destructive" onClick={() => handleDeleteMeal(row.meal.id)}>
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
+                            </div>
                           </div>
-                        );
-                      });
-                    })()}
+                        )
+                      }
+
+                      const { meal, isExpandable } = row
+                      const expanded = expandedMeals[meal.id] || false
+                      return (
+                        <div key={meal.id} className={`flex flex-col px-4 py-3 hover:bg-muted/20 transition-colors group ${borderClass}`}>
+                          <div className="flex items-center gap-3">
+                            <div className="flex-1 min-w-0">
+                              {isExpandable ? (
+                                <button
+                                  className="flex items-center gap-1.5 text-left"
+                                  onClick={() => setExpandedMeals(prev => ({ ...prev, [meal.id]: !prev[meal.id] }))}
+                                >
+                                  <span className="text-sm font-semibold text-foreground">{meal.name}</span>
+                                  <ChevronDown className={`w-3.5 h-3.5 flex-shrink-0 text-muted-foreground/50 transition-transform duration-150 ${expanded ? 'rotate-180' : ''}`} />
+                                </button>
+                              ) : (
+                                <p className="text-sm font-semibold text-foreground">{meal.name}</p>
+                              )}
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                <span className="text-[11px] font-data text-muted-foreground/55">{meal.macros.calories} kcal</span>
+                                <span className="text-[11px] text-border/40">·</span>
+                                <span className="text-[11px] font-data text-muted-foreground/55">{meal.macros.protein_g}g P</span>
+                                <span className="text-[11px] text-border/40">·</span>
+                                <span className="text-[11px] font-data text-muted-foreground/55">{meal.macros.carbs_g}g C</span>
+                                <span className="text-[11px] text-border/40">·</span>
+                                <span className="text-[11px] font-data text-muted-foreground/55">{meal.macros.fat_g}g F</span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <Button size="icon-sm" variant="ghost" className="h-7 w-7" onClick={() => openEdit(meal)}>
+                                <Pencil className="w-3.5 h-3.5" />
+                              </Button>
+                              <Button size="icon-sm" variant="ghost" className="h-7 w-7 text-destructive/60 hover:text-destructive" onClick={() => handleDeleteMeal(meal.id)}>
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
+                            </div>
+                          </div>
+                          {/* Expanded ingredients for saved meals and recipes */}
+                          {isExpandable && expanded && meal.meal_items && meal.meal_items.length > 0 && (
+                            <div className="mt-2 ml-1 space-y-1.5 pl-3 border-l border-border/30">
+                              {meal.meal_items.map((item, itemIndex) => (
+                                <div key={`${meal.id}-item-${itemIndex}`}>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-xs font-medium text-foreground/70 leading-tight">{item.name}</span>
+                                    {item.amount != null && (
+                                      <span className="text-[11px] font-data text-muted-foreground/40">{item.amount}{item.unit}</span>
+                                    )}
+                                  </div>
+                                  {item.macros.calories > 0 && (
+                                    <div className="flex items-center gap-1.5 mt-0.5">
+                                      <span className="text-[11px] font-data text-muted-foreground/50">{item.macros.calories} kcal</span>
+                                      <span className="text-[11px] text-border/30">·</span>
+                                      <span className="text-[11px] font-data text-muted-foreground/50">{item.macros.protein_g}g P</span>
+                                      <span className="text-[11px] text-border/30">·</span>
+                                      <span className="text-[11px] font-data text-muted-foreground/50">{item.macros.carbs_g}g C</span>
+                                      <span className="text-[11px] text-border/30">·</span>
+                                      <span className="text-[11px] font-data text-muted-foreground/50">{item.macros.fat_g}g F</span>
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
                   </div>
                 )}
               </div>
