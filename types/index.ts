@@ -4,6 +4,10 @@ export type Gender = 'male' | 'female' | 'other'
 export type ActivityLevel = 'sedentary' | 'lightly_active' | 'moderately_active' | 'very_active' | 'extra_active'
 export type FitnessGoal = 'fat_loss' | 'muscle_gain' | 'maintenance' | 'athletic_performance'
 export type WorkoutSplit = 'ppl' | 'upper_lower' | '3day_fullbody' | '4day' | '5day' | '6day' | 'cardio_focus'
+export type UnitSystem = 'imperial' | 'metric'
+export type PreferredWorkoutTime = 'early_morning' | 'morning' | 'afternoon' | 'evening' | 'late_night' | 'flexible'
+export type SupplementCategory = 'vitamin' | 'mineral' | 'herbal' | 'supplement' | 'medicine' | 'other'
+export type SupplementFrequency = 'daily' | 'twice_daily' | 'three_times_daily' | 'weekly' | 'as_needed'
 
 export interface UserProfile {
   id: string
@@ -13,10 +17,17 @@ export interface UserProfile {
   height_cm: number
   weight_kg: number
   age: number
+  unit_system: UnitSystem
   gender: Gender
   activity_level: ActivityLevel
   fitness_goal: FitnessGoal
   workout_split: WorkoutSplit
+  goal_target_change_kg?: number
+  goal_timeframe_weeks?: number
+  preferred_workout_time?: PreferredWorkoutTime
+  preferred_foods?: string[]
+  avoided_foods?: string[]
+  notification_preferences?: NotificationPreferences
   bmr: number
   tdee: number
   calorie_target: number
@@ -67,7 +78,7 @@ export interface MealEntry {
   id: string
   user_id: string
   date: string // ISO date YYYY-MM-DD
-  meal_type: 'breakfast' | 'lunch' | 'dinner' | 'snack'
+  meal_type: 'breakfast' | 'lunch' | 'dinner' | 'snack' | 'drink'
   recipe?: Recipe
   custom_name?: string
   macros: Macros
@@ -81,16 +92,46 @@ export interface DailyNutrition {
   target: Macros
 }
 
+export interface SavedMealItem {
+  input: string
+  matched_name: string
+  amount: number
+  unit: string
+}
+
+export interface SavedMealTemplate {
+  id: string
+  name: string
+  meal_type: 'breakfast' | 'lunch' | 'dinner' | 'snack' | 'drink'
+  macros: { calories: number; protein_g: number; carbs_g: number; fat_g: number }
+  items: SavedMealItem[]
+  updated_at: string
+}
+
+export interface CustomMealIngredient {
+  name: string
+  amount: number
+  unit: string
+}
+
+export type PlannedItem =
+  | { type: 'recipe'; recipe: Recipe }
+  | { type: 'saved'; savedMeal: SavedMealTemplate }
+  | { type: 'custom'; name: string; ingredients: CustomMealIngredient[] }
+
+// Each slot holds an array of items (empty = nothing planned)
+export type PlannedSlot = PlannedItem[]
+
 export interface WeeklyMealPlan {
   id: string
   user_id: string
   week_start: string
   days: {
     [day: string]: {
-      breakfast: Recipe | null
-      lunch: Recipe | null
-      dinner: Recipe | null
-      snack?: Recipe | null
+      breakfast: PlannedSlot
+      lunch: PlannedSlot
+      dinner: PlannedSlot
+      snack: PlannedSlot
     }
   }
 }
@@ -128,14 +169,35 @@ export interface Exercise {
   instructions: string[]
 }
 
+export interface ExerciseLibraryItem extends Exercise {
+  aliases?: string[]
+  default_sets: number
+  default_reps: number
+  default_rest_seconds: number
+  met_base: number
+  met_type?: 'resistance' | 'squat_hinge' | 'circuit' | 'bodyweight_light' | 'bodyweight_vigorous' | 'cardio'
+}
+
 export interface WorkoutSet {
   set_number: number
   reps: number
   weight_kg?: number
+  incline_pct?: number
+  speed_mph?: number
+  machine_level?: number
+  resistance_level?: number
+  watts?: number
+  cadence_rpm?: number
   rest_seconds: number
   completed?: boolean
   actual_reps?: number
   actual_weight_kg?: number
+  actual_incline_pct?: number
+  actual_speed_mph?: number
+  actual_machine_level?: number
+  actual_resistance_level?: number
+  actual_watts?: number
+  actual_cadence_rpm?: number
 }
 
 export interface WorkoutExercise {
@@ -154,6 +216,8 @@ export interface Workout {
   estimated_duration_min: number
   difficulty: 'beginner' | 'intermediate' | 'advanced'
   split_type: WorkoutSplit
+  source?: 'premade' | 'custom'
+  updated_at?: string
 }
 
 export interface WorkoutLog {
@@ -173,10 +237,18 @@ export interface WorkoutLog {
       target_reps: number
       actual_reps: number
       weight_kg: number
+      incline_pct?: number
+      speed_mph?: number
+      machine_level?: number
+      resistance_level?: number
+      watts?: number
+      cadence_rpm?: number
     }>
   }>
   notes?: string
   rating?: 1 | 2 | 3 | 4 | 5
+  calories_burned_kcal?: number
+  total_volume_kg?: number
 }
 
 // ─── Progress Tracking ──────────────────────────────────────────────────────────
@@ -221,6 +293,11 @@ export interface JournalEntry {
   tags: JournalTag[]
   workout_id?: string
   meal_plan_id?: string
+  linked_item?: {
+    type: 'workout' | 'meal' | 'supplement' | 'other'
+    id?: string
+    label: string
+  }
   prompts_answered?: {
     workout_feel?: string
     energy_description?: string
@@ -231,6 +308,16 @@ export interface JournalEntry {
 }
 
 // ─── Calendar ───────────────────────────────────────────────────────────────────
+
+export interface CalendarReminder {
+  id: string
+  date: string       // yyyy-MM-dd
+  time?: string      // 'HH:mm' 24h, optional
+  title: string
+  notes?: string
+  color: 'default' | 'red' | 'blue' | 'green' | 'yellow' | 'purple'
+  created_at: string
+}
 
 export type CalendarEventType = 'workout' | 'meal' | 'weight_check' | 'journal' | 'goal'
 
@@ -257,6 +344,19 @@ export interface AppState {
   notifications: Notification[]
 }
 
+export type NotificationPreferenceKey =
+  | 'daily_workout_reminder'
+  | 'meal_logging_reminder'
+  | 'weekly_progress_summary'
+  | 'goal_milestone_alerts'
+
+export interface NotificationPreferences {
+  daily_workout_reminder: boolean
+  meal_logging_reminder: boolean
+  weekly_progress_summary: boolean
+  goal_milestone_alerts: boolean
+}
+
 export interface Notification {
   id: string
   type: 'info' | 'success' | 'warning' | 'error'
@@ -265,4 +365,19 @@ export interface Notification {
   read: boolean
   created_at: string
   action_url?: string
+}
+
+export interface SupplementEntry {
+  id: string
+  name: string
+  category: SupplementCategory
+  amount: number
+  unit: string
+  frequency: SupplementFrequency
+  notes?: string
+  notification_enabled: boolean
+  archived?: boolean
+  taken_dates: string[]
+  created_at: string
+  updated_at: string
 }

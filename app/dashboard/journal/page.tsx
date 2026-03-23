@@ -1,11 +1,13 @@
 'use client'
 
+import React from 'react'
+
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { format } from 'date-fns'
 import {
   BookOpen, Plus, Edit2, Trash2, Tag, Smile, Zap, Search,
-  ChevronRight, X, Save, Heart, Battery,
+  ChevronRight, X, Save, Heart, Battery, Dumbbell, Apple, Pill, Link2, PenLine,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -88,6 +90,15 @@ function EnergySelector({ value, onChange }: { value: EnergyLevel; onChange: (v:
   )
 }
 
+type LinkedItem = { type: 'workout' | 'meal' | 'supplement' | 'other'; id?: string; label: string }
+
+const LINK_TYPE_CONFIG = {
+  workout: { icon: Dumbbell, label: 'Workout', color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30' },
+  meal: { icon: Apple, label: 'Meal', color: 'text-blue-400 bg-blue-500/10 border-blue-500/30' },
+  supplement: { icon: Pill, label: 'Supplement', color: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/30' },
+  other: { icon: PenLine, label: 'Other', color: 'text-purple-400 bg-purple-500/10 border-purple-500/30' },
+}
+
 // Journal editor dialog
 function JournalEditorDialog({
   entry,
@@ -100,6 +111,12 @@ function JournalEditorDialog({
   onClose?: () => void
   children?: React.ReactNode
 }) {
+  const { workoutLogs, getDailyMeals, supplements } = useAppStore()
+  const today = getTodayISO()
+  const todayWorkouts = workoutLogs.filter((w) => w.date === today)
+  const todayMeals = getDailyMeals(today)
+  const todaySupplements = supplements.filter((s) => !s.archived && s.taken_dates.includes(today))
+
   const [open, setOpen] = useState(false)
   const [title, setTitle] = useState(entry?.title || '')
   const [content, setContent] = useState(entry?.content || '')
@@ -107,11 +124,12 @@ function JournalEditorDialog({
   const [energy, setEnergy] = useState<EnergyLevel>(entry?.energy || 3)
   const [tags, setTags] = useState<JournalTag[]>(entry?.tags || [])
   const [usedPrompt, setUsedPrompt] = useState(false)
+  const [linkedItem, setLinkedItem] = useState<LinkedItem | null>(entry?.linked_item || null)
+  const [linkStep, setLinkStep] = useState<'type' | 'pick' | null>(null)
+  const [otherText, setOtherText] = useState('')
 
   const toggleTag = (tag: JournalTag) => {
-    setTags((prev) =>
-      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
-    )
+    setTags((prev) => prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag])
   }
 
   const handlePrompt = (prompt: string) => {
@@ -124,17 +142,30 @@ function JournalEditorDialog({
       toast.error('Please write something before saving')
       return
     }
-    onSave({ title: title || undefined, content, mood, energy, tags })
+    onSave({ title: title || undefined, content, mood, energy, tags, linked_item: linkedItem || undefined })
     setOpen(false)
     setTitle('')
     setContent('')
     setMood(4)
     setEnergy(3)
     setTags([])
+    setLinkedItem(null)
+    setLinkStep(null)
   }
 
+  const pickType = (type: LinkedItem['type']) => {
+    if (type === 'other') {
+      setLinkStep('pick')
+    } else {
+      setLinkStep('pick')
+    }
+    setLinkedItem({ type, label: '' })
+  }
+
+  const MEAL_TYPES = ['breakfast', 'lunch', 'dinner', 'snack'] as const
+
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setLinkStep(null) }}>
       <DialogTrigger asChild>
         {children || (
           <Button variant="brand" size="sm" className="gap-1.5">
@@ -157,6 +188,125 @@ function JournalEditorDialog({
               value={title}
               onChange={(e) => setTitle(e.target.value)}
             />
+          </div>
+
+          {/* Link to activity */}
+          <div className="space-y-2">
+            <Label className="flex items-center gap-1.5">
+              <Link2 className="w-3.5 h-3.5 text-muted-foreground" /> Link to activity (optional)
+            </Label>
+
+            {linkedItem?.label ? (
+              <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-medium ${LINK_TYPE_CONFIG[linkedItem.type].color}`}>
+                {(() => { const Icon = LINK_TYPE_CONFIG[linkedItem.type].icon; return <Icon className="w-3.5 h-3.5 shrink-0" /> })()}
+                <span className="flex-1 capitalize">{linkedItem.label}</span>
+                <button type="button" onClick={() => { setLinkedItem(null); setLinkStep(null) }}>
+                  <X className="w-3.5 h-3.5 opacity-60 hover:opacity-100" />
+                </button>
+              </div>
+            ) : linkStep === null ? (
+              <button
+                type="button"
+                onClick={() => setLinkStep('type')}
+                className="w-full text-left text-xs px-3 py-2.5 rounded-lg border border-dashed border-border text-muted-foreground hover:border-primary/50 hover:text-primary transition-colors flex items-center gap-2"
+              >
+                <Link2 className="w-3.5 h-3.5" /> Link a workout, meal, supplement, or note...
+              </button>
+            ) : linkStep === 'type' ? (
+              <div className="rounded-lg border border-border overflow-hidden">
+                <div className="px-3 py-2 bg-muted/30 border-b border-border/50 flex items-center justify-between">
+                  <p className="text-xs font-medium text-muted-foreground">What are you journaling about?</p>
+                  <button type="button" onClick={() => setLinkStep(null)} className="text-muted-foreground hover:text-foreground"><X className="w-3.5 h-3.5" /></button>
+                </div>
+                <div className="grid grid-cols-2 gap-0 divide-x divide-border/50">
+                  {(Object.entries(LINK_TYPE_CONFIG) as [LinkedItem['type'], typeof LINK_TYPE_CONFIG[keyof typeof LINK_TYPE_CONFIG]][]).map(([type, cfg]) => {
+                    const Icon = cfg.icon
+                    return (
+                      <button
+                        key={type}
+                        type="button"
+                        onClick={() => pickType(type)}
+                        className="flex items-center gap-2.5 px-4 py-3 hover:bg-muted/40 transition-colors text-left"
+                      >
+                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center border ${cfg.color}`}>
+                          <Icon className="w-3.5 h-3.5" />
+                        </div>
+                        <span className="text-sm font-medium">{cfg.label}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            ) : linkStep === 'pick' && linkedItem ? (
+              <div className="rounded-lg border border-border overflow-hidden">
+                <div className="px-3 py-2 bg-muted/30 border-b border-border/50 flex items-center justify-between">
+                  <button type="button" onClick={() => setLinkStep('type')} className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1">
+                    ← Back
+                  </button>
+                  <p className="text-xs font-medium text-muted-foreground capitalize">{linkedItem.type}</p>
+                  <button type="button" onClick={() => { setLinkedItem(null); setLinkStep(null) }} className="text-muted-foreground hover:text-foreground"><X className="w-3.5 h-3.5" /></button>
+                </div>
+                <div className="p-2 space-y-1 max-h-48 overflow-y-auto">
+                  {linkedItem.type === 'workout' && (
+                    todayWorkouts.length > 0
+                      ? todayWorkouts.map((w) => (
+                          <button key={w.id} type="button" onClick={() => { setLinkedItem({ type: 'workout', id: w.id, label: w.workout.name }); setLinkStep(null) }}
+                            className="w-full text-left px-3 py-2 rounded-lg hover:bg-muted/50 transition-colors text-sm">
+                            <span className="font-medium">{w.workout.name}</span>
+                            <span className="text-xs text-muted-foreground ml-2">{w.exercises.length} exercises · {w.duration_min || 0}m</span>
+                          </button>
+                        ))
+                      : <p className="text-xs text-muted-foreground px-3 py-2">No workouts logged today</p>
+                  )}
+                  {linkedItem.type === 'meal' && (
+                    MEAL_TYPES.map((mt) => {
+                      const meals = todayMeals.filter((m) => m.meal_type === mt)
+                      if (meals.length === 0) return null
+                      return (
+                        <button key={mt} type="button" onClick={() => { setLinkedItem({ type: 'meal', label: `${mt.charAt(0).toUpperCase() + mt.slice(1)} (${meals.length} item${meals.length > 1 ? 's' : ''})` }); setLinkStep(null) }}
+                          className="w-full text-left px-3 py-2 rounded-lg hover:bg-muted/50 transition-colors text-sm capitalize">
+                          <span className="font-medium">{mt}</span>
+                          <span className="text-xs text-muted-foreground ml-2">{meals.length} item{meals.length > 1 ? 's' : ''} · {meals.reduce((s, m) => s + m.macros.calories, 0)} kcal</span>
+                        </button>
+                      )
+                    })
+                  )}
+                  {linkedItem.type === 'supplement' && (
+                    todaySupplements.length > 0
+                      ? todaySupplements.map((s) => (
+                          <button key={s.id} type="button" onClick={() => { setLinkedItem({ type: 'supplement', id: s.id, label: s.name }); setLinkStep(null) }}
+                            className="w-full text-left px-3 py-2 rounded-lg hover:bg-muted/50 transition-colors text-sm">
+                            <span className="font-medium">{s.name}</span>
+                            <span className="text-xs text-muted-foreground ml-2">{s.amount} {s.unit}</span>
+                          </button>
+                        ))
+                      : <p className="text-xs text-muted-foreground px-3 py-2">No supplements taken today</p>
+                  )}
+                  {linkedItem.type === 'other' && (
+                    <div className="px-2 py-1">
+                      <Input
+                        autoFocus
+                        placeholder="e.g. Morning run, sleep quality..."
+                        value={otherText}
+                        onChange={(e) => setOtherText(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && otherText.trim()) {
+                            setLinkedItem({ type: 'other', label: otherText.trim() })
+                            setLinkStep(null)
+                            setOtherText('')
+                          }
+                        }}
+                        className="h-8 text-sm"
+                      />
+                      <Button size="sm" variant="brand" className="mt-2 w-full h-7 text-xs" disabled={!otherText.trim()}
+                        onClick={() => { setLinkedItem({ type: 'other', label: otherText.trim() }); setLinkStep(null); setOtherText('') }}>
+                        Link this
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : null}
           </div>
 
           {/* Mood + Energy */}
@@ -287,6 +437,22 @@ function JournalEntryCard({ entry, onEdit, onDelete }: {
             </div>
           </div>
 
+          {/* Linked item */}
+          {entry.linked_item && (
+            <div className="mb-3">
+              {(() => {
+                const cfg = LINK_TYPE_CONFIG[entry.linked_item.type]
+                const Icon = cfg.icon
+                return (
+                  <span className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border font-medium ${cfg.color}`}>
+                    <Icon className="w-3 h-3" />
+                    {entry.linked_item.label}
+                  </span>
+                )
+              })()}
+            </div>
+          )}
+
           {/* Tags */}
           {entry.tags.length > 0 && (
             <div className="flex flex-wrap gap-1.5 mb-3">
@@ -380,7 +546,7 @@ export default function JournalPage() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-bold">Journal</h2>
-          <p className="text-muted-foreground text-sm">Daily reflections, mood, and energy tracking</p>
+          <p className="text-muted-foreground text-sm hidden sm:block">Daily reflections, mood, and energy tracking</p>
         </div>
         <JournalEditorDialog onSave={handleCreate} />
       </div>
@@ -388,10 +554,10 @@ export default function JournalPage() {
       {/* Stats row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: 'Total Entries', value: journalEntries.length, icon: BookOpen, color: 'text-primary' },
-          { label: 'Avg Mood', value: `${avgMood}/5`, icon: Heart, color: 'text-rose-400', sub: MOOD_EMOJIS[Math.round(avgMood) as MoodLevel] },
-          { label: 'Avg Energy', value: `${avgEnergy}/5`, icon: Battery, color: 'text-amber-400' },
-          { label: 'Top Tag', value: topTags[0]?.[0] || 'None', icon: Tag, color: 'text-purple-400', capitalize: true },
+          { label: 'Total Entries', value: journalEntries.length, icon: BookOpen, sub: undefined, capitalize: false },
+          { label: 'Avg Mood', value: `${avgMood}/5`, icon: Heart, sub: MOOD_EMOJIS[Math.round(avgMood) as MoodLevel], capitalize: false },
+          { label: 'Avg Energy', value: `${avgEnergy}/5`, icon: Battery, sub: undefined, capitalize: false },
+          { label: 'Top Tag', value: topTags[0]?.[0] || 'None', icon: Tag, sub: undefined, capitalize: true },
         ].map((stat) => {
           const Icon = stat.icon
           return (
@@ -399,9 +565,11 @@ export default function JournalPage() {
               <CardContent className="p-4">
                 <div className="flex items-start justify-between mb-1.5">
                   <p className="text-xs text-muted-foreground">{stat.label}</p>
-                  <Icon className={`w-4 h-4 ${stat.color}`} />
+                  <div className="w-7 h-7 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+                    <Icon className="w-3.5 h-3.5 text-emerald-500" />
+                  </div>
                 </div>
-                <p className={`text-xl font-bold capitalize ${stat.color}`}>
+                <p className={`text-xl font-bold tabular-nums ${stat.capitalize ? 'capitalize' : ''}`}>
                   {stat.sub && <span className="mr-1">{stat.sub}</span>}
                   {stat.value}
                 </p>
@@ -458,12 +626,12 @@ export default function JournalPage() {
             </CardContent>
           </Card>
 
-          {/* Today's prompt */}
+          {/* Today&apos;s prompt */}
           <Card className="bg-gradient-to-br from-primary/5 to-teal-500/5 border-primary/20">
             <CardContent className="p-4">
-              <p className="text-xs font-semibold text-primary mb-2">✨ Today's prompt</p>
+              <p className="text-xs font-semibold text-primary mb-2">✨ Today&apos;s prompt</p>
               <p className="text-sm text-muted-foreground italic leading-relaxed">
-                "{PROMPTS[new Date().getDay() % PROMPTS.length]}"
+                &quot;{PROMPTS[new Date().getDay() % PROMPTS.length]}&quot;
               </p>
               <JournalEditorDialog onSave={handleCreate}>
                 <Button variant="outline" size="sm" className="mt-3 w-full text-xs">

@@ -1,5 +1,5 @@
 -- ============================================================
--- Grays Fitness — Supabase Database Schema
+-- Rivlo — Supabase Database Schema
 -- ============================================================
 -- Run this in your Supabase SQL editor to set up all tables.
 
@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS profiles (
   height_cm     NUMERIC(5,1) NOT NULL DEFAULT 175,
   weight_kg     NUMERIC(5,2) NOT NULL DEFAULT 75,
   age           INTEGER NOT NULL DEFAULT 25,
+  unit_system   TEXT NOT NULL DEFAULT 'imperial' CHECK (unit_system IN ('imperial', 'metric')),
   gender        TEXT NOT NULL DEFAULT 'male' CHECK (gender IN ('male', 'female', 'other')),
   activity_level TEXT NOT NULL DEFAULT 'moderately_active'
     CHECK (activity_level IN ('sedentary','lightly_active','moderately_active','very_active','extra_active')),
@@ -23,6 +24,12 @@ CREATE TABLE IF NOT EXISTS profiles (
     CHECK (fitness_goal IN ('fat_loss','muscle_gain','maintenance','athletic_performance')),
   workout_split TEXT NOT NULL DEFAULT 'ppl'
     CHECK (workout_split IN ('ppl','upper_lower','3day_fullbody','4day','5day','6day','cardio_focus')),
+  goal_target_change_kg NUMERIC(5,2),
+  goal_timeframe_weeks INTEGER,
+  preferred_workout_time TEXT CHECK (preferred_workout_time IN ('early_morning','morning','afternoon','evening','late_night','flexible')),
+  preferred_foods TEXT[] DEFAULT '{}',
+  avoided_foods TEXT[] DEFAULT '{}',
+  notification_preferences JSONB NOT NULL DEFAULT '{"daily_workout_reminder": true, "meal_logging_reminder": true, "weekly_progress_summary": false, "goal_milestone_alerts": true}'::jsonb,
   bmr           INTEGER,
   tdee          INTEGER,
   calorie_target INTEGER NOT NULL DEFAULT 2000,
@@ -33,6 +40,19 @@ CREATE TABLE IF NOT EXISTS profiles (
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE profiles
+  ADD COLUMN IF NOT EXISTS unit_system TEXT NOT NULL DEFAULT 'imperial'
+  CHECK (unit_system IN ('imperial', 'metric'));
+
+ALTER TABLE profiles
+  ADD COLUMN IF NOT EXISTS goal_target_change_kg NUMERIC(5,2),
+  ADD COLUMN IF NOT EXISTS goal_timeframe_weeks INTEGER,
+  ADD COLUMN IF NOT EXISTS preferred_workout_time TEXT
+  CHECK (preferred_workout_time IN ('early_morning','morning','afternoon','evening','late_night','flexible')),
+  ADD COLUMN IF NOT EXISTS preferred_foods TEXT[] DEFAULT '{}',
+  ADD COLUMN IF NOT EXISTS avoided_foods TEXT[] DEFAULT '{}',
+  ADD COLUMN IF NOT EXISTS notification_preferences JSONB NOT NULL DEFAULT '{"daily_workout_reminder": true, "meal_logging_reminder": true, "weekly_progress_summary": false, "goal_milestone_alerts": true}'::jsonb;
 
 -- ─── Meals / Nutrition ──────────────────────────────────────────────────────────
 
@@ -116,6 +136,26 @@ CREATE TABLE IF NOT EXISTS workout_logs (
 
 CREATE INDEX idx_workout_logs_user_date ON workout_logs(user_id, date);
 
+-- ─── Saved Workout Templates ───────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS workout_templates (
+  id            TEXT PRIMARY KEY,
+  user_id       UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+  name          TEXT NOT NULL,
+  description   TEXT NOT NULL DEFAULT '',
+  day_label     TEXT NOT NULL DEFAULT '',
+  muscle_groups TEXT[] NOT NULL DEFAULT '{}',
+  exercises     JSONB NOT NULL DEFAULT '[]'::jsonb,
+  estimated_duration_min INTEGER NOT NULL DEFAULT 0,
+  difficulty    TEXT NOT NULL CHECK (difficulty IN ('beginner', 'intermediate', 'advanced')),
+  split_type    TEXT NOT NULL CHECK (split_type IN ('ppl','upper_lower','3day_fullbody','4day','5day','6day','cardio_focus')),
+  source        TEXT NOT NULL DEFAULT 'custom' CHECK (source IN ('custom', 'premade')),
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_workout_templates_user_updated ON workout_templates(user_id, updated_at DESC);
+
 -- ─── Weight Tracking ────────────────────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS weight_entries (
@@ -159,6 +199,7 @@ ALTER TABLE recipes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE meal_plans ENABLE ROW LEVEL SECURITY;
 ALTER TABLE grocery_lists ENABLE ROW LEVEL SECURITY;
 ALTER TABLE workout_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE workout_templates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE weight_entries ENABLE ROW LEVEL SECURITY;
 ALTER TABLE journal_entries ENABLE ROW LEVEL SECURITY;
 
@@ -172,6 +213,7 @@ CREATE POLICY "recipes_own_write" ON recipes FOR ALL USING (auth.uid() = user_id
 CREATE POLICY "meal_plans_own" ON meal_plans FOR ALL USING (auth.uid() = user_id);
 CREATE POLICY "grocery_lists_own" ON grocery_lists FOR ALL USING (auth.uid() = user_id);
 CREATE POLICY "workout_logs_own" ON workout_logs FOR ALL USING (auth.uid() = user_id);
+CREATE POLICY "workout_templates_own" ON workout_templates FOR ALL USING (auth.uid() = user_id);
 CREATE POLICY "weight_entries_own" ON weight_entries FOR ALL USING (auth.uid() = user_id);
 CREATE POLICY "journal_entries_own" ON journal_entries FOR ALL USING (auth.uid() = user_id);
 
@@ -191,16 +233,20 @@ CREATE TRIGGER profiles_updated_at BEFORE UPDATE ON profiles
 CREATE TRIGGER journal_entries_updated_at BEFORE UPDATE ON journal_entries
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
+CREATE TRIGGER workout_templates_updated_at BEFORE UPDATE ON workout_templates
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
 -- ─── Auto-create profile on signup ──────────────────────────────────────────────
 
 CREATE OR REPLACE FUNCTION handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO public.profiles (id, email, name)
+  INSERT INTO public.profiles (id, email, name, unit_system)
   VALUES (
     NEW.id,
     NEW.email,
-    COALESCE(NEW.raw_user_meta_data->>'name', split_part(NEW.email, '@', 1))
+    COALESCE(NEW.raw_user_meta_data->>'name', split_part(NEW.email, '@', 1)),
+    COALESCE(NEW.raw_user_meta_data->>'unit_system', 'imperial')
   );
   RETURN NEW;
 END;

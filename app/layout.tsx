@@ -5,25 +5,31 @@ import { Toaster } from 'sonner'
 
 export const metadata: Metadata = {
   title: {
-    default: 'Grays Fitness — Optimize Your Body. Automate Your Fitness.',
-    template: '%s | Grays Fitness',
+    default: 'Rivlo — Optimize Your Body. Automate Your Fitness.',
+    template: '%s | Rivlo',
   },
   description:
     'The all-in-one fitness and nutrition platform. Track calories, plan meals, log workouts, and hit your goals with personalized automation.',
   keywords: ['fitness', 'nutrition', 'workout tracker', 'meal planner', 'calorie counter'],
-  authors: [{ name: 'Grays Fitness' }],
-  creator: 'Grays Fitness',
+  authors: [{ name: 'Rivlo' }],
+  creator: 'Rivlo',
+  manifest: '/manifest.json',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'Rivlo',
+  },
   openGraph: {
     type: 'website',
     locale: 'en_US',
-    url: 'https://grays.fit',
-    title: 'Grays Fitness — Optimize Your Body. Automate Your Fitness.',
+    url: 'https://rivlo.fit',
+    title: 'Rivlo — Optimize Your Body. Automate Your Fitness.',
     description: 'The all-in-one fitness and nutrition platform.',
-    siteName: 'Grays Fitness',
+    siteName: 'Rivlo',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Grays Fitness',
+    title: 'Rivlo',
     description: 'Optimize Your Body. Automate Your Fitness.',
   },
 }
@@ -35,6 +41,12 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="theme-color" content="#10b981" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+      </head>
       <body className="font-sans antialiased">
         <ThemeProvider
           attribute="class"

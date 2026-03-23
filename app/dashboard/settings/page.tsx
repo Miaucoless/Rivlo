@@ -1,6 +1,9 @@
 'use client'
 
+import React from 'react'
+
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import {
   User, Target, BarChart3, Bell, Shield, Download,
@@ -14,58 +17,139 @@ import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useAppStore } from '@/store/useAppStore'
-import { buildUserProfile } from '@/lib/utils'
-import type { ActivityLevel, FitnessGoal, WorkoutSplit } from '@/types'
+import { deleteAccount as deleteSupabaseAccount, updateProfile as persistProfile } from '@/lib/auth'
+import { buildUserProfile, formatGoalWeightChangeForInput, formatHeightForInput, formatWeightForInput, getHeightUnitLabel, getWeightUnitLabel, parseHeightInput, parseWeightInput } from '@/lib/utils'
+import type { ActivityLevel, FitnessGoal, NotificationPreferenceKey, PreferredWorkoutTime, UnitSystem, WorkoutSplit } from '@/types'
 import { useTheme } from 'next-themes'
 import { toast } from 'sonner'
 
 export default function SettingsPage() {
-  const { user, updateProfile, setTheme, isDemoMode, weightHistory, journalEntries, workoutLogs, mealEntries } = useAppStore()
+  const router = useRouter()
+  const {
+    user,
+    updateProfile: updateLocalProfile,
+    updateNotificationPreference,
+    notificationPreferences,
+    isDemoMode,
+    weightHistory,
+    journalEntries,
+    workoutLogs,
+    mealEntries,
+  } = useAppStore()
   const { theme, setTheme: setNextTheme } = useTheme()
 
   const [profile, setProfile] = useState({
     name: user?.name || '',
     email: user?.email || '',
-    height_cm: user?.height_cm || 175,
-    weight_kg: user?.weight_kg || 75,
+    height_input: formatHeightForInput(user?.height_cm || 175, user?.unit_system || 'imperial'),
+    weight_input: formatWeightForInput(user?.weight_kg || 75, user?.unit_system || 'imperial'),
     age: user?.age || 25,
+    unit_system: user?.unit_system || 'imperial' as UnitSystem,
   })
 
   const [goals, setGoals] = useState({
     fitness_goal: user?.fitness_goal || 'fat_loss',
     activity_level: user?.activity_level || 'moderately_active',
     workout_split: user?.workout_split || 'ppl',
+    goal_target_change_input: formatGoalWeightChangeForInput(user?.goal_target_change_kg, user?.unit_system || 'imperial'),
+    goal_timeframe_weeks_input: user?.goal_timeframe_weeks ? String(user.goal_timeframe_weeks) : '12',
+    preferred_workout_time: user?.preferred_workout_time || 'evening',
+    preferred_foods_input: user?.preferred_foods?.join(', ') || '',
+    avoided_foods_input: user?.avoided_foods?.join(', ') || '',
     calorie_target: user?.calorie_target || 2200,
     protein_target_g: user?.protein_target_g || 180,
     carb_target_g: user?.carb_target_g || 220,
     fat_target_g: user?.fat_target_g || 80,
   })
 
-  const handleSaveProfile = () => {
-    updateProfile(profile)
-    toast.success('Profile updated!')
+  const handleUnitSystemChange = (unitSystem: UnitSystem) => {
+    const currentHeightCm = parseHeightInput(profile.height_input, profile.unit_system) ?? user?.height_cm ?? 175
+    const currentWeightKg = parseWeightInput(profile.weight_input, profile.unit_system) ?? user?.weight_kg ?? 75
+    setProfile((prev) => ({
+      ...prev,
+      unit_system: unitSystem,
+      height_input: formatHeightForInput(currentHeightCm, unitSystem),
+      weight_input: formatWeightForInput(currentWeightKg, unitSystem),
+    }))
   }
 
-  const handleRecalculate = () => {
+  const saveUserProfile = async (updates: Record<string, any>, successMessage: string) => {
+    if (!user) return false
+
+    if (isDemoMode) {
+      updateLocalProfile(updates)
+      toast.success(successMessage)
+      return true
+    }
+
+    const response = await persistProfile(user.id, updates)
+    if (!response.success || !response.user) {
+      toast.error(response.error || 'Failed to save changes.')
+      return false
+    }
+
+    updateLocalProfile(response.user)
+    toast.success(successMessage)
+    return true
+  }
+
+  const handleSaveProfile = async () => {
+    const height_cm = parseHeightInput(profile.height_input, profile.unit_system)
+    const weight_kg = parseWeightInput(profile.weight_input, profile.unit_system)
+
+    if (!height_cm || !weight_kg) {
+      toast.error('Enter a valid height and weight.')
+      return
+    }
+
+    await saveUserProfile({
+      name: profile.name,
+      email: profile.email,
+      height_cm,
+      weight_kg,
+      age: profile.age,
+      unit_system: profile.unit_system,
+    }, 'Profile updated!')
+  }
+
+  const handleRecalculate = async () => {
     if (!user) return
+    const height_cm = parseHeightInput(profile.height_input, profile.unit_system)
+    const weight_kg = parseWeightInput(profile.weight_input, profile.unit_system)
+
+    if (!height_cm || !weight_kg) {
+      toast.error('Enter a valid height and weight.')
+      return
+    }
+
     const updated = buildUserProfile({
       name: profile.name,
       email: profile.email,
-      height_cm: profile.height_cm,
-      weight_kg: profile.weight_kg,
+      height_cm,
+      weight_kg,
       age: profile.age,
+      unit_system: profile.unit_system,
       gender: user.gender,
       activity_level: goals.activity_level as ActivityLevel,
       fitness_goal: goals.fitness_goal as FitnessGoal,
       workout_split: goals.workout_split,
+      goal_target_change_kg: parseWeightInput(goals.goal_target_change_input, profile.unit_system) ?? undefined,
+      goal_timeframe_weeks: Number(goals.goal_timeframe_weeks_input) || undefined,
+      preferred_workout_time: goals.preferred_workout_time as PreferredWorkoutTime,
+      preferred_foods: goals.preferred_foods_input.split(',').map((item) => item.trim()).filter(Boolean),
+      avoided_foods: goals.avoided_foods_input.split(',').map((item) => item.trim()).filter(Boolean),
     })
-    updateProfile({
+
+    const saved = await saveUserProfile({
       ...updated,
       calorie_target: updated.calorie_target,
       protein_target_g: updated.protein_target_g,
       carb_target_g: updated.carb_target_g,
       fat_target_g: updated.fat_target_g,
-    })
+    }, 'Macros recalculated from your profile!')
+
+    if (!saved) return
+
     setGoals((prev) => ({
       ...prev,
       calorie_target: updated.calorie_target,
@@ -73,20 +157,23 @@ export default function SettingsPage() {
       carb_target_g: updated.carb_target_g,
       fat_target_g: updated.fat_target_g,
     }))
-    toast.success('Macros recalculated from your profile!')
   }
 
-  const handleSaveGoals = () => {
-    updateProfile({
+  const handleSaveGoals = async () => {
+    await saveUserProfile({
       fitness_goal: goals.fitness_goal as FitnessGoal,
       activity_level: goals.activity_level as ActivityLevel,
       workout_split: goals.workout_split as WorkoutSplit,
+      goal_target_change_kg: parseWeightInput(goals.goal_target_change_input, profile.unit_system) ?? undefined,
+      goal_timeframe_weeks: Number(goals.goal_timeframe_weeks_input) || undefined,
+      preferred_workout_time: goals.preferred_workout_time as PreferredWorkoutTime,
+      preferred_foods: goals.preferred_foods_input.split(',').map((item) => item.trim()).filter(Boolean),
+      avoided_foods: goals.avoided_foods_input.split(',').map((item) => item.trim()).filter(Boolean),
       calorie_target: Number(goals.calorie_target),
       protein_target_g: Number(goals.protein_target_g),
       carb_target_g: Number(goals.carb_target_g),
       fat_target_g: Number(goals.fat_target_g),
-    })
-    toast.success('Goals updated!')
+    }, 'Goals updated!')
   }
 
   const handleExportJSON = () => {
@@ -102,15 +189,19 @@ export default function SettingsPage() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `grays-fitness-export-${new Date().toISOString().slice(0, 10)}.json`
+    a.download = `rivlo-export-${new Date().toISOString().slice(0, 10)}.json`
     a.click()
     toast.success('Data exported as JSON!')
   }
 
   const handleExportCSV = () => {
     const csvRows = [
-      ['Date', 'Weight (kg)', 'Body Fat (%)'],
-      ...weightHistory.map((w) => [w.date, w.weight_kg.toFixed(1), w.body_fat_pct?.toFixed(1) || '']),
+      [`Date`, `Weight (${getWeightUnitLabel(profile.unit_system)})`, 'Body Fat (%)'],
+      ...weightHistory.map((w) => [
+        w.date,
+        profile.unit_system === 'metric' ? w.weight_kg.toFixed(1) : (w.weight_kg * 2.20462).toFixed(1),
+        w.body_fat_pct?.toFixed(1) || '',
+      ]),
     ]
     const csv = csvRows.map((row) => row.join(',')).join('\n')
     const blob = new Blob([csv], { type: 'text/csv' })
@@ -120,6 +211,54 @@ export default function SettingsPage() {
     a.download = 'weight-history.csv'
     a.click()
     toast.success('Weight data exported as CSV!')
+  }
+
+  const handleDeleteAccount = async () => {
+    if (!user) return
+
+    const confirmed = window.confirm('Delete your account and all data permanently? This cannot be undone.')
+    if (!confirmed) return
+
+    if (isDemoMode) {
+      toast.error('Demo accounts cannot be deleted from Supabase.')
+      return
+    }
+
+    const response = await deleteSupabaseAccount()
+    if (!response.success) {
+      toast.error(response.error || 'Failed to delete your account.')
+      return
+    }
+
+    toast.success('Your account was deleted.')
+    router.replace('/login')
+  }
+
+  const handleToggleNotification = async (key: NotificationPreferenceKey) => {
+    const nextValue = !notificationPreferences[key]
+    updateNotificationPreference(key, nextValue)
+
+    if (!user || isDemoMode) {
+      toast.success(nextValue ? 'Notification enabled.' : 'Notification disabled.')
+      return
+    }
+
+    const nextPreferences = {
+      ...(user.notification_preferences ?? notificationPreferences),
+      [key]: nextValue,
+    }
+
+    const response = await persistProfile(user.id, {
+      notification_preferences: nextPreferences,
+    } as Partial<typeof user>)
+
+    if (!response.success || !response.user) {
+      toast.info('Preference saved locally. Run the notification preferences SQL migration to persist it in Supabase too.')
+      return
+    }
+
+    updateLocalProfile(response.user)
+    toast.success(nextValue ? 'Notification enabled.' : 'Notification disabled.')
   }
 
   if (!user) return null
@@ -170,6 +309,18 @@ export default function SettingsPage() {
                   />
                 </div>
                 <div className="space-y-1.5">
+                  <Label>Preferred Units</Label>
+                  <Select value={profile.unit_system} onValueChange={(v) => handleUnitSystemChange(v as UnitSystem)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="imperial">US / Imperial (ft, in, lbs)</SelectItem>
+                      <SelectItem value="metric">Metric (cm, kg)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
                   <Label>Email</Label>
                   <Input
                     type="email"
@@ -180,20 +331,20 @@ export default function SettingsPage() {
               </div>
               <div className="grid grid-cols-3 gap-4">
                 <div className="space-y-1.5">
-                  <Label>Height (cm)</Label>
+                  <Label>Height ({getHeightUnitLabel(profile.unit_system)})</Label>
                   <Input
-                    type="number"
-                    value={profile.height_cm}
-                    onChange={(e) => setProfile((p) => ({ ...p, height_cm: Number(e.target.value) }))}
+                    type="text"
+                    value={profile.height_input}
+                    onChange={(e) => setProfile((p) => ({ ...p, height_input: e.target.value }))}
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Weight (kg)</Label>
+                  <Label>Weight ({getWeightUnitLabel(profile.unit_system)})</Label>
                   <Input
                     type="number"
-                    value={profile.weight_kg}
-                    onChange={(e) => setProfile((p) => ({ ...p, weight_kg: Number(e.target.value) }))}
-                    step={0.5}
+                    value={profile.weight_input}
+                    onChange={(e) => setProfile((p) => ({ ...p, weight_input: e.target.value }))}
+                    step={profile.unit_system === 'metric' ? 0.1 : 1}
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -209,15 +360,15 @@ export default function SettingsPage() {
               {/* Stats summary */}
               <div className="bg-muted/40 rounded-xl p-4 grid grid-cols-3 gap-4 text-center">
                 <div>
-                  <p className="text-lg font-bold text-emerald-400">{user.bmr}</p>
+                  <p className="text-lg font-bold tabular-nums">{user.bmr}</p>
                   <p className="text-xs text-muted-foreground">BMR (kcal)</p>
                 </div>
                 <div>
-                  <p className="text-lg font-bold text-blue-400">{user.tdee}</p>
+                  <p className="text-lg font-bold tabular-nums">{user.tdee}</p>
                   <p className="text-xs text-muted-foreground">TDEE (kcal)</p>
                 </div>
                 <div>
-                  <p className="text-lg font-bold text-amber-400">{user.calorie_target}</p>
+                  <p className="text-lg font-bold tabular-nums text-emerald-500">{user.calorie_target}</p>
                   <p className="text-xs text-muted-foreground">Daily Target</p>
                 </div>
               </div>
@@ -287,6 +438,63 @@ export default function SettingsPage() {
                 </Select>
               </div>
 
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label>Target change ({getWeightUnitLabel(profile.unit_system)})</Label>
+                  <Input
+                    type="number"
+                    value={goals.goal_target_change_input}
+                    onChange={(e) => setGoals((g) => ({ ...g, goal_target_change_input: e.target.value }))}
+                    placeholder={profile.unit_system === 'metric' ? '6' : '12'}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Goal timeframe (weeks)</Label>
+                  <Input
+                    type="number"
+                    value={goals.goal_timeframe_weeks_input}
+                    onChange={(e) => setGoals((g) => ({ ...g, goal_timeframe_weeks_input: e.target.value }))}
+                    min={1}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Preferred workout time</Label>
+                <Select value={goals.preferred_workout_time} onValueChange={(v) => setGoals((g) => ({ ...g, preferred_workout_time: v as PreferredWorkoutTime }))}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="early_morning">Early Morning</SelectItem>
+                    <SelectItem value="morning">Morning</SelectItem>
+                    <SelectItem value="afternoon">Afternoon</SelectItem>
+                    <SelectItem value="evening">Evening</SelectItem>
+                    <SelectItem value="late_night">Late Night</SelectItem>
+                    <SelectItem value="flexible">Flexible</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label>Foods you want more of</Label>
+                  <Input
+                    value={goals.preferred_foods_input}
+                    onChange={(e) => setGoals((g) => ({ ...g, preferred_foods_input: e.target.value }))}
+                    placeholder="e.g. chicken, eggs, fruit, rice"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Foods to avoid</Label>
+                  <Input
+                    value={goals.avoided_foods_input}
+                    onChange={(e) => setGoals((g) => ({ ...g, avoided_foods_input: e.target.value }))}
+                    placeholder="e.g. shellfish, mushrooms, peanuts"
+                  />
+                </div>
+              </div>
+
               {/* Macro targets */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
@@ -298,13 +506,13 @@ export default function SettingsPage() {
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   {[
-                    { label: 'Calories (kcal)', key: 'calorie_target', color: 'text-orange-400' },
-                    { label: 'Protein (g)', key: 'protein_target_g', color: 'text-emerald-400' },
-                    { label: 'Carbs (g)', key: 'carb_target_g', color: 'text-blue-400' },
-                    { label: 'Fat (g)', key: 'fat_target_g', color: 'text-amber-400' },
+                    { label: 'Calories (kcal)', key: 'calorie_target' },
+                    { label: 'Protein (g)', key: 'protein_target_g' },
+                    { label: 'Carbs (g)', key: 'carb_target_g' },
+                    { label: 'Fat (g)', key: 'fat_target_g' },
                   ].map((field) => (
                     <div key={field.key} className="space-y-1.5">
-                      <Label className={`text-xs ${field.color}`}>{field.label}</Label>
+                      <Label className="text-xs">{field.label}</Label>
                       <Input
                         type="number"
                         value={goals[field.key as keyof typeof goals]}
@@ -362,22 +570,24 @@ export default function SettingsPage() {
             </CardHeader>
             <CardContent className="space-y-3">
               {[
-                { label: 'Daily workout reminder', sub: 'Get reminded to log your workout', enabled: true },
-                { label: 'Meal logging reminder', sub: 'Reminder to log meals', enabled: true },
-                { label: 'Weekly progress summary', sub: 'Summary of your week every Sunday', enabled: false },
-                { label: 'Goal milestone alerts', sub: 'Notify when you hit a milestone', enabled: true },
-              ].map((item, i) => (
-                <div key={i} className="flex items-center justify-between py-2 border-b border-border/50 last:border-0">
+                { key: 'daily_workout_reminder', label: 'Daily workout reminder', sub: 'Get reminded when today still has no workout logged' },
+                { key: 'meal_logging_reminder', label: 'Meal logging reminder', sub: 'Prompt you when today has no meals logged yet' },
+                { key: 'weekly_progress_summary', label: 'Weekly progress summary', sub: 'Show a weekly snapshot based on workouts, meals, and streaks' },
+                { key: 'goal_milestone_alerts', label: 'Goal milestone alerts', sub: 'Surface streak milestones and major goal progress updates' },
+              ].map((item) => (
+                <div key={item.key} className="flex items-center justify-between py-2 border-b border-border/50 last:border-0">
                   <div>
                     <p className="text-sm font-medium">{item.label}</p>
                     <p className="text-xs text-muted-foreground">{item.sub}</p>
                   </div>
-                  <div
-                    className={`w-10 h-5 rounded-full transition-colors cursor-pointer ${item.enabled ? 'bg-emerald-500' : 'bg-muted'}`}
-                    onClick={() => toast.info('Notification settings — connect to a backend to persist')}
+                  <button
+                    type="button"
+                    aria-pressed={notificationPreferences[item.key as NotificationPreferenceKey]}
+                    className={`w-10 h-5 rounded-full transition-colors ${notificationPreferences[item.key as NotificationPreferenceKey] ? 'bg-emerald-500' : 'bg-muted'}`}
+                    onClick={() => handleToggleNotification(item.key as NotificationPreferenceKey)}
                   >
-                    <div className={`w-4 h-4 rounded-full bg-white mt-0.5 transition-transform duration-200 ${item.enabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
-                  </div>
+                    <div className={`w-4 h-4 rounded-full bg-white mt-0.5 transition-transform duration-200 ${notificationPreferences[item.key as NotificationPreferenceKey] ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                  </button>
                 </div>
               ))}
             </CardContent>
@@ -453,7 +663,7 @@ export default function SettingsPage() {
                 variant="destructive"
                 size="sm"
                 className="gap-1.5"
-                onClick={() => toast.error('Delete account — requires Supabase backend to implement')}
+                onClick={handleDeleteAccount}
               >
                 <Trash2 className="w-3.5 h-3.5" />
                 Delete Account & All Data

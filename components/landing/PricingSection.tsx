@@ -74,7 +74,7 @@ export function PricingSection() {
             Simple, transparent pricing
           </h2>
           <p className="text-zinc-400 text-lg max-w-xl mx-auto">
-            Start free, upgrade when you're ready. No hidden fees, cancel anytime.
+            Start free, upgrade when you&apos;re ready. No hidden fees, cancel anytime.
           </p>
 
           {/* Billing toggle */}

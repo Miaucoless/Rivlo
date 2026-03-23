@@ -9,14 +9,17 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useAppStore } from '@/store/useAppStore'
+import { signUpWithEmail } from '@/lib/auth'
+import type { UnitSystem } from '@/types'
 import { toast } from 'sonner'
 
 export default function SignupPage() {
   const router = useRouter()
-  const { loginDemo } = useAppStore()
-  const [form, setForm] = useState({ name: '', email: '', password: '' })
+  const { loginDemo, setUser } = useAppStore()
+  const [form, setForm] = useState({ name: '', email: '', password: '', unit_system: 'imperial' as UnitSystem })
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [confirmationEmail, setConfirmationEmail] = useState('')
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }))
@@ -33,10 +36,28 @@ export default function SignupPage() {
       return
     }
     setLoading(true)
-    await new Promise((r) => setTimeout(r, 800))
-    toast.info('Connect Supabase for real auth. Using demo mode with your name.')
+    
+    const response = await signUpWithEmail(form.email, form.password, form.name, form.unit_system)
+    
+    if (response.success && response.pendingConfirmation) {
+      setConfirmationEmail(form.email)
+      toast.success('Account created. Check your inbox to confirm your email.')
+      setForm((prev) => ({ ...prev, password: '' }))
+    } else if (response.success && response.user) {
+      setUser(response.user)
+      toast.success('Account created! Complete your profile.')
+      router.push('/onboarding')
+    } else {
+      toast.error(response.error || 'Failed to create account')
+    }
+    setLoading(false)
+  }
+
+  const handleDemo = async () => {
+    setLoading(true)
+    await new Promise((r) => setTimeout(r, 600))
     loginDemo()
-    router.push('/onboarding')
+    router.push('/dashboard')
     setLoading(false)
   }
 
@@ -62,7 +83,7 @@ export default function SignupPage() {
   ]
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] flex">
+    <div className="min-h-screen bg-[#0a0a0a] flex" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
       {/* Left panel — visual */}
       <div className="hidden lg:flex flex-1 bg-gradient-to-br from-teal-950/40 to-zinc-900 items-center justify-center p-12 border-r border-white/5 relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-mesh opacity-40" />
@@ -93,7 +114,7 @@ export default function SignupPage() {
                 <div key={i} className="w-4 h-4 text-amber-400">⭐</div>
               ))}
             </div>
-            <p className="text-zinc-300 text-sm italic">"Lost 12kg in 4 months. The meal planning system is incredibly convenient."</p>
+            <p className="text-zinc-300 text-sm italic">&quot;Lost 12kg in 4 months. The meal planning system is incredibly convenient.&quot;</p>
             <p className="text-zinc-500 text-xs mt-2">— Sarah C., Software Engineer</p>
           </div>
         </div>
@@ -113,7 +134,7 @@ export default function SignupPage() {
             <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center shadow-lg shadow-emerald-500/30">
               <Zap className="w-4 h-4 text-white" strokeWidth={2.5} />
             </div>
-            <span className="text-xl font-bold text-white">Grays</span>
+            <span className="text-xl font-bold text-white">Rivlo</span>
           </div>
 
           {/* Heading */}
@@ -126,6 +147,15 @@ export default function SignupPage() {
             <h1 className="text-2xl font-bold text-white">Create your account</h1>
             <p className="text-zinc-400 text-sm">Free forever. No credit card required.</p>
           </motion.div>
+
+          {confirmationEmail && (
+            <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-4">
+              <p className="text-sm font-medium text-emerald-300">Confirm your email to finish setup</p>
+              <p className="mt-1 text-xs text-zinc-300">
+                We sent a verification link to {confirmationEmail}. Open that email, confirm your account, then sign in.
+              </p>
+            </div>
+          )}
 
           {/* Form */}
           <motion.form
@@ -161,6 +191,30 @@ export default function SignupPage() {
                 className="bg-zinc-900 border-white/10 text-white placeholder:text-zinc-600 focus:border-emerald-500/50"
                 autoComplete="email"
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-zinc-300">Preferred Units</Label>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { value: 'imperial', label: 'US / Imperial', hint: 'ft, in, lbs' },
+                  { value: 'metric', label: 'Metric', hint: 'cm, kg' },
+                ].map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setForm((prev) => ({ ...prev, unit_system: option.value as UnitSystem }))}
+                    className={`rounded-lg border px-3 py-3 text-left transition-all ${
+                      form.unit_system === option.value
+                        ? 'border-emerald-500 bg-emerald-500/10 text-white'
+                        : 'border-white/10 bg-zinc-900/60 text-zinc-400 hover:border-white/20'
+                    }`}
+                  >
+                    <p className="text-sm font-medium">{option.label}</p>
+                    <p className="text-xs text-zinc-500">{option.hint}</p>
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="space-y-2">
@@ -213,6 +267,26 @@ export default function SignupPage() {
               disabled={loading}
             >
               {loading ? 'Creating account...' : 'Create Free Account'}
+            </Button>
+
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-white/10" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="px-2 bg-[#0a0a0a] text-zinc-500">Or</span>
+              </div>
+            </div>
+
+            <Button
+              type="button"
+              variant="outline"
+              size="lg"
+              className="w-full border-white/20 text-white hover:bg-white/5"
+              onClick={handleDemo}
+              disabled={loading}
+            >
+              {loading ? 'Loading...' : 'Try Demo'}
             </Button>
 
             <p className="text-xs text-zinc-600 text-center">

@@ -18,8 +18,6 @@ export function LandingNav() {
 
   const links = [
     { label: 'Features', href: '#features' },
-    { label: 'Testimonials', href: '#testimonials' },
-    { label: 'Pricing', href: '#pricing' },
   ]
 
   return (
@@ -32,6 +30,7 @@ export function LandingNav() {
           ? 'bg-black/80 backdrop-blur-xl border-b border-white/10 py-3'
           : 'py-5'
       }`}
+      style={{ paddingTop: `calc(${scrolled ? '0.75rem' : '1.25rem'} + env(safe-area-inset-top))` }}
     >
       <div className="max-w-7xl mx-auto px-6 flex items-center justify-between">
         {/* Logo */}
@@ -39,7 +38,7 @@ export function LandingNav() {
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center shadow-lg shadow-emerald-500/30">
             <Zap className="w-4 h-4 text-white" strokeWidth={2.5} />
           </div>
-          <span className="text-xl font-bold tracking-tight">Grays</span>
+          <span className="text-xl font-bold tracking-tight">Rivlo</span>
         </Link>
 
         {/* Desktop Nav */}

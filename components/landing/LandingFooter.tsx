@@ -12,7 +12,7 @@ export function LandingFooter() {
               <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center">
                 <Zap className="w-4 h-4 text-white" strokeWidth={2.5} />
               </div>
-              <span className="text-xl font-bold">Grays</span>
+              <span className="text-xl font-bold">Rivlo</span>
             </Link>
             <p className="text-zinc-500 text-sm max-w-xs leading-relaxed">
               The all-in-one fitness platform for serious athletes. Track, plan, and optimize everything.
@@ -45,7 +45,7 @@ export function LandingFooter() {
         </div>
 
         <div className="border-t border-white/5 pt-8 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <p className="text-zinc-600 text-sm">© 2026 Grays Fitness. All rights reserved.</p>
+          <p className="text-zinc-600 text-sm">© 2026 Rivlo. All rights reserved.</p>
           <p className="text-zinc-600 text-sm">Built with 💚 for athletes who never settle</p>
         </div>
       </div>

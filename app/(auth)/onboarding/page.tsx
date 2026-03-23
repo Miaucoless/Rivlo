@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowRight, ArrowLeft, Check, Zap } from 'lucide-react'
@@ -8,30 +8,27 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useAppStore } from '@/store/useAppStore'
-import { buildUserProfile } from '@/lib/utils'
-import type { Gender, ActivityLevel, FitnessGoal, WorkoutSplit } from '@/types'
+import { updateProfile as persistProfile } from '@/lib/auth'
+import { buildUserProfile, formatGoalWeightChangeForInput, formatHeightForInput, formatWeightForInput, getHeightUnitLabel, getWeightUnitLabel, parseHeightInput, parseWeightInput } from '@/lib/utils'
+import type { Gender, ActivityLevel, FitnessGoal, PreferredWorkoutTime, UnitSystem, WorkoutSplit } from '@/types'
 import { toast } from 'sonner'
 
-const TOTAL_STEPS = 5
+const TOTAL_STEPS = 6
 
 interface FormData {
-  height_cm: number
-  weight_kg: number
+  height_input: string
+  weight_input: string
   age: number
+  unit_system: UnitSystem
   gender: Gender
   activity_level: ActivityLevel
   fitness_goal: FitnessGoal
   workout_split: WorkoutSplit
-}
-
-const initialForm: FormData = {
-  height_cm: 175,
-  weight_kg: 75,
-  age: 25,
-  gender: 'male',
-  activity_level: 'moderately_active',
-  fitness_goal: 'fat_loss',
-  workout_split: 'ppl',
+  goal_target_change_input: string
+  goal_timeframe_weeks_input: string
+  preferred_workout_time: PreferredWorkoutTime
+  preferred_foods_input: string
+  avoided_foods_input: string
 }
 
 type ChoiceCard = {
@@ -83,28 +80,99 @@ function ChoiceGrid<T extends string>({
 
 export default function OnboardingPage() {
   const router = useRouter()
-  const { user, updateProfile } = useAppStore()
+  const { user, updateProfile, isDemoMode } = useAppStore()
   const [step, setStep] = useState(1)
-  const [form, setForm] = useState<FormData>(initialForm)
+  const [form, setForm] = useState<FormData>(() => {
+    const unitSystem = user?.unit_system || 'imperial'
+    return {
+      height_input: formatHeightForInput(user?.height_cm || 175, unitSystem),
+      weight_input: formatWeightForInput(user?.weight_kg || 75, unitSystem),
+      age: user?.age || 25,
+      unit_system: unitSystem,
+      gender: user?.gender || 'male',
+      activity_level: user?.activity_level || 'moderately_active',
+      fitness_goal: user?.fitness_goal || 'fat_loss',
+      workout_split: user?.workout_split || 'ppl',
+      goal_target_change_input: formatGoalWeightChangeForInput(user?.goal_target_change_kg, unitSystem),
+      goal_timeframe_weeks_input: user?.goal_timeframe_weeks ? String(user.goal_timeframe_weeks) : '12',
+      preferred_workout_time: user?.preferred_workout_time || 'evening',
+      preferred_foods_input: user?.preferred_foods?.join(', ') || '',
+      avoided_foods_input: user?.avoided_foods?.join(', ') || '',
+    }
+  })
   const [loading, setLoading] = useState(false)
 
   const update = <K extends keyof FormData>(key: K, value: FormData[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }))
+
+  useEffect(() => {
+    if (user?.onboarded) {
+      router.replace('/dashboard')
+    }
+  }, [router, user?.onboarded])
+
+  const handleUnitSystemChange = (unitSystem: UnitSystem) => {
+    const currentHeightCm = parseHeightInput(form.height_input, form.unit_system) ?? user?.height_cm ?? 175
+    const currentWeightKg = parseWeightInput(form.weight_input, form.unit_system) ?? user?.weight_kg ?? 75
+    setForm((prev) => ({
+      ...prev,
+      unit_system: unitSystem,
+      height_input: formatHeightForInput(currentHeightCm, unitSystem),
+      weight_input: formatWeightForInput(currentWeightKg, unitSystem),
+    }))
+  }
 
   const handleComplete = async () => {
     setLoading(true)
     await new Promise((r) => setTimeout(r, 600))
 
     if (user) {
+      const height_cm = parseHeightInput(form.height_input, form.unit_system)
+      const weight_kg = parseWeightInput(form.weight_input, form.unit_system)
+
+      if (!height_cm || !weight_kg) {
+        toast.error('Enter a valid height and weight before continuing.')
+        setLoading(false)
+        return
+      }
+
       const profile = buildUserProfile({
         name: user.name,
         email: user.email,
-        ...form,
+        height_cm,
+        weight_kg,
+        age: form.age,
+        unit_system: form.unit_system,
+        gender: form.gender,
+        activity_level: form.activity_level,
+        fitness_goal: form.fitness_goal,
+        workout_split: form.workout_split,
+        goal_target_change_kg: parseWeightInput(form.goal_target_change_input, form.unit_system) ?? undefined,
+        goal_timeframe_weeks: Number(form.goal_timeframe_weeks_input) || undefined,
+        preferred_workout_time: form.preferred_workout_time,
+        preferred_foods: form.preferred_foods_input.split(',').map((item) => item.trim()).filter(Boolean),
+        avoided_foods: form.avoided_foods_input.split(',').map((item) => item.trim()).filter(Boolean),
       })
-      updateProfile({
-        ...profile,
-        onboarded: true,
-      })
+
+      if (isDemoMode) {
+        updateProfile({
+          ...profile,
+          onboarded: true,
+        })
+      } else {
+        const response = await persistProfile(user.id, {
+          ...profile,
+          onboarded: true,
+        })
+
+        if (!response.success || !response.user) {
+          toast.error(response.error || 'Failed to save your profile.')
+          setLoading(false)
+          return
+        }
+
+        updateProfile(response.user)
+      }
     }
 
     toast.success('Profile set up! Your personalized plan is ready. 🎉')
@@ -118,26 +186,48 @@ export default function OnboardingPage() {
       subtitle: "We'll use this to calculate your exact calorie and macro targets.",
       content: (
         <div className="space-y-5">
+          <div className="space-y-2">
+            <Label className="text-zinc-300">Preferred Units</Label>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { value: 'imperial', label: 'US / Imperial', hint: 'ft, in, lbs' },
+                { value: 'metric', label: 'Metric', hint: 'cm, kg' },
+              ].map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => handleUnitSystemChange(option.value as UnitSystem)}
+                  className={`rounded-lg border px-3 py-3 text-left transition-all ${
+                    form.unit_system === option.value
+                      ? 'border-emerald-500 bg-emerald-500/10 text-white'
+                      : 'border-white/10 bg-zinc-900/60 text-zinc-400 hover:border-white/20'
+                  }`}
+                >
+                  <p className="text-sm font-medium">{option.label}</p>
+                  <p className="text-xs text-zinc-500">{option.hint}</p>
+                </button>
+              ))}
+            </div>
+          </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label className="text-zinc-300">Height (cm)</Label>
+              <Label className="text-zinc-300">Height ({getHeightUnitLabel(form.unit_system)})</Label>
               <Input
-                type="number"
-                value={form.height_cm}
-                onChange={(e) => update('height_cm', Number(e.target.value))}
+                type="text"
+                value={form.height_input}
+                onChange={(e) => update('height_input', e.target.value)}
+                placeholder={form.unit_system === 'imperial' ? `5'9` : '175'}
                 className="bg-zinc-900 border-white/10 text-white"
-                min={140} max={230}
               />
             </div>
             <div className="space-y-2">
-              <Label className="text-zinc-300">Weight (kg)</Label>
+              <Label className="text-zinc-300">Weight ({getWeightUnitLabel(form.unit_system)})</Label>
               <Input
                 type="number"
-                value={form.weight_kg}
-                onChange={(e) => update('weight_kg', Number(e.target.value))}
+                value={form.weight_input}
+                onChange={(e) => update('weight_input', e.target.value)}
                 className="bg-zinc-900 border-white/10 text-white"
-                min={40} max={200}
-                step={0.5}
+                step={form.unit_system === 'metric' ? 0.1 : 1}
               />
             </div>
           </div>
@@ -225,14 +315,94 @@ export default function OnboardingPage() {
       ),
     },
     {
+      title: 'Lifestyle preferences',
+      subtitle: 'Tell us how you want this plan to fit your life.',
+      content: (
+        <div className="space-y-5">
+          <div className="space-y-2">
+            <Label className="text-zinc-300">Preferred workout time</Label>
+            <ChoiceGrid
+              value={form.preferred_workout_time}
+              onChange={(v) => update('preferred_workout_time', v)}
+              choices={[
+                { value: 'early_morning', label: 'Early Morning', description: 'Before the day starts', emoji: '🌅' },
+                { value: 'morning', label: 'Morning', description: 'Best before lunch', emoji: '☀️' },
+                { value: 'afternoon', label: 'Afternoon', description: 'Midday sessions', emoji: '🕑' },
+                { value: 'evening', label: 'Evening', description: 'After work or school', emoji: '🌆' },
+                { value: 'late_night', label: 'Late Night', description: 'Night owl training', emoji: '🌙' },
+                { value: 'flexible', label: 'Flexible', description: 'Any time works', emoji: '🔄' },
+              ] as Array<{ value: PreferredWorkoutTime; label: string; description: string; emoji: string }>}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label className="text-zinc-300">
+                {form.fitness_goal === 'muscle_gain' ? `How much do you want to gain? (${getWeightUnitLabel(form.unit_system)})` : `How much do you want to lose? (${getWeightUnitLabel(form.unit_system)})`}
+              </Label>
+              <Input
+                type="number"
+                value={form.goal_target_change_input}
+                onChange={(e) => update('goal_target_change_input', e.target.value)}
+                placeholder={form.unit_system === 'metric' ? '6' : '12'}
+                className="bg-zinc-900 border-white/10 text-white"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-zinc-300">Timeframe (weeks)</Label>
+              <Input
+                type="number"
+                value={form.goal_timeframe_weeks_input}
+                onChange={(e) => update('goal_timeframe_weeks_input', e.target.value)}
+                className="bg-zinc-900 border-white/10 text-white"
+                min={1}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-zinc-300">Foods you want more of</Label>
+            <Input
+              type="text"
+              value={form.preferred_foods_input}
+              onChange={(e) => update('preferred_foods_input', e.target.value)}
+              placeholder="e.g. chicken, eggs, fruit, rice"
+              className="bg-zinc-900 border-white/10 text-white"
+            />
+            <p className="text-xs text-zinc-500">Use commas to separate foods.</p>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-zinc-300">Foods you want to avoid</Label>
+            <Input
+              type="text"
+              value={form.avoided_foods_input}
+              onChange={(e) => update('avoided_foods_input', e.target.value)}
+              placeholder="e.g. seafood, mushrooms, peanuts"
+              className="bg-zinc-900 border-white/10 text-white"
+            />
+            <p className="text-xs text-zinc-500">Use commas to separate foods.</p>
+          </div>
+        </div>
+      ),
+    },
+    {
       title: 'Your personalized plan',
       subtitle: 'Based on your profile, here are your targets:',
       content: (() => {
-        const { calculateBMR, calculateTDEE, calculateCalorieTarget, calculateProteinTarget, calculateMacros } = require('@/lib/utils')
-        const bmr = Math.round(calculateBMR(form.weight_kg, form.height_cm, form.age, form.gender))
+        const { calculateBMR, calculateTDEE, calculateDetailedCalorieTarget, calculateProteinTarget, calculateMacros } = require('@/lib/utils')
+        const height_cm = parseHeightInput(form.height_input, form.unit_system) ?? 175
+        const weight_kg = parseWeightInput(form.weight_input, form.unit_system) ?? 75
+        const bmr = Math.round(calculateBMR(weight_kg, height_cm, form.age, form.gender))
         const tdee = calculateTDEE(bmr, form.activity_level)
-        const calories = calculateCalorieTarget(tdee, form.fitness_goal)
-        const protein = calculateProteinTarget(form.weight_kg, form.fitness_goal)
+        const goal_target_change_kg = parseWeightInput(form.goal_target_change_input, form.unit_system) ?? undefined
+          const calories = calculateDetailedCalorieTarget({
+          tdee,
+          goal: form.fitness_goal,
+          goal_target_change_kg,
+          goal_timeframe_weeks: Number(form.goal_timeframe_weeks_input) || undefined,
+        })
+        const protein = calculateProteinTarget(weight_kg, form.fitness_goal)
         const macros = calculateMacros(calories, protein, form.fitness_goal)
 
         return (
@@ -259,6 +429,14 @@ export default function OnboardingPage() {
                 {' · '}
                 Total daily expenditure: <span className="text-white font-semibold">{tdee} kcal</span>
               </p>
+              {goal_target_change_kg && (
+                <p className="mt-2 text-sm text-zinc-300">
+                  Goal pace: <span className="text-white font-semibold">
+                    {form.fitness_goal === 'muscle_gain' ? 'gain' : 'lose'} {form.goal_target_change_input} {getWeightUnitLabel(form.unit_system)}
+                  </span>{' '}
+                  in <span className="text-white font-semibold">{form.goal_timeframe_weeks_input} weeks</span>
+                </p>
+              )}
             </div>
 
             <p className="text-xs text-zinc-500 text-center">
@@ -273,14 +451,14 @@ export default function OnboardingPage() {
   const currentStep = steps[step - 1]
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center p-6">
+    <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center p-6" style={{ paddingTop: 'max(1.5rem, env(safe-area-inset-top))' }}>
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="flex items-center gap-2 mb-8">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center">
             <Zap className="w-4 h-4 text-white" strokeWidth={2.5} />
           </div>
-          <span className="text-lg font-bold text-white">Grays</span>
+          <span className="text-lg font-bold text-white">Rivlo</span>
         </div>
 
         {/* Progress bar */}

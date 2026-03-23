@@ -8,7 +8,7 @@ export function cn(...inputs: ClassValue[]) {
 
 // ─── Fitness Calculations ────────────────────────────────────────────────────────
 
-import type { ActivityLevel, FitnessGoal, Gender, UserProfile } from '@/types'
+import type { ActivityLevel, FitnessGoal, Gender, PreferredWorkoutTime, UnitSystem, UserProfile } from '@/types'
 
 /**
  * Mifflin-St Jeor BMR formula (most accurate for most people)
@@ -39,6 +39,38 @@ const GOAL_CALORIE_ADJUSTMENTS: Record<FitnessGoal, number> = {
 
 export function calculateCalorieTarget(tdee: number, goal: FitnessGoal): number {
   return tdee + GOAL_CALORIE_ADJUSTMENTS[goal]
+}
+
+export function calculateDetailedCalorieTarget(args: {
+  tdee: number
+  goal: FitnessGoal
+  goal_target_change_kg?: number
+  goal_timeframe_weeks?: number
+}) {
+  const { tdee, goal, goal_target_change_kg, goal_timeframe_weeks } = args
+
+  if (
+    !goal_target_change_kg ||
+    !goal_timeframe_weeks ||
+    goal_timeframe_weeks <= 0 ||
+    goal === 'maintenance' ||
+    goal === 'athletic_performance'
+  ) {
+    return calculateCalorieTarget(tdee, goal)
+  }
+
+  const weeklyChangeKg = goal_target_change_kg / goal_timeframe_weeks
+  const dailyKcalDelta = (weeklyChangeKg * 7700) / 7
+
+  if (goal === 'fat_loss') {
+    return Math.round(Math.max(tdee - 1100, tdee - dailyKcalDelta))
+  }
+
+  if (goal === 'muscle_gain') {
+    return Math.round(Math.min(tdee + 500, tdee + dailyKcalDelta))
+  }
+
+  return calculateCalorieTarget(tdee, goal)
 }
 
 /**
@@ -86,14 +118,25 @@ export function buildUserProfile(formData: {
   height_cm: number
   weight_kg: number
   age: number
+  unit_system: UnitSystem
   gender: Gender
   activity_level: ActivityLevel
   fitness_goal: FitnessGoal
   workout_split: string
+  goal_target_change_kg?: number
+  goal_timeframe_weeks?: number
+  preferred_workout_time?: PreferredWorkoutTime
+  preferred_foods?: string[]
+  avoided_foods?: string[]
 }): Omit<UserProfile, 'id' | 'created_at' | 'updated_at'> {
   const bmr = calculateBMR(formData.weight_kg, formData.height_cm, formData.age, formData.gender)
   const tdee = calculateTDEE(bmr, formData.activity_level)
-  const calorie_target = calculateCalorieTarget(tdee, formData.fitness_goal)
+  const calorie_target = calculateDetailedCalorieTarget({
+    tdee,
+    goal: formData.fitness_goal,
+    goal_target_change_kg: formData.goal_target_change_kg,
+    goal_timeframe_weeks: formData.goal_timeframe_weeks,
+  })
   const protein_target_g = calculateProteinTarget(formData.weight_kg, formData.fitness_goal)
   const macros = calculateMacros(calorie_target, protein_target_g, formData.fitness_goal)
 
@@ -146,6 +189,110 @@ export function percentage(value: number, total: number): number {
 export function formatWeight(kg: number, unit: 'kg' | 'lbs' = 'kg'): string {
   if (unit === 'lbs') return `${(kg * 2.205).toFixed(1)} lbs`
   return `${kg.toFixed(1)} kg`
+}
+
+export function kgToLbs(kg: number): number {
+  return kg * 2.20462
+}
+
+export function lbsToKg(lbs: number): number {
+  return lbs / 2.20462
+}
+
+export function inchesToCm(inches: number): number {
+  return inches * 2.54
+}
+
+export function cmToInches(cm: number): number {
+  return cm / 2.54
+}
+
+export function cmToFeetAndInches(cm: number) {
+  const totalInches = Math.round(cmToInches(cm))
+  const feet = Math.floor(totalInches / 12)
+  const inches = totalInches % 12
+  return { feet, inches }
+}
+
+export function formatHeightForInput(heightCm: number, unitSystem: UnitSystem): string {
+  if (unitSystem === 'metric') return Math.round(heightCm).toString()
+  const { feet, inches } = cmToFeetAndInches(heightCm)
+  return `${feet}'${inches}`
+}
+
+export function formatWeightForInput(weightKg: number, unitSystem: UnitSystem): string {
+  if (unitSystem === 'metric') return weightKg.toFixed(1)
+  return Math.round(kgToLbs(weightKg)).toString()
+}
+
+export function formatGoalWeightChangeForInput(goalChangeKg: number | undefined, unitSystem: UnitSystem): string {
+  if (goalChangeKg === undefined) return ''
+  return unitSystem === 'metric' ? goalChangeKg.toFixed(1) : Math.round(kgToLbs(goalChangeKg)).toString()
+}
+
+export function parseHeightInput(input: string, unitSystem: UnitSystem): number | null {
+  const value = input.trim().toLowerCase()
+  if (!value) return null
+
+  if (unitSystem === 'metric') {
+    const centimeters = Number(value)
+    return Number.isFinite(centimeters) ? centimeters : null
+  }
+
+  const feetInchesMatch = value.match(/^(\d+)\s*(?:'|ft)\s*(\d{1,2})?\s*(?:"|in)?$/)
+  if (feetInchesMatch) {
+    const feet = Number(feetInchesMatch[1])
+    const inches = Number(feetInchesMatch[2] || 0)
+    return inchesToCm((feet * 12) + inches)
+  }
+
+  const splitMatch = value.match(/^(\d+)\s+(\d{1,2})$/)
+  if (splitMatch) {
+    const feet = Number(splitMatch[1])
+    const inches = Number(splitMatch[2])
+    return inchesToCm((feet * 12) + inches)
+  }
+
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric)) return null
+  if (numeric >= 4 && numeric <= 8) return inchesToCm(numeric * 12)
+  if (numeric >= 48 && numeric <= 96) return inchesToCm(numeric)
+  return null
+}
+
+export function parseWeightInput(input: string, unitSystem: UnitSystem): number | null {
+  const numeric = Number(input.trim())
+  if (!Number.isFinite(numeric)) return null
+  return unitSystem === 'metric' ? numeric : lbsToKg(numeric)
+}
+
+export function formatWeightValue(weightKg: number, unitSystem: UnitSystem, digits = 1): string {
+  if (unitSystem === 'metric') return `${weightKg.toFixed(digits)} kg`
+  return `${kgToLbs(weightKg).toFixed(digits)} lbs`
+}
+
+export function formatWeightNumber(weightKg: number, unitSystem: UnitSystem, digits = 1): string {
+  if (unitSystem === 'metric') return weightKg.toFixed(digits)
+  return kgToLbs(weightKg).toFixed(digits)
+}
+
+export function formatWeightDelta(weightKg: number, unitSystem: UnitSystem, digits = 1): string {
+  const sign = weightKg > 0 ? '+' : ''
+  if (unitSystem === 'metric') return `${sign}${weightKg.toFixed(digits)} kg`
+  return `${sign}${kgToLbs(weightKg).toFixed(digits)} lbs`
+}
+
+export function getWeightUnitLabel(unitSystem: UnitSystem): 'kg' | 'lbs' {
+  return unitSystem === 'metric' ? 'kg' : 'lbs'
+}
+
+export function formatVolumeValue(volumeKg: number, unitSystem: UnitSystem, digits = 0): string {
+  const value = unitSystem === 'metric' ? volumeKg : kgToLbs(volumeKg)
+  return `${value.toFixed(digits)} ${getWeightUnitLabel(unitSystem)}`
+}
+
+export function getHeightUnitLabel(unitSystem: UnitSystem): string {
+  return unitSystem === 'metric' ? 'cm' : 'ft/in'
 }
 
 export function formatCalories(cal: number): string {

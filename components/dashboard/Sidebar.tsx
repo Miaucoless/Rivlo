@@ -16,6 +16,7 @@ import {
   LogOut,
   Flame,
   Trophy,
+  Pill,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAppStore } from '@/store/useAppStore'
@@ -28,6 +29,7 @@ const NAV_ITEMS = [
   { label: 'Tracking', href: '/tracking', icon: BarChart3 },
   { label: 'Calendar', href: '/calendar', icon: Calendar },
   { label: 'Journal', href: '/journal', icon: BookOpen },
+  { label: 'Supplements', href: '/supplements', icon: Pill },
 ]
 
 export function Sidebar() {
@@ -35,7 +37,12 @@ export function Sidebar() {
   const router = useRouter()
   const { user, sidebarCollapsed, toggleSidebar, logout, streak, isDemoMode } = useAppStore()
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    // If not in demo mode, sign out from Supabase
+    if (!isDemoMode) {
+      const { signOut } = await import('@/lib/auth')
+      await signOut()
+    }
     logout()
     toast.success('Logged out successfully')
     router.push('/')
@@ -45,7 +52,7 @@ export function Sidebar() {
     <motion.aside
       animate={{ width: sidebarCollapsed ? 64 : 240 }}
       transition={{ duration: 0.25, ease: [0.22, 0.61, 0.36, 1] }}
-      className="fixed left-0 top-0 bottom-0 z-40 flex flex-col bg-card border-r border-border overflow-hidden"
+      className="fixed left-0 top-0 bottom-0 z-40 hidden md:flex flex-col bg-card border-r border-border overflow-hidden"
     >
       {/* Logo */}
       <div className={cn(
@@ -65,7 +72,7 @@ export function Sidebar() {
                 transition={{ duration: 0.2 }}
                 className="text-lg font-bold overflow-hidden whitespace-nowrap"
               >
-                Grays
+                Rivlo
               </motion.span>
             )}
           </AnimatePresence>

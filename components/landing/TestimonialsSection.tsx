@@ -85,7 +85,7 @@ export function TestimonialsSection() {
             Real results from real people
           </h2>
           <p className="text-zinc-400 text-lg max-w-xl mx-auto">
-            Join thousands of athletes who've transformed their fitness with Grays.
+            Join thousands of athletes who&apos;ve transformed their fitness with Grays.
           </p>
         </motion.div>
 
@@ -109,7 +109,7 @@ export function TestimonialsSection() {
               </div>
 
               {/* Text */}
-              <p className="text-zinc-300 text-sm leading-relaxed flex-1">"{t.text}"</p>
+              <p className="text-zinc-300 text-sm leading-relaxed flex-1">&quot;{t.text}&quot;</p>
 
               {/* Metric badge */}
               <div className={`self-start text-xs font-semibold ${t.metricColor} bg-white/5 px-3 py-1 rounded-full`}>

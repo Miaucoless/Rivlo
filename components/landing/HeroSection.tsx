@@ -1,27 +1,11 @@
 'use client'
 
-import { motion, useMotionValue, useTransform, animate } from 'framer-motion'
+import { motion } from 'framer-motion'
 import Link from 'next/link'
 import { ArrowRight, Play, TrendingUp, Flame, Dumbbell, Apple } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { useEffect, useState } from 'react'
 import { useAppStore } from '@/store/useAppStore'
 import { useRouter } from 'next/navigation'
-
-// Animated counter
-function AnimatedNumber({ to, duration = 1.5 }: { to: number; duration?: number }) {
-  const [value, setValue] = useState(0)
-  useEffect(() => {
-    const controls = animate(0, to, {
-      duration,
-      ease: [0.22, 0.61, 0.36, 1],
-      onUpdate: (v) => setValue(Math.round(v)),
-    })
-    return controls.stop
-  }, [to, duration])
-  return <span>{value.toLocaleString()}</span>
-}
 
 // Mock dashboard card
 function DashboardPreview() {
@@ -46,7 +30,7 @@ function DashboardPreview() {
           </div>
           <div className="flex-1 mx-3">
             <div className="bg-zinc-800 rounded-md px-3 py-1 text-xs text-zinc-500 text-center">
-              grays.fit/dashboard
+              rivlo.fit/dashboard
             </div>
           </div>
         </div>
@@ -100,7 +84,7 @@ function DashboardPreview() {
 
             {/* Macros */}
             <div className="col-span-2 bg-zinc-800/50 rounded-xl p-3 space-y-2">
-              <p className="text-xs font-medium text-zinc-400">Today's Macros</p>
+              <p className="text-xs font-medium text-zinc-400">Today&apos;s Macros</p>
               {[
                 { label: 'Protein', value: 119, total: 180, color: '#10b981', pct: 66 },
                 { label: 'Carbs', value: 101, total: 218, color: '#3b82f6', pct: 46 },
@@ -222,12 +206,6 @@ export function HeroSection() {
     router.push('/dashboard')
   }
 
-  const stats = [
-    { value: 50000, suffix: '+', label: 'Active users' },
-    { value: 2.3, suffix: 'M', label: 'Meals tracked', isDecimal: true },
-    { value: 98, suffix: '%', label: 'Goal completion rate' },
-  ]
-
   return (
     <section className="relative min-h-screen flex items-center pt-24 pb-16 px-6 overflow-hidden">
       {/* Gradient background */}
@@ -239,18 +217,6 @@ export function HeroSection() {
         <div className="grid lg:grid-cols-2 gap-16 items-center">
           {/* Left side — copy */}
           <div className="space-y-8">
-            {/* Badge */}
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4 }}
-            >
-              <span className="inline-flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-full px-4 py-1.5 text-sm font-medium">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                Now in open beta — free to start
-              </span>
-            </motion.div>
-
             {/* Headline */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -272,7 +238,7 @@ export function HeroSection() {
               transition={{ duration: 0.5, delay: 0.2 }}
               className="text-lg text-zinc-400 leading-relaxed max-w-lg"
             >
-              Personalized workout plans, precision nutrition tracking, and AI-powered insights — all in one beautifully designed platform. Built for people who take their results seriously.
+              Workout tracking, nutrition logging, meal planning, and body tracking — all in one platform. Built for people who take their results seriously.
             </motion.p>
 
             {/* CTA buttons */}
@@ -297,52 +263,6 @@ export function HeroSection() {
                 <Play className="w-4 h-4 fill-current" />
                 View Live Demo
               </Button>
-            </motion.div>
-
-            {/* Social proof */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.5, delay: 0.5 }}
-              className="pt-2 flex items-center gap-6"
-            >
-              <div className="flex -space-x-2">
-                {['bg-rose-400', 'bg-blue-400', 'bg-amber-400', 'bg-emerald-400', 'bg-purple-400'].map((color, i) => (
-                  <div
-                    key={i}
-                    className={`w-8 h-8 rounded-full ${color} border-2 border-[#0a0a0a] flex items-center justify-center text-xs font-bold text-white`}
-                  >
-                    {['A', 'J', 'S', 'M', 'R'][i]}
-                  </div>
-                ))}
-              </div>
-              <p className="text-sm text-zinc-400">
-                <span className="text-white font-semibold">50,000+</span> athletes achieving their goals
-              </p>
-            </motion.div>
-
-            {/* Stats */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.6 }}
-              className="grid grid-cols-3 gap-4 pt-4 border-t border-white/10"
-            >
-              {stats.map((stat) => (
-                <div key={stat.label}>
-                  <div className="text-2xl font-bold text-white">
-                    {stat.isDecimal ? (
-                      <span>{stat.value}{stat.suffix}</span>
-                    ) : (
-                      <>
-                        <AnimatedNumber to={stat.value} />
-                        <span>{stat.suffix}</span>
-                      </>
-                    )}
-                  </div>
-                  <p className="text-xs text-zinc-500 mt-0.5">{stat.label}</p>
-                </div>
-              ))}
             </motion.div>
           </div>
 

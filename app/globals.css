@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -56,7 +58,12 @@
 
   body {
     @apply bg-background text-foreground;
+    font-family: 'Inter', system-ui, sans-serif;
     font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  .font-data {
+    font-variant-numeric: tabular-nums;
   }
 
   html {
@@ -84,6 +91,16 @@
   /* Focus styles */
   *:focus-visible {
     @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+}
+
+@layer utilities {
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
   }
 }
 
@@ -117,13 +134,28 @@
   }
 
   .hover-lift:hover {
-    transform: translateY(-3px);
-    @apply shadow-lg;
+    transform: translateY(-2px) scale(1.01);
+    @apply shadow-md;
   }
 
   /* Dashboard card */
   .dash-card {
     @apply bg-card border border-border rounded-xl p-5 shadow-sm hover-lift;
+  }
+
+  /* Button hover interaction */
+  .btn-hover {
+    @apply transition-all duration-150;
+    transition-timing-function: cubic-bezier(.22,.61,.36,1);
+  }
+
+  .btn-hover:hover {
+    transform: translateY(-1px);
+    @apply shadow-sm;
+  }
+
+  .btn-hover:active {
+    transform: translateY(0);
   }
 
   /* Glow effect */

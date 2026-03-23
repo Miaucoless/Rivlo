@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useAppStore } from '@/store/useAppStore'
+import { signInWithEmail } from '@/lib/auth'
 import { toast } from 'sonner'
 
 export default function LoginPage() {
@@ -32,17 +33,21 @@ export default function LoginPage() {
       return
     }
     setLoading(true)
-
-    // In production, this would call Supabase auth
-    // For demo, we just simulate login
-    await new Promise((r) => setTimeout(r, 800))
-    toast.info('Connect Supabase for real authentication. Using demo mode.')
-    handleDemoLogin()
+    
+    const response = await signInWithEmail(email, password)
+    
+    if (response.success && response.user) {
+      setUser(response.user)
+      toast.success('Welcome back! 👋')
+      router.push(response.user.onboarded ? '/dashboard' : '/onboarding')
+    } else {
+      toast.error(response.error || 'Failed to sign in')
+    }
     setLoading(false)
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] flex">
+    <div className="min-h-screen bg-[#0a0a0a] flex" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
       {/* Left panel — form */}
       <div className="flex-1 flex items-center justify-center p-8">
         <div className="w-full max-w-sm space-y-8">
@@ -57,7 +62,7 @@ export default function LoginPage() {
             <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center shadow-lg shadow-emerald-500/30">
               <Zap className="w-4 h-4 text-white" strokeWidth={2.5} />
             </div>
-            <span className="text-xl font-bold text-white">Grays</span>
+            <span className="text-xl font-bold text-white">Rivlo</span>
           </div>
 
           {/* Heading */}
@@ -68,7 +73,8 @@ export default function LoginPage() {
             className="space-y-2"
           >
             <h1 className="text-2xl font-bold text-white">Welcome back</h1>
-            <p className="text-zinc-400 text-sm">Sign in to your account to continue</p>
+            <p className="text-zinc-400 text-sm">Sign in to your account to continue.</p>
+            <p className="text-xs text-zinc-500">If you just signed up, confirm your email first.</p>
           </motion.div>
 
           {/* Demo banner */}
@@ -175,7 +181,7 @@ export default function LoginPage() {
           <div className="text-6xl">🏋️</div>
           <h2 className="text-3xl font-bold text-white">Track. Train. Transform.</h2>
           <p className="text-zinc-400 leading-relaxed">
-            Join thousands of athletes who've taken control of their fitness with precision tracking and smart automation.
+            Join thousands of athletes who&apos;ve taken control of their fitness with precision tracking and smart automation.
           </p>
           <div className="flex justify-center gap-6 pt-4">
             {[
