@@ -97,6 +97,7 @@ export interface SavedMealItem {
   matched_name: string
   amount: number
   unit: string
+  macros?: { calories: number; protein_g: number; carbs_g: number; fat_g: number }
 }
 
 export interface SavedMealTemplate {

@@ -1758,6 +1758,11 @@ export default function WorkoutsPage() {
   const [premadeMuscle, setPremadeMuscle] = useState<MuscleGroup | 'all'>('all')
   const [premadeFilterOpen, setPremadeFilterOpen] = useState(false)
 
+  const [savedWorkoutSearch, setSavedWorkoutSearch] = useState('')
+  const [savedWorkoutMuscle, setSavedWorkoutMuscle] = useState<MuscleGroup | 'all'>('all')
+  const [savedWorkoutSplit, setSavedWorkoutSplit] = useState<WorkoutSplit | 'all'>('all')
+  const [savedWorkoutFilterOpen, setSavedWorkoutFilterOpen] = useState(false)
+
   const [exerciseMuscleFilter, setExerciseMuscleFilter] = useState<MuscleGroup | 'all'>('all')
   const [exerciseEquipmentFilter, setExerciseEquipmentFilter] = useState<string>('all')
   const [exerciseFilterOpen, setExerciseFilterOpen] = useState(false)
@@ -1797,6 +1802,18 @@ export default function WorkoutsPage() {
       return true
     })
   }, [premadeSearch, premadeSplit, premadeDifficulty, premadeMuscle])
+
+  const filteredSavedWorkouts = useMemo(() => {
+    return accountCustomWorkouts.filter((w) => {
+      if (savedWorkoutSplit !== 'all' && w.split_type !== savedWorkoutSplit) return false
+      if (savedWorkoutMuscle !== 'all' && !w.muscle_groups.includes(savedWorkoutMuscle)) return false
+      if (savedWorkoutSearch.trim()) {
+        const q = savedWorkoutSearch.toLowerCase()
+        if (!w.name.toLowerCase().includes(q) && !w.description.toLowerCase().includes(q)) return false
+      }
+      return true
+    })
+  }, [accountCustomWorkouts, savedWorkoutSearch, savedWorkoutSplit, savedWorkoutMuscle])
 
   const totalCaloriesBurned = workoutLogs.reduce((sum, log) => sum + (log.calories_burned_kcal || 0), 0)
   const todayLoggedWorkouts = workoutLogs.filter((log) => log.date === getTodayISO())
@@ -3153,15 +3170,103 @@ export default function WorkoutsPage() {
 
           {accountCustomWorkouts.length > 0 && (
             <div className="space-y-4">
-              <div>
-                <p className="text-sm font-semibold">Your saved workouts</p>
-                <p className="text-xs text-muted-foreground">Built by you or saved from the Log Workout tab. These are tied to your account.</p>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold">Your saved workouts</p>
+                  <p className="text-xs text-muted-foreground">Built by you or saved from the Log Workout tab.</p>
+                </div>
               </div>
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                {accountCustomWorkouts.map((workout) => (
-                  <SavedWorkoutCard key={workout.id} workout={workout} onStart={startWorkout} onEdit={(item) => { setEditingWorkout(item); setBuilderOpen(true) }} onDelete={handleDeleteWorkout} />
-                ))}
+
+              {/* Search + filter row */}
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                    <Input
+                      placeholder="Search saved workouts…"
+                      value={savedWorkoutSearch}
+                      onChange={(e) => setSavedWorkoutSearch(e.target.value)}
+                      className="pl-9"
+                    />
+                  </div>
+                  <button
+                    onClick={() => setSavedWorkoutFilterOpen(o => !o)}
+                    className={`flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+                      savedWorkoutFilterOpen || savedWorkoutMuscle !== 'all' || savedWorkoutSplit !== 'all'
+                        ? 'border-primary bg-primary/10 text-primary'
+                        : 'border-border bg-background text-muted-foreground hover:text-foreground hover:border-primary/40'
+                    }`}
+                  >
+                    <SlidersHorizontal className="h-3.5 w-3.5" />
+                    Filters
+                    {(savedWorkoutMuscle !== 'all' || savedWorkoutSplit !== 'all') && (
+                      <span className="flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
+                        {(savedWorkoutMuscle !== 'all' ? 1 : 0) + (savedWorkoutSplit !== 'all' ? 1 : 0)}
+                      </span>
+                    )}
+                    <ChevronDown className={`h-3.5 w-3.5 transition-transform ${savedWorkoutFilterOpen ? 'rotate-180' : ''}`} />
+                  </button>
+                </div>
+
+                {savedWorkoutFilterOpen && (
+                  <div className="rounded-xl border border-border/40 bg-muted/20 p-3 space-y-3">
+                    <div className="space-y-1.5">
+                      <p className="text-[10px] uppercase tracking-[0.12em] font-semibold text-muted-foreground">Muscle group</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {(['all', 'chest', 'back', 'shoulders', 'biceps', 'triceps', 'quads', 'hamstrings', 'glutes', 'core', 'cardio', 'full_body'] as const).map(m => (
+                          <button
+                            key={m}
+                            onClick={() => setSavedWorkoutMuscle(m)}
+                            className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${
+                              savedWorkoutMuscle === m
+                                ? 'bg-primary/15 border-primary/50 text-primary'
+                                : 'bg-background border-border/50 text-muted-foreground hover:text-foreground hover:border-border'
+                            }`}
+                          >
+                            {m === 'all' ? 'All' : m === 'full_body' ? 'Full Body' : m.charAt(0).toUpperCase() + m.slice(1)}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <p className="text-[10px] uppercase tracking-[0.12em] font-semibold text-muted-foreground">Split type</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {(['all', 'ppl', 'upper_lower', '3day_fullbody', '4day', '5day', '6day', 'cardio_focus'] as const).map(s => (
+                          <button
+                            key={s}
+                            onClick={() => setSavedWorkoutSplit(s)}
+                            className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${
+                              savedWorkoutSplit === s
+                                ? 'bg-primary/15 border-primary/50 text-primary'
+                                : 'bg-background border-border/50 text-muted-foreground hover:text-foreground hover:border-border'
+                            }`}
+                          >
+                            {s === 'all' ? 'All' : SPLIT_OPTIONS.find(o => o.value === s)?.label ?? s}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    {(savedWorkoutMuscle !== 'all' || savedWorkoutSplit !== 'all') && (
+                      <button
+                        onClick={() => { setSavedWorkoutMuscle('all'); setSavedWorkoutSplit('all') }}
+                        className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        Clear filters
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
+
+              {filteredSavedWorkouts.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">No workouts match the current filters.</p>
+              ) : (
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                  {filteredSavedWorkouts.map((workout) => (
+                    <SavedWorkoutCard key={workout.id} workout={workout} onStart={startWorkout} onEdit={(item) => { setEditingWorkout(item); setBuilderOpen(true) }} onDelete={handleDeleteWorkout} />
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -3181,6 +3286,21 @@ export default function WorkoutsPage() {
             {/* Search + filters */}
             <div className="space-y-3">
               <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder="Search premade workouts…"
+                    className="pl-9"
+                    value={premadeSearch}
+                    onChange={(e) => setPremadeSearch(e.target.value)}
+                  />
+                  {premadeSearch && (
+                    <button className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => setPremadeSearch('')}>
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+
                 {/* Filters dropdown */}
                 <div className="relative">
                   <button
@@ -3200,7 +3320,7 @@ export default function WorkoutsPage() {
                   {premadeFilterOpen && (
                     <>
                       <div className="fixed inset-0 z-10" onClick={() => setPremadeFilterOpen(false)} />
-                      <div className="absolute left-0 top-full z-20 mt-1.5 w-80 max-w-[calc(100vw-2rem)] rounded-xl border border-border bg-background p-4 shadow-lg">
+                      <div className="absolute right-0 top-full z-20 mt-1.5 w-80 max-w-[calc(100vw-2rem)] rounded-xl border border-border bg-background p-4 shadow-lg">
                         <div className="space-y-4">
                           <div>
                             <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Split type</p>
@@ -3232,21 +3352,6 @@ export default function WorkoutsPage() {
                         </div>
                       </div>
                     </>
-                  )}
-                </div>
-
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    placeholder="Search premade workouts…"
-                    className="pl-9"
-                    value={premadeSearch}
-                    onChange={(e) => setPremadeSearch(e.target.value)}
-                  />
-                  {premadeSearch && (
-                    <button className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => setPremadeSearch('')}>
-                      <X className="h-4 w-4" />
-                    </button>
                   )}
                 </div>
               </div>

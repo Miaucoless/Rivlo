@@ -5047,6 +5047,7 @@ export interface MealLogEntry {
     servings?: number
   }>
   entry_source?: 'search' | 'manual' | 'recipe' | 'saved'
+  saved_meal_template_id?: string
 }
 
 export const TODAY_MEALS: MealLogEntry[] = [

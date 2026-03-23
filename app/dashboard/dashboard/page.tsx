@@ -119,6 +119,7 @@ export default function DashboardPage() {
   const [hasPausedWorkout, setHasPausedWorkout] = useState(false)
   const [expandedDashboardLogId, setExpandedDashboardLogId] = useState<string | null>(null)
   const [expandedMealType, setExpandedMealType] = useState<string | null>(null)
+  const [expandedMeals, setExpandedMeals] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -700,24 +701,52 @@ export default function DashboardPage() {
                               className="overflow-hidden"
                             >
                               <div className="border-t border-border/40 divide-y divide-border/30">
-                                {mealsOfType.map((meal) => {
-                                  const isExpandable = meal.entry_source === 'saved' || meal.recipe;
-                                  const expanded = expandedMealType === meal.id;
-                                  const toggleExpand = () => setExpandedMealType(expanded ? null : meal.id);
-                                  return (
+                                {mealsOfType.flatMap((meal) => {
+                                  const isExpandable = meal.entry_source === 'saved' || !!meal.recipe
+                                  // Flat items: non-saved/non-recipe entries with sub-items render as separate rows
+                                  if (!isExpandable && meal.meal_items && meal.meal_items.length > 0) {
+                                    return meal.meal_items.map((item, itemIndex) => (
+                                      <div key={`${meal.id}-flat-${itemIndex}`} className="px-3 py-2.5 bg-muted/10">
+                                        <div className="flex items-center justify-between gap-2 mb-1.5">
+                                          <span className="text-xs font-medium truncate">{item.name}</span>
+                                          <span className="text-[10px] text-muted-foreground shrink-0">{meal.time}</span>
+                                        </div>
+                                        <div className="grid grid-cols-4 gap-1">
+                                          {[
+                                            { label: 'Cal', value: item.macros.calories, unit: '' },
+                                            { label: 'Pro', value: item.macros.protein_g, unit: 'g' },
+                                            { label: 'Carb', value: item.macros.carbs_g, unit: 'g' },
+                                            { label: 'Fat', value: item.macros.fat_g, unit: 'g' },
+                                          ].map(({ label, value, unit }) => (
+                                            <div key={label} className="rounded-lg bg-muted/40 px-2 py-1 text-center">
+                                              <p className="font-data text-[11px] font-semibold tabular-nums">{value}{unit}</p>
+                                              <p className="text-[9px] text-muted-foreground uppercase tracking-wide">{label}</p>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    ))
+                                  }
+
+                                  const expanded = expandedMeals[meal.id] || false
+                                  return [(
                                     <div key={meal.id} className="px-3 py-2.5 bg-muted/10">
                                       <div className="flex items-center justify-between gap-2 mb-1.5">
-                                        <button
-                                          type="button"
-                                          className={`text-xs font-medium truncate text-left ${isExpandable ? 'hover:underline' : ''}`}
-                                          onClick={isExpandable ? toggleExpand : undefined}
-                                          tabIndex={isExpandable ? 0 : -1}
-                                        >
-                                          {meal.name}
-                                          {isExpandable && (
-                                            <span className="ml-2 text-[10px] text-muted-foreground font-normal">{expanded ? '▲' : '▼'}</span>
-                                          )}
-                                        </button>
+                                        {isExpandable ? (
+                                          <button
+                                            type="button"
+                                            className="flex items-center gap-1 text-xs font-medium truncate text-left"
+                                            onClick={(e) => {
+                                              e.stopPropagation()
+                                              setExpandedMeals(prev => ({ ...prev, [meal.id]: !prev[meal.id] }))
+                                            }}
+                                          >
+                                            {meal.name}
+                                            <ChevronDown className={`w-3 h-3 flex-shrink-0 text-muted-foreground/60 transition-transform duration-150 ${expanded ? 'rotate-180' : ''}`} />
+                                          </button>
+                                        ) : (
+                                          <span className="text-xs font-medium truncate">{meal.name}</span>
+                                        )}
                                         <span className="text-[10px] text-muted-foreground shrink-0">{meal.time}</span>
                                       </div>
                                       <div className="grid grid-cols-4 gap-1">
@@ -733,32 +762,33 @@ export default function DashboardPage() {
                                           </div>
                                         ))}
                                       </div>
-                                      {/* Expandable ingredient list for saved meals or recipes only */}
                                       {isExpandable && expanded && meal.meal_items && meal.meal_items.length > 0 && (
-                                        <div className="mt-2 space-y-1.5 pl-2 border-l-2 border-muted">
+                                        <div className="mt-2 space-y-1 pl-2 border-l border-border/40">
                                           {meal.meal_items.map((item, itemIndex) => (
-                                            <div key={`${meal.id}-item-${itemIndex}`} className="text-xs">
-                                              <div className="flex items-center gap-2">
-                                                <span className="font-semibold text-foreground truncate">{item.name}</span>
-                                                {item.servings && item.servings > 1 && (
-                                                  <span className="text-muted-foreground">({item.servings} servings)</span>
+                                            <div key={`${meal.id}-item-${itemIndex}`}>
+                                              <div className="flex items-center gap-1.5">
+                                                <span className="text-[11px] font-medium text-foreground/70 truncate">{item.name}</span>
+                                                {item.amount != null && (
+                                                  <span className="text-[10px] font-data text-muted-foreground/40">{item.amount}{item.unit}</span>
                                                 )}
                                               </div>
-                                              <div className="flex items-center gap-2 mt-0.5 text-muted-foreground font-data">
-                                                <span>{item.macros.calories} kcal</span>
-                                                <span className="opacity-40">·</span>
-                                                <span>{item.macros.protein_g}g P</span>
-                                                <span className="opacity-40">·</span>
-                                                <span>{item.macros.carbs_g}g C</span>
-                                                <span className="opacity-40">·</span>
-                                                <span>{item.macros.fat_g}g F</span>
-                                              </div>
+                                              {item.macros.calories > 0 && (
+                                                <div className="flex items-center gap-1.5 mt-0.5">
+                                                  <span className="text-[10px] font-data text-muted-foreground/50">{item.macros.calories} kcal</span>
+                                                  <span className="text-[10px] text-border/30">·</span>
+                                                  <span className="text-[10px] font-data text-muted-foreground/50">{item.macros.protein_g}g P</span>
+                                                  <span className="text-[10px] text-border/30">·</span>
+                                                  <span className="text-[10px] font-data text-muted-foreground/50">{item.macros.carbs_g}g C</span>
+                                                  <span className="text-[10px] text-border/30">·</span>
+                                                  <span className="text-[10px] font-data text-muted-foreground/50">{item.macros.fat_g}g F</span>
+                                                </div>
+                                              )}
                                             </div>
                                           ))}
                                         </div>
                                       )}
                                     </div>
-                                  );
+                                  )]
                                 })}
                                 {/* Type totals row */}
                                 <div className="px-3 py-2 bg-muted/20">

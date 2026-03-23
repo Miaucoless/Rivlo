@@ -825,9 +825,27 @@ export const useAppStore = create<AppStore>()(
       },
 
       removeSavedMeal: (mealId) => {
-        set((state) => ({
-          savedMeals: state.savedMeals.filter((meal) => meal.id !== mealId),
-        }))
+        // Collect all log entry IDs linked to this template before removing
+        const stateSnap = get()
+        const linkedEntryIds: Array<{ date: string; id: string }> = []
+        for (const [date, entries] of Object.entries(stateSnap.mealEntries)) {
+          for (const entry of entries) {
+            if ((entry as { saved_meal_template_id?: string }).saved_meal_template_id === mealId) {
+              linkedEntryIds.push({ date, id: entry.id })
+            }
+          }
+        }
+
+        set((state) => {
+          // Remove template
+          const savedMeals = state.savedMeals.filter((meal) => meal.id !== mealId)
+          // Remove linked log entries
+          const mealEntries = { ...state.mealEntries }
+          for (const { date, id } of linkedEntryIds) {
+            mealEntries[date] = (mealEntries[date] || []).filter(e => e.id !== id)
+          }
+          return { savedMeals, mealEntries }
+        })
 
         const state = get()
         if (state.user && !state.isDemoMode) {
@@ -836,6 +854,10 @@ export const useAppStore = create<AppStore>()(
             supplements: state.supplements,
             calendarReminders: state.calendarReminders,
           })
+          // Delete linked log entries from cloud
+          for (const { id } of linkedEntryIds) {
+            void deleteMealEntryCloud(state.user.id, id)
+          }
         }
       },
 
