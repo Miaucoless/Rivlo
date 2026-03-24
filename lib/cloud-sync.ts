@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase'
-import type { CalendarReminder, GroceryList, JournalEntry, Recipe, SavedMealTemplate, SupplementEntry, WeightEntry, WeeklyMealPlan, Workout, WorkoutLog } from '@/types'
+import type { CalendarReminder, GroceryList, JournalEntry, Recipe, SavedMealTemplate, SupplementEntry, WaterEntry, WeightEntry, WeeklyMealPlan, Workout, WorkoutLog } from '@/types'
 import type { MealLogEntry } from '@/lib/mock-data'
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -411,6 +411,23 @@ export async function deleteWorkoutLogCloud(userId: string, logId: string) {
   if (!isUuid(logId)) return
   const supabase = createClient()
   await supabase.from('workout_logs').delete().eq('user_id', userId).eq('id', logId)
+}
+
+export async function upsertWaterLog(userId: string, entry: WaterEntry) {
+  const supabase = createClient()
+  await supabase.from('water_logs').upsert({
+    id: ensureUuid(entry.id),
+    user_id: userId,
+    date: entry.date,
+    amount_ml: entry.amount_ml,
+    logged_at: entry.logged_at,
+  })
+}
+
+export async function deleteWaterLog(userId: string, entryId: string) {
+  if (!isUuid(entryId)) return
+  const supabase = createClient()
+  await supabase.from('water_logs').delete().eq('user_id', userId).eq('id', entryId)
 }
 
 export async function upsertWeightEntry(userId: string, entry: WeightEntry) {
