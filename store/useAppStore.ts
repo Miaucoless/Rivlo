@@ -25,6 +25,7 @@ import type {
   SavedMealTemplate,
   Recipe,
   CalendarReminder,
+  WaterEntry,
 } from '@/types'
 import {
   DEMO_USER,
@@ -52,6 +53,8 @@ import {
   upsertMealEntry,
   upsertMealPlan,
   upsertWeightEntry,
+  upsertWaterLog,
+  deleteWaterLog,
   upsertWorkoutLog,
 } from '@/lib/cloud-sync'
 import { formatWeightValue, getTodayISO } from '@/lib/utils'
@@ -80,6 +83,7 @@ interface AppStore {
   journalEntries: JournalEntry[]
   workoutLogs: WorkoutLog[]
   mealEntries: Record<string, MealLogEntry[]>
+  waterLogs: Record<string, WaterEntry[]>
   weeklyMealPlan: WeeklyMealPlan | null
   groceryList: GroceryList | null
   streak: number
@@ -127,6 +131,11 @@ interface AppStore {
   addPlannedMeal: (day: string, slot: 'breakfast' | 'lunch' | 'dinner' | 'snack', item: import('@/types').PlannedItem) => void
   removePlannedMealItem: (day: string, slot: 'breakfast' | 'lunch' | 'dinner' | 'snack', index: number) => void
   clearMealPlan: () => void
+
+  // Water
+  addWaterEntry: (entry: WaterEntry) => void
+  removeWaterEntry: (date: string, entryId: string) => void
+  getWaterTotal: (date: string) => number
 
   // Supplements
   addSupplement: (supplement: SupplementEntry) => void
@@ -513,6 +522,7 @@ export const useAppStore = create<AppStore>()(
       journalEntries: [],
       workoutLogs: [],
       mealEntries: {},
+      waterLogs: {},
       weeklyMealPlan: null,
       groceryList: null,
       streak: 0,
@@ -538,7 +548,7 @@ export const useAppStore = create<AppStore>()(
 
         const localState = get()
         const seedPayload = {
-          mealEntries: Object.keys(cloud.mealEntries).length === 0 ? localState.mealEntries : {},
+          mealEntries: Object.keys(cloud.mealEntries).length === 0 ? localState.mealEntries : cloud.mealEntries,
           workoutLogs: cloud.workoutLogs.length === 0 ? localState.workoutLogs : [],
           weightHistory: cloud.weightHistory.length === 0 ? localState.weightHistory : [],
           journalEntries: cloud.journalEntries.length === 0 ? localState.journalEntries : [],
@@ -649,6 +659,7 @@ export const useAppStore = create<AppStore>()(
           journalEntries: [],
           workoutLogs: [],
           mealEntries: {},
+          waterLogs: {},
           weeklyMealPlan: null,
           groceryList: null,
           streak: 0,
@@ -787,6 +798,33 @@ export const useAppStore = create<AppStore>()(
         const state = get()
         if (state.user && !state.isDemoMode) {
           void deleteMealEntryCloud(state.user.id, mealId)
+        }
+      },
+
+      addWaterEntry: (entry) => {
+        const normalized = { ...entry, id: ensureUuid(entry.id) }
+        set((state) => ({
+          waterLogs: {
+            ...state.waterLogs,
+            [entry.date]: [...(state.waterLogs[entry.date] || []), normalized],
+          },
+        }))
+        const state = get()
+        if (state.user && !state.isDemoMode) {
+          void upsertWaterLog(state.user.id, normalized)
+        }
+      },
+
+      removeWaterEntry: (date, entryId) => {
+        set((state) => ({
+          waterLogs: {
+            ...state.waterLogs,
+            [date]: (state.waterLogs[date] || []).filter((e) => e.id !== entryId),
+          },
+        }))
+        const state = get()
+        if (state.user && !state.isDemoMode) {
+          void deleteWaterLog(state.user.id, entryId)
         }
       },
 
@@ -1308,6 +1346,10 @@ export const useAppStore = create<AppStore>()(
         )
       },
 
+      getWaterTotal: (date) => {
+        return (get().waterLogs[date] || []).reduce((sum, e) => sum + e.amount_ml, 0)
+      },
+
       getCalendarEvents: () => {
         const { workoutLogs, mealEntries, weightHistory, journalEntries, supplements, user } = get()
         const events: Array<{ date: string; type: string; title: string; color: string }> = []
@@ -1370,6 +1412,7 @@ export const useAppStore = create<AppStore>()(
         journalEntries: state.journalEntries,
         workoutLogs: state.workoutLogs,
         mealEntries: state.mealEntries,
+        waterLogs: state.waterLogs,
         weeklyMealPlan: state.weeklyMealPlan,
         groceryList: state.groceryList,
         streak: state.streak,
