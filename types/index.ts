@@ -34,6 +34,7 @@ export interface UserProfile {
   protein_target_g: number
   carb_target_g: number
   fat_target_g: number
+  water_goal_ml: number
   onboarded: boolean
   created_at: string
   updated_at: string
@@ -170,6 +171,9 @@ export interface Exercise {
   instructions: string[]
 }
 
+export type ExercisePrimaryType = 'strength' | 'bodyweight' | 'time' | 'distance' | 'time_distance' | 'intervals' | 'mixed'
+export type ExerciseModifier = 'unilateral' | 'alternating' | 'weighted' | 'assisted' | 'distance_based' | 'time_cap' | 'rounds' | 'interval_structure'
+
 export interface ExerciseLibraryItem extends Exercise {
   aliases?: string[]
   default_sets: number
@@ -177,6 +181,8 @@ export interface ExerciseLibraryItem extends Exercise {
   default_rest_seconds: number
   met_base: number
   met_type?: 'resistance' | 'squat_hinge' | 'circuit' | 'bodyweight_light' | 'bodyweight_vigorous' | 'cardio'
+  primary_type?: ExercisePrimaryType
+  modifiers?: ExerciseModifier[]
 }
 
 export interface WorkoutSet {
@@ -383,4 +389,14 @@ export interface SupplementEntry {
   taken_dates: string[]
   created_at: string
   updated_at: string
+}
+
+// ─── Water ──────────────────────────────────────────────────────────────────────
+
+export interface WaterEntry {
+  id: string
+  user_id: string
+  date: string       // ISO YYYY-MM-DD
+  amount_ml: number
+  logged_at: string  // ISO timestamp
 }
