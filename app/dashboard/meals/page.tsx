@@ -1829,6 +1829,11 @@ function MealEditorModal({
                   value={savedMealModalSearch}
                   onChange={e => setSavedMealModalSearch(e.target.value)}
                   placeholder="Search saved meals…"
+                  type="search"
+                  inputMode="search"
+                  enterKeyHint="search"
+                  autoCapitalize="none"
+                  autoCorrect="off"
                   className="pl-9 pr-8 h-9"
                 />
                 {savedMealModalSearch && (
@@ -2271,6 +2276,11 @@ function MealEditorModal({
                   value={recipeSearch}
                   onChange={e => setRecipeSearch(e.target.value)}
                   placeholder="Search recipes…"
+                  type="search"
+                  inputMode="search"
+                  enterKeyHint="search"
+                  autoCapitalize="none"
+                  autoCorrect="off"
                   className="pl-9 pr-8 h-9"
                 />
                 {recipeSearch && (
@@ -3026,10 +3036,16 @@ function EditSavedMealModal({
                   value={query}
                   onChange={e => { setQuery(e.target.value); setPendingFood(null) }}
                   onFocus={() => { if (query.trim() && suggestions.length > 0) setShowSugg(true) }}
+                  type="search"
+                  inputMode="search"
+                  enterKeyHint="search"
+                  autoCapitalize="none"
+                  autoCorrect="off"
                   className="pl-9"
                 />
                 {query && (
                   <button
+                    type="button"
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                     onClick={() => { setQuery(''); setShowSugg(false); setPendingFood(null) }}
                   >
@@ -3680,6 +3696,11 @@ export default function MealsPage() {
                 placeholder="Search saved meals…"
                 value={savedMealSearchText}
                 onChange={e => setSavedMealSearchText(e.target.value)}
+                type="search"
+                inputMode="search"
+                enterKeyHint="search"
+                autoCapitalize="none"
+                autoCorrect="off"
                 className="h-9 pl-9 pr-8"
               />
               {savedMealSearchText && (
@@ -4005,6 +4026,11 @@ export default function MealsPage() {
                 placeholder="Search recipes…"
                 value={recipeSearchText}
                 onChange={e => setRecipeSearchText(e.target.value)}
+                type="search"
+                inputMode="search"
+                enterKeyHint="search"
+                autoCapitalize="none"
+                autoCorrect="off"
                 className="h-9 pl-9 pr-8"
               />
               {recipeSearchText && (

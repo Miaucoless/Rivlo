@@ -920,7 +920,17 @@ function WorkoutBuilderModal({
               <div className="space-y-2">
                 <div className="relative">
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input value={exerciseQuery} onChange={(e) => setExerciseQuery(e.target.value)} placeholder="Search exercise variations" className="pl-9 pr-8" />
+                  <Input
+                    value={exerciseQuery}
+                    onChange={(e) => setExerciseQuery(e.target.value)}
+                    placeholder="Search exercise variations"
+                    type="search"
+                    inputMode="search"
+                    enterKeyHint="search"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    className="pl-9 pr-8"
+                  />
                   {exerciseQuery && (
                     <button type="button" onClick={() => setExerciseQuery('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
                       <X className="w-3.5 h-3.5" />
@@ -1635,7 +1645,17 @@ function ActiveWorkoutModal({
             <div className="space-y-2">
               <div className="relative">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input value={exerciseSearch} onChange={(e) => setExerciseSearch(e.target.value)} placeholder="Search exercise variations" className="pl-9 pr-8" />
+                <Input
+                  value={exerciseSearch}
+                  onChange={(e) => setExerciseSearch(e.target.value)}
+                  placeholder="Search exercise variations"
+                  type="search"
+                  inputMode="search"
+                  enterKeyHint="search"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  className="pl-9 pr-8"
+                />
                 {exerciseSearch && (
                   <button type="button" onClick={() => setExerciseSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
                     <X className="w-3.5 h-3.5" />
@@ -2751,10 +2771,15 @@ export default function WorkoutsPage() {
                       onChange={(e) => setManualSearch(e.target.value)}
                       onKeyDown={handleManualSearchKeyDown}
                       placeholder="Search all exercises…"
+                      type="search"
+                      inputMode="search"
+                      enterKeyHint="search"
+                      autoCapitalize="none"
+                      autoCorrect="off"
                       className="pl-9"
                     />
                     {manualSearch && (
-                      <button className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => setManualSearch('')}>
+                      <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => setManualSearch('')}>
                         <X className="h-4 w-4" />
                       </button>
                     )}
@@ -3509,6 +3534,11 @@ export default function WorkoutsPage() {
                       placeholder="Search saved workouts…"
                       value={savedWorkoutSearch}
                       onChange={(e) => setSavedWorkoutSearch(e.target.value)}
+                      type="search"
+                      inputMode="search"
+                      enterKeyHint="search"
+                      autoCapitalize="none"
+                      autoCorrect="off"
                       className="pl-9 pr-8"
                     />
                     {savedWorkoutSearch && (
@@ -3621,6 +3651,11 @@ export default function WorkoutsPage() {
                     className="pl-9 pr-8"
                     value={premadeSearch}
                     onChange={(e) => setPremadeSearch(e.target.value)}
+                    type="search"
+                    inputMode="search"
+                    enterKeyHint="search"
+                    autoCapitalize="none"
+                    autoCorrect="off"
                   />
                   {premadeSearch && (
                     <button type="button" onClick={() => setPremadeSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">

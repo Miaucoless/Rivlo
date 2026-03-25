@@ -589,6 +589,11 @@ export default function JournalPage() {
               placeholder="Search entries..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
+              type="search"
+              inputMode="search"
+              enterKeyHint="search"
+              autoCapitalize="none"
+              autoCorrect="off"
               className="pl-9 pr-8"
             />
             {search && (
