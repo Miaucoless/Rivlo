@@ -259,16 +259,9 @@
   }
 }
 
-/* Prevent zoom on all inputs */
-input, textarea, select {
-  transform: scale(1) !important;
-  -webkit-transform: scale(1) !important;
-  transition: none !important;
-}
-
-input:focus, textarea:focus, select:focus {
-  transform: scale(1) !important;
-  -webkit-transform: scale(1) !important;
+/* Improve tap responsiveness on mobile — eliminates 300ms tap delay */
+input, textarea, select, button {
+  touch-action: manipulation;
 }
 
 .recharts-cartesian-axis-tick-value {
