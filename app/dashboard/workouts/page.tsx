@@ -474,14 +474,15 @@ function estimateAdjustedMet(args: {
   const correctedMetBase = getCorrectedMet(args.metBase, args.metProfile)
   const loadRatio = args.metProfile.weightKg > 0 ? args.actualWeight / args.metProfile.weightKg : 0
   const densityFactor = Math.min(1.35, Math.max(0.85, 40 / Math.max(args.activeSeconds, 20)))
-  const repFactor = Math.min(1.15, Math.max(0.9, args.actualReps / 10))
-  const loadFactor = Math.min(1.4, 0.9 + loadRatio * 0.3)
+  const repFactor = Math.min(1.25, Math.max(0.9, args.actualReps / 10))
+  // Higher coefficient (0.8 vs 0.3) and cap (3.0 vs 1.4) so heavier lifts visibly increase calories
+  const loadFactor = Math.min(3.0, 1.0 + loadRatio * 0.8)
 
   if (args.metType === 'cardio') return Math.min(14, correctedMetBase * Math.max(0.95, densityFactor))
   if (args.metType === 'bodyweight_vigorous') return Math.min(11, correctedMetBase * Math.max(0.95, repFactor))
   if (args.metType === 'bodyweight_light') return Math.min(7.5, correctedMetBase * Math.max(0.95, repFactor))
-  if (args.metType === 'squat_hinge') return Math.min(9.5, correctedMetBase * ((loadFactor + densityFactor) / 2))
-  return Math.min(8.8, correctedMetBase * ((loadFactor + repFactor + densityFactor) / 3))
+  if (args.metType === 'squat_hinge') return Math.min(14, correctedMetBase * ((loadFactor + densityFactor) / 2))
+  return Math.min(12, correctedMetBase * ((loadFactor + repFactor + densityFactor) / 3))
 }
 
 function estimateSetCalories(args: {
