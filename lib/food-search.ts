@@ -1,5 +1,44 @@
 import type { Macros } from '@/types'
 
+export function parseFraction(input: string): number {
+  const trimmed = input.trim()
+  
+  // Handle mixed numbers like "1 1/2"
+  const mixedMatch = trimmed.match(/^(\d+)\s+(\d+)\/(\d+)$/)
+  if (mixedMatch) {
+    const whole = parseInt(mixedMatch[1])
+    const numerator = parseInt(mixedMatch[2])
+    const denominator = parseInt(mixedMatch[3])
+    if (denominator !== 0) {
+      return whole + (numerator / denominator)
+    }
+  }
+  
+  // Handle simple fractions like "1/3"
+  const fractionMatch = trimmed.match(/^(\d+)\/(\d+)$/)
+  if (fractionMatch) {
+    const numerator = parseInt(fractionMatch[1])
+    const denominator = parseInt(fractionMatch[2])
+    if (denominator !== 0) {
+      return numerator / denominator
+    }
+  }
+  
+  // Handle decimal numbers
+  const decimalMatch = trimmed.match(/^\d*\.?\d+$/)
+  if (decimalMatch) {
+    return parseFloat(trimmed)
+  }
+  
+  // Handle whole numbers
+  const wholeMatch = trimmed.match(/^\d+$/)
+  if (wholeMatch) {
+    return parseInt(trimmed)
+  }
+  
+  return 0
+}
+
 export interface FoodCatalogItem {
   id: string
   name: string
@@ -9,6 +48,15 @@ export interface FoodCatalogItem {
   default_serving_label: string
   grams_per_serving?: number
   macros_per_serving: Macros
+  // NEW: Multiple serving unit options
+  serving_units?: ServingUnit[]
+}
+
+export interface ServingUnit {
+  unit: string           // 'g', 'cup', 'oz', 'piece', etc.
+  label: string          // 'grams', 'cup', 'ounce', 'piece', etc.
+  grams_per_unit: number // How many grams this unit equals
+  macros_per_unit: Macros // Macros for this specific unit
 }
 
 export interface ParsedFoodLine {
@@ -182,20 +230,56 @@ function kcalFromKj(kj?: number) {
 function getMultiplier(item: FoodCatalogItem, amount: number, unit: string) {
   const canonical = canonicalUnit(unit)
   const itemUnit = canonicalUnit(item.default_serving_unit)
+  
+  // Standard unit conversions to grams
+  const unitToGrams: Record<string, number> = {
+    'g': 1,
+    'kg': 1000,
+    'oz': 28.35,
+    'lb': 453.6,
+    'cup': 240,  // Standard cup - may vary by food type
+    'tbsp': 15,  // Standard tablespoon
+    'tsp': 5,    // Standard teaspoon
+    'ml': 1,     // 1ml = 1g for water-based foods
+    'l': 1000,
+    'piece': item.grams_per_serving || item.default_serving_amount || 100,
+    'bowl': 200,
+    'handful': 50,
+    'pinch': 2,
+    'dash': 3,
+    'scoop': 120,
+    'portion': 150,
+    'pat': 10,
+    'drop': 0.05,
+    'hand': 75,
+    'serving': item.grams_per_serving || item.default_serving_amount || 100
+  }
 
-  if (canonical === itemUnit) {
-    return amount / item.default_serving_amount
+  // Smart slice detection based on food type
+  const foodName = item.name.toLowerCase()
+  if (foodName.includes('beef') || foodName.includes('roast') || foodName.includes('turkey') || 
+      foodName.includes('ham') || foodName.includes('salami') || foodName.includes('bacon')) {
+    unitToGrams['slice'] = 20  // Thin meat slices
+  } else if (foodName.includes('bread') || foodName.includes('toast')) {
+    unitToGrams['slice'] = 25  // Bread slices
+  } else if (foodName.includes('cheese')) {
+    unitToGrams['slice'] = 28  // Cheese slices
+  } else if (foodName.includes('pizza')) {
+    unitToGrams['slice'] = 100  // Pizza slices
+  } else if (foodName.includes('cake') || foodName.includes('pie')) {
+    unitToGrams['slice'] = 80  // Cake/pie slices
+  } else {
+    unitToGrams['slice'] = (item.grams_per_serving || item.default_serving_amount || 100) * 0.3  // Default: 30% of serving
   }
 
   if (canonical === 'serving') {
     return amount
   }
 
-  if (canonical === 'g' && item.grams_per_serving && item.grams_per_serving > 0) {
-    return amount / item.grams_per_serving
-  }
-
-  return amount
+  const gramsPerUnit = unitToGrams[canonical] || 1
+  const baseGrams = item.grams_per_serving || item.default_serving_amount || 100
+  
+  return (amount * gramsPerUnit) / baseGrams
 }
 
 function scaleMacros(macros: Macros, multiplier: number): Macros {
@@ -373,8 +457,19 @@ function normalizeUsdaFood(food: UsdaSearchFood): FoodCatalogItem | null {
   }
 }
 
+export function getAvailableUnits(item: FoodCatalogItem): string[] {
+  // Return comprehensive unit options for ALL foods
+  return [
+    'serving', 'g', 'kg', 'oz', 'lb', 'cup', 'tbsp', 'tsp', 'ml', 'l', 
+    'piece', 'slice', 'bowl', 'handful', 'pinch', 'dash', 'scoop', 
+    'portion', 'pat', 'drop', 'hand'
+  ]
+}
+
 export function getKnownFoodCatalog() {
-  return [...FOOD_CATALOG, ...EXTENDED_FOOD_CATALOG, ...EXTRA_FOOD_CATALOG, ...Array.from(LIVE_CACHE.values())]
+  const allExistingFoods = [...FOOD_CATALOG, ...EXTENDED_FOOD_CATALOG, ...EXTRA_FOOD_CATALOG]
+  const allFoods = removeDuplicateFoods(CUSTOM_FOOD_CATALOG, allExistingFoods)
+  return [...allFoods, ...Array.from(LIVE_CACHE.values())]
 }
 
 export async function primeFoodSearchCache(query: string) {
@@ -972,6 +1067,36 @@ const EXTRA_FOOD_CATALOG: FoodCatalogItem[] = [
   { id: 'xf-kefir', name: 'Kefir (plain)', aliases: ['kefir'], default_serving_amount: 240, default_serving_unit: 'ml', default_serving_label: '1 cup (240 ml)', grams_per_serving: 240, macros_per_serving: { calories: 149, protein_g: 9, carbs_g: 12, fat_g: 5 } },
   { id: 'xf-whey-protein', name: 'Whey protein powder', aliases: ['protein powder', 'whey'], default_serving_amount: 1, default_serving_unit: 'serving', default_serving_label: '1 scoop (30 g)', grams_per_serving: 30, macros_per_serving: { calories: 120, protein_g: 25, carbs_g: 3, fat_g: 1.5 } },
   { id: 'xf-casein-protein', name: 'Casein protein powder', aliases: ['casein', 'micellar casein'], default_serving_amount: 1, default_serving_unit: 'serving', default_serving_label: '1 scoop (32 g)', grams_per_serving: 32, macros_per_serving: { calories: 120, protein_g: 24, carbs_g: 3, fat_g: 1 } },
+  // ── Fairlife Ultra-Filtered Milks ──
+  { id: 'xf-fairlife-fat-free', name: 'Fairlife Fat-Free Ultra-Filtered Milk', aliases: ['fairlife fat free', 'fairlife 0% milk'], default_serving_amount: 1, default_serving_unit: 'cup', default_serving_label: '1 cup (240 ml)', grams_per_serving: 240, macros_per_serving: { calories: 80, protein_g: 13, carbs_g: 6, fat_g: 0 } },
+  { id: 'xf-fairlife-1pct', name: 'Fairlife 1% Ultra-Filtered Milk', aliases: ['fairlife 1%', 'fairlife lowfat'], default_serving_amount: 1, default_serving_unit: 'cup', default_serving_label: '1 cup (240 ml)', grams_per_serving: 240, macros_per_serving: { calories: 101, protein_g: 13, carbs_g: 6, fat_g: 2.5 } },
+  { id: 'xf-fairlife-2pct', name: 'Fairlife 2% Ultra-Filtered Milk', aliases: ['fairlife 2%', 'fairlife reduced fat'], default_serving_amount: 1, default_serving_unit: 'cup', default_serving_label: '1 cup (240 ml)', grams_per_serving: 240, macros_per_serving: { calories: 120, protein_g: 13, carbs_g: 6, fat_g: 4.5 } },
+  { id: 'xf-fairlife-whole', name: 'Fairlife Whole Ultra-Filtered Milk', aliases: ['fairlife whole', 'fairlife full fat'], default_serving_amount: 1, default_serving_unit: 'cup', default_serving_label: '1 cup (240 ml)', grams_per_serving: 240, macros_per_serving: { calories: 150, protein_g: 13, carbs_g: 6, fat_g: 8 } },
+  { id: 'xf-fairlife-chocolate-cup', name: 'Fairlife Chocolate 2% Ultra-Filtered Milk', aliases: ['fairlife chocolate milk'], default_serving_amount: 1, default_serving_unit: 'cup', default_serving_label: '1 cup (240 ml)', grams_per_serving: 240, macros_per_serving: { calories: 140, protein_g: 13, carbs_g: 13, fat_g: 4.5 } },
+  { id: 'xf-fairlife-chocolate-14oz', name: 'Fairlife Chocolate 2% Ultra-Filtered Milk (14oz)', aliases: ['fairlife chocolate 14oz'], default_serving_amount: 14, default_serving_unit: 'oz', default_serving_label: '14 oz bottle', grams_per_serving: 414, macros_per_serving: { calories: 250, protein_g: 23, carbs_g: 22, fat_g: 8 } },
+  { id: 'xf-fairlife-strawberry-14oz', name: 'Fairlife Strawberry 2% Ultra-Filtered Milk (14oz)', aliases: ['fairlife strawberry 14oz'], default_serving_amount: 14, default_serving_unit: 'oz', default_serving_label: '14 oz bottle', grams_per_serving: 414, macros_per_serving: { calories: 250, protein_g: 23, carbs_g: 21, fat_g: 8 } },
+  { id: 'xf-fairlife-dha-omega3', name: 'Fairlife DHA Omega-3 Milk', aliases: ['fairlife dha', 'fairlife omega3'], default_serving_amount: 1, default_serving_unit: 'cup', default_serving_label: '1 cup (240 ml)', grams_per_serving: 240, macros_per_serving: { calories: 130, protein_g: 13, carbs_g: 8, fat_g: 4.51 } },
+  { id: 'xf-fairlife-dha-whole', name: 'Fairlife DHA Omega-3 Whole Milk', aliases: ['fairlife dha whole'], default_serving_amount: 1, default_serving_unit: 'cup', default_serving_label: '1 cup (240 ml)', grams_per_serving: 240, macros_per_serving: { calories: 161, protein_g: 13, carbs_g: 8, fat_g: 8 } },
+  { id: 'xf-fairlife-cookies-cream', name: 'Fairlife Cookies N\' Creamiest Milk', aliases: ['fairlife cookies cream', 'fairlife cookies n cream'], default_serving_amount: 1, default_serving_unit: 'cup', default_serving_label: '1 cup (240 ml)', grams_per_serving: 240, macros_per_serving: { calories: 219, protein_g: 16, carbs_g: 21, fat_g: 8 } },
+  // ── Fairlife Nutrition Plan (30g protein) ──
+  { id: 'xf-fairlife-nutrition-chocolate', name: 'Fairlife Nutrition Plan Chocolate', aliases: ['fairlife nutrition chocolate', 'nutrition plan chocolate'], default_serving_amount: 1, default_serving_unit: 'bottle', default_serving_label: '1 bottle (14 oz)', grams_per_serving: 414, macros_per_serving: { calories: 150, protein_g: 30, carbs_g: 6, fat_g: 2.5 } },
+  { id: 'xf-fairlife-nutrition-vanilla', name: 'Fairlife Nutrition Plan Vanilla', aliases: ['fairlife nutrition vanilla', 'nutrition plan vanilla'], default_serving_amount: 1, default_serving_unit: 'bottle', default_serving_label: '1 bottle (14 oz)', grams_per_serving: 414, macros_per_serving: { calories: 150, protein_g: 30, carbs_g: 6, fat_g: 2.5 } },
+  { id: 'xf-fairlife-nutrition-strawberry', name: 'Fairlife Nutrition Plan Strawberry', aliases: ['fairlife nutrition strawberry', 'nutrition plan strawberry'], default_serving_amount: 1, default_serving_unit: 'bottle', default_serving_label: '1 bottle (14 oz)', grams_per_serving: 414, macros_per_serving: { calories: 150, protein_g: 30, carbs_g: 6, fat_g: 2.5 } },
+  { id: 'xf-fairlife-nutrition-coffee', name: 'Fairlife Nutrition Plan Coffee', aliases: ['fairlife nutrition coffee', 'nutrition plan coffee'], default_serving_amount: 1, default_serving_unit: 'bottle', default_serving_label: '1 bottle (14 oz)', grams_per_serving: 414, macros_per_serving: { calories: 150, protein_g: 30, carbs_g: 2.99, fat_g: 2.52 } },
+  { id: 'xf-fairlife-nutrition-salted-caramel', name: 'Fairlife Nutrition Plan Salted Caramel', aliases: ['fairlife nutrition salted caramel', 'nutrition plan salted caramel'], default_serving_amount: 1, default_serving_unit: 'bottle', default_serving_label: '1 bottle (14 oz)', grams_per_serving: 414, macros_per_serving: { calories: 150, protein_g: 30, carbs_g: 3, fat_g: 2.5 } },
+  // ── Fairlife Honey & Oats (15g protein) ──
+  { id: 'xf-fairlife-honey-oats-original', name: 'Fairlife Honey & Oats Original', aliases: ['fairlife honey oats original', 'honey oats original'], default_serving_amount: 1, default_serving_unit: 'bottle', default_serving_label: '1 bottle (14 oz)', grams_per_serving: 414, macros_per_serving: { calories: 170, protein_g: 15, carbs_g: 17, fat_g: 4.99 } },
+  { id: 'xf-fairlife-honey-oats-vanilla', name: 'Fairlife Honey & Oats French Vanilla', aliases: ['fairlife honey oats vanilla', 'honey oats vanilla'], default_serving_amount: 1, default_serving_unit: 'bottle', default_serving_label: '1 bottle (14 oz)', grams_per_serving: 414, macros_per_serving: { calories: 170, protein_g: 15, carbs_g: 19, fat_g: 4.99 } },
+  { id: 'xf-fairlife-honey-oats-strawberry', name: 'Fairlife Honey & Oats Creamy Strawberry', aliases: ['fairlife honey oats strawberry', 'honey oats strawberry'], default_serving_amount: 1, default_serving_unit: 'bottle', default_serving_label: '1 bottle (14 oz)', grams_per_serving: 414, macros_per_serving: { calories: 170, protein_g: 15, carbs_g: 17, fat_g: 4.99 } },
+  { id: 'xf-fairlife-honey-oats-chocolate', name: 'Fairlife Honey & Oats Rich Chocolate', aliases: ['fairlife honey oats chocolate', 'honey oats chocolate'], default_serving_amount: 1, default_serving_unit: 'bottle', default_serving_label: '1 bottle (14 oz)', grams_per_serving: 414, macros_per_serving: { calories: 170, protein_g: 15, carbs_g: 18, fat_g: 4.99 } },
+  // ── Fairlife Core Power (26g protein) ──
+  { id: 'xf-fairlife-core-power-chocolate', name: 'Fairlife Core Power Chocolate', aliases: ['core power chocolate', 'fairlife core chocolate'], default_serving_amount: 1, default_serving_unit: 'bottle', default_serving_label: '1 bottle (14 oz)', grams_per_serving: 414, macros_per_serving: { calories: 170, protein_g: 26, carbs_g: 8, fat_g: 4.5 } },
+  { id: 'xf-fairlife-core-power-strawberry-banana', name: 'Fairlife Core Power Strawberry Banana', aliases: ['core power strawberry banana', 'fairlife core strawberry banana'], default_serving_amount: 1, default_serving_unit: 'bottle', default_serving_label: '1 bottle (14 oz)', grams_per_serving: 414, macros_per_serving: { calories: 170, protein_g: 26, carbs_g: 7, fat_g: 4.5 } },
+  { id: 'xf-fairlife-core-power-vanilla', name: 'Fairlife Core Power Vanilla', aliases: ['core power vanilla', 'fairlife core vanilla'], default_serving_amount: 1, default_serving_unit: 'bottle', default_serving_label: '1 bottle (14 oz)', grams_per_serving: 414, macros_per_serving: { calories: 170, protein_g: 26, carbs_g: 8, fat_g: 4.5 } },
+  // ── Fairlife Core Power ELITE (42g protein) ──
+  { id: 'xf-fairlife-core-power-elite-chocolate', name: 'Fairlife Core Power Elite Chocolate', aliases: ['core power elite chocolate', 'fairlife elite chocolate'], default_serving_amount: 1, default_serving_unit: 'bottle', default_serving_label: '1 bottle (14 oz)', grams_per_serving: 414, macros_per_serving: { calories: 230, protein_g: 42, carbs_g: 9, fat_g: 3.5 } },
+  { id: 'xf-fairlife-core-power-elite-vanilla', name: 'Fairlife Core Power Elite Vanilla', aliases: ['core power elite vanilla', 'fairlife elite vanilla'], default_serving_amount: 1, default_serving_unit: 'bottle', default_serving_label: '1 bottle (14 oz)', grams_per_serving: 414, macros_per_serving: { calories: 230, protein_g: 42, carbs_g: 8, fat_g: 3.5 } },
+  { id: 'xf-fairlife-core-power-elite-strawberry', name: 'Fairlife Core Power Elite Strawberry', aliases: ['core power elite strawberry', 'fairlife elite strawberry'], default_serving_amount: 1, default_serving_unit: 'bottle', default_serving_label: '1 bottle (14 oz)', grams_per_serving: 414, macros_per_serving: { calories: 230, protein_g: 42, carbs_g: 8, fat_g: 3.5 } },
   // ── Grains & Bread ──
   { id: 'xf-rye-bread', name: 'Rye bread', aliases: ['dark rye', 'rye'], default_serving_amount: 1, default_serving_unit: 'slice', default_serving_label: '1 slice (32 g)', grams_per_serving: 32, macros_per_serving: { calories: 83, protein_g: 2.7, carbs_g: 15.5, fat_g: 1.1 } },
   { id: 'xf-pumpernickel', name: 'Pumpernickel bread', aliases: ['pumpernickel'], default_serving_amount: 1, default_serving_unit: 'slice', default_serving_label: '1 slice (26 g)', grams_per_serving: 26, macros_per_serving: { calories: 65, protein_g: 2.3, carbs_g: 12.4, fat_g: 0.8 } },
@@ -984,6 +1109,42 @@ const EXTRA_FOOD_CATALOG: FoodCatalogItem[] = [
   { id: 'xf-cornbread', name: 'Cornbread', aliases: ['corn bread'], default_serving_amount: 1, default_serving_unit: 'piece', default_serving_label: '1 piece (60 g)', grams_per_serving: 60, macros_per_serving: { calories: 173, protein_g: 3, carbs_g: 28, fat_g: 6 } },
   { id: 'xf-flour-tortilla', name: 'Flour tortilla', aliases: ['tortilla wrap', 'wheat tortilla'], default_serving_amount: 1, default_serving_unit: 'piece', default_serving_label: '1 large (72 g)', grams_per_serving: 72, macros_per_serving: { calories: 218, protein_g: 5.7, carbs_g: 35, fat_g: 5.5 } },
   { id: 'xf-rice-noodles', name: 'Rice noodles (cooked)', aliases: ['rice vermicelli', 'pad thai noodles'], default_serving_amount: 100, default_serving_unit: 'g', default_serving_label: '100 g', grams_per_serving: 100, macros_per_serving: { calories: 135, protein_g: 1.8, carbs_g: 30, fat_g: 0.2 } },
+  // ── Rice Varieties ──
+  { id: 'xf-white-rice-cooked', name: 'White rice (cooked)', aliases: ['white rice', 'cooked rice'], default_serving_amount: 100, default_serving_unit: 'g', default_serving_label: '100 g', grams_per_serving: 100, macros_per_serving: { calories: 130, protein_g: 2.9, carbs_g: 28, fat_g: 0.3 },
+    serving_units: [
+      { unit: 'g', label: 'grams', grams_per_unit: 1, macros_per_unit: { calories: 1.3, protein_g: 0.029, carbs_g: 0.28, fat_g: 0.003 } },
+      { unit: 'kg', label: 'kilograms', grams_per_unit: 1000, macros_per_unit: { calories: 1300, protein_g: 29, carbs_g: 280, fat_g: 3 } },
+      { unit: 'oz', label: 'ounces', grams_per_unit: 28.35, macros_per_unit: { calories: 37, protein_g: 0.8, carbs_g: 7.9, fat_g: 0.09 } },
+      { unit: 'lb', label: 'pounds', grams_per_unit: 453.6, macros_per_unit: { calories: 590, protein_g: 13.1, carbs_g: 127, fat_g: 1.4 } },
+      { unit: 'cup', label: 'cups', grams_per_unit: 158, macros_per_unit: { calories: 205, protein_g: 4.6, carbs_g: 44, fat_g: 0.5 } },
+      { unit: 'tbsp', label: 'tablespoons', grams_per_unit: 15, macros_per_unit: { calories: 19.5, protein_g: 0.4, carbs_g: 4.2, fat_g: 0.05 } },
+      { unit: 'tsp', label: 'teaspoons', grams_per_unit: 5, macros_per_unit: { calories: 6.5, protein_g: 0.15, carbs_g: 1.4, fat_g: 0.02 } },
+      { unit: 'ml', label: 'milliliters', grams_per_unit: 1, macros_per_unit: { calories: 1.3, protein_g: 0.029, carbs_g: 0.28, fat_g: 0.003 } },
+      { unit: 'l', label: 'liters', grams_per_unit: 1000, macros_per_unit: { calories: 1300, protein_g: 29, carbs_g: 280, fat_g: 3 } },
+      { unit: 'piece', label: 'servings', grams_per_unit: 100, macros_per_unit: { calories: 130, protein_g: 2.9, carbs_g: 28, fat_g: 0.3 } },
+      { unit: 'bowl', label: 'bowls', grams_per_unit: 200, macros_per_unit: { calories: 260, protein_g: 5.8, carbs_g: 56, fat_g: 0.6 } },
+      { unit: 'handful', label: 'handfuls', grams_per_unit: 50, macros_per_unit: { calories: 65, protein_g: 1.45, carbs_g: 14, fat_g: 0.15 } },
+      { unit: 'pinch', label: 'pinches', grams_per_unit: 2, macros_per_unit: { calories: 2.6, protein_g: 0.058, carbs_g: 0.56, fat_g: 0.006 } },
+      { unit: 'dash', label: 'dashes', grams_per_unit: 3, macros_per_unit: { calories: 3.9, protein_g: 0.087, carbs_g: 0.84, fat_g: 0.009 } },
+      { unit: 'scoop', label: 'scoops', grams_per_unit: 120, macros_per_unit: { calories: 156, protein_g: 3.48, carbs_g: 33.6, fat_g: 0.36 } },
+      { unit: 'portion', label: 'portions', grams_per_unit: 150, macros_per_unit: { calories: 195, protein_g: 4.35, carbs_g: 42, fat_g: 0.45 } },
+      { unit: 'slice', label: 'slices', grams_per_unit: 80, macros_per_unit: { calories: 104, protein_g: 2.32, carbs_g: 22.4, fat_g: 0.24 } },
+      { unit: 'pat', label: 'pats', grams_per_unit: 10, macros_per_unit: { calories: 13, protein_g: 0.29, carbs_g: 2.8, fat_g: 0.03 } },
+      { unit: 'drop', label: 'drops', grams_per_unit: 0.05, macros_per_unit: { calories: 0.065, protein_g: 0.00145, carbs_g: 0.014, fat_g: 0.00015 } },
+      { unit: 'hand', label: 'hands', grams_per_unit: 75, macros_per_unit: { calories: 97.5, protein_g: 2.175, carbs_g: 21, fat_g: 0.225 } }
+    ]
+  },
+  { id: 'xf-brown-rice-cooked-cup', name: 'Brown rice (cooked, 1 cup)', aliases: ['brown rice cup', 'cooked brown rice cup'], default_serving_amount: 195, default_serving_unit: 'g', default_serving_label: '1 cup (195 g)', grams_per_serving: 195, macros_per_serving: { calories: 216, protein_g: 4.8, carbs_g: 45, fat_g: 1.7 } },
+  { id: 'xf-brown-rice-uncooked', name: 'Brown rice (uncooked)', aliases: ['brown rice raw', 'uncooked brown rice'], default_serving_amount: 100, default_serving_unit: 'g', default_serving_label: '100 g', grams_per_serving: 100, macros_per_serving: { calories: 363, protein_g: 7.9, carbs_g: 75, fat_g: 2.9 } },
+  { id: 'xf-jasmine-rice-cooked-a', name: 'Jasmine rice (cooked, Profile A)', aliases: ['jasmine rice a', 'thai jasmine rice'], default_serving_amount: 100, default_serving_unit: 'g', default_serving_label: '100 g', grams_per_serving: 100, macros_per_serving: { calories: 170, protein_g: 3.8, carbs_g: 32.1, fat_g: 2.5 } },
+  { id: 'xf-jasmine-rice-cooked-b', name: 'Jasmine rice (cooked, Profile B)', aliases: ['jasmine rice b', 'fragrant jasmine rice'], default_serving_amount: 100, default_serving_unit: 'g', default_serving_label: '100 g', grams_per_serving: 100, macros_per_serving: { calories: 130, protein_g: 3, carbs_g: 28, fat_g: 0 } },
+  { id: 'xf-jasmine-rice-cooked-cup', name: 'Jasmine rice (cooked, 1 cup)', aliases: ['jasmine rice cup', 'cooked jasmine rice cup'], default_serving_amount: 158, default_serving_unit: 'g', default_serving_label: '1 cup (158 g)', grams_per_serving: 158, macros_per_serving: { calories: 213, protein_g: 4.2, carbs_g: 43.7, fat_g: 1.7 } },
+  { id: 'xf-basmati-rice-cooked', name: 'Basmati rice (cooked)', aliases: ['basmati rice', 'indian rice'], default_serving_amount: 100, default_serving_unit: 'g', default_serving_label: '100 g', grams_per_serving: 100, macros_per_serving: { calories: 167, protein_g: 3.4, carbs_g: 38.9, fat_g: 0 } },
+  { id: 'xf-basmati-rice-cooked-cup', name: 'Basmati rice (cooked, 1 cup)', aliases: ['basmati rice cup', 'cooked basmati rice cup'], default_serving_amount: 158, default_serving_unit: 'g', default_serving_label: '1 cup (158 g)', grams_per_serving: 158, macros_per_serving: { calories: 205, protein_g: 4.3, carbs_g: 45, fat_g: 0.4 } },
+  { id: 'xf-sushi-rice-cooked', name: 'Sushi rice (cooked)', aliases: ['sushi rice', 'seasoned rice'], default_serving_amount: 100, default_serving_unit: 'g', default_serving_label: '100 g', grams_per_serving: 100, macros_per_serving: { calories: 153, protein_g: 2.5, carbs_g: 34, fat_g: 0.3 } },
+  { id: 'xf-sushi-rice-cooked-cup', name: 'Sushi rice (cooked, 1 cup)', aliases: ['sushi rice cup', 'seasoned rice cup'], default_serving_amount: 185, default_serving_unit: 'g', default_serving_label: '1 cup (185 g)', grams_per_serving: 185, macros_per_serving: { calories: 270, protein_g: 4.6, carbs_g: 60, fat_g: 0.4 } },
+  { id: 'xf-parboiled-rice-cooked', name: 'Parboiled rice (cooked)', aliases: ['parboiled rice', 'converted rice'], default_serving_amount: 100, default_serving_unit: 'g', default_serving_label: '100 g', grams_per_serving: 100, macros_per_serving: { calories: 123, protein_g: 2.5, carbs_g: 26, fat_g: 0.4 } },
+  { id: 'xf-instant-white-rice-cooked', name: 'Instant white rice (cooked)', aliases: ['instant rice', 'quick rice'], default_serving_amount: 100, default_serving_unit: 'g', default_serving_label: '100 g', grams_per_serving: 100, macros_per_serving: { calories: 150, protein_g: 2.8, carbs_g: 32, fat_g: 0.2 } },
   { id: 'xf-udon', name: 'Udon noodles (cooked)', aliases: ['udon'], default_serving_amount: 100, default_serving_unit: 'g', default_serving_label: '100 g', grams_per_serving: 100, macros_per_serving: { calories: 130, protein_g: 3.3, carbs_g: 27, fat_g: 0.5 } },
   { id: 'xf-soba', name: 'Soba noodles (cooked)', aliases: ['buckwheat noodles', 'soba'], default_serving_amount: 100, default_serving_unit: 'g', default_serving_label: '100 g', grams_per_serving: 100, macros_per_serving: { calories: 99, protein_g: 5.1, carbs_g: 21.4, fat_g: 0.1 } },
   { id: 'xf-couscous', name: 'Couscous (cooked)', aliases: ['couscous'], default_serving_amount: 100, default_serving_unit: 'g', default_serving_label: '100 g', grams_per_serving: 100, macros_per_serving: { calories: 112, protein_g: 3.8, carbs_g: 23, fat_g: 0.2 } },
@@ -1144,3 +1305,1035 @@ const EXTRA_FOOD_CATALOG: FoodCatalogItem[] = [
   { id: 'xf-chicken-soup', name: 'Chicken noodle soup', aliases: ['chicken soup'], default_serving_amount: 1, default_serving_unit: 'serving', default_serving_label: '1 bowl (300 g)', grams_per_serving: 300, macros_per_serving: { calories: 156, protein_g: 13, carbs_g: 16, fat_g: 4 } },
   { id: 'xf-tomato-soup', name: 'Tomato soup', aliases: ['creamy tomato soup'], default_serving_amount: 1, default_serving_unit: 'serving', default_serving_label: '1 bowl (244 ml)', grams_per_serving: 244, macros_per_serving: { calories: 74, protein_g: 1.7, carbs_g: 16, fat_g: 0.8 } },
 ]
+
+// ──────────────────────────────────────────────────────────────────────────────
+// 🍽️  YOUR CUSTOM FOODS SECTION - PASTE YOUR FOODS HERE
+// ──────────────────────────────────────────────────────────────────────────────
+// 
+// 📝 INSTRUCTIONS:
+// 1. Paste your food entries between the brackets below
+// 2. Use the exact format shown in the template
+// 3. Each food must end with a comma (,) except the last one
+// 4. Save this file and the foods will be available immediately
+// 5. 🆕 DUPLICATE REMOVAL: If you add a food that's basically identical to an existing one,
+//    the old one will be automatically removed and your new version will be used
+// 
+// 🎯 TEMPLATE TO COPY:
+// { 
+//   id: 'xf-your-food-name', 
+//   name: 'Your Food Name', 
+//   aliases: ['search term 1', 'search term 2'], 
+//   default_serving_amount: 100, 
+//   default_serving_unit: 'g', 
+//   default_serving_label: '100 g', 
+//   grams_per_serving: 100, 
+//   macros_per_serving: { 
+//     calories: 100, 
+//     protein_g: 10, 
+//     carbs_g: 15, 
+//     fat_g: 2 
+//   } 
+// },
+//
+// 🚀 START PASTING YOUR FOODS BELOW THIS LINE:
+const CUSTOM_FOOD_CATALOG: FoodCatalogItem[] = [
+  // Example food (remove or replace with your own):
+  // { 
+  //   id: 'xf-my-custom-food', 
+  //   name: 'My Custom Food', 
+  //   aliases: ['custom food', 'my food'], 
+  //   default_serving_amount: 100, 
+  //   default_serving_unit: 'g', 
+  //   default_serving_label: '100 g', 
+  //   grams_per_serving: 100, 
+  //   macros_per_serving: { 
+  //     calories: 150, 
+  //     protein_g: 12, 
+  //     carbs_g: 20, 
+  //     fat_g: 5 
+  //   } 
+  // },
+  
+  // 👇 PASTE YOUR FOODS HERE 👇
+  {
+  id: 'xf-roast-beef',
+  name: 'Roast Beef',
+  aliases: ['roast beef', 'roast-beef', 'beef roast'],
+  default_serving_amount: 85,
+  default_serving_unit: 'g',
+  default_serving_label: '3 oz (85g)',
+  grams_per_serving: 85,
+  macros_per_serving: {
+    calories: 180,
+    protein_g: 24,
+    carbs_g: 0,
+    fat_g: 8
+  }
+},
+{
+  id: 'xf-chicken-breast-cooked',
+  name: 'Chicken Breast (Cooked)',
+  aliases: ['chicken breast', 'cooked chicken breast', 'chicken cooked'],
+  default_serving_amount: 85,
+  default_serving_unit: 'g',
+  default_serving_label: '3 oz (85g)',
+  grams_per_serving: 85,
+  macros_per_serving: {
+    calories: 140,
+    protein_g: 26,
+    carbs_g: 0,
+    fat_g: 3
+  }
+},
+{
+  id: 'xf-barebells-caramel-cashew',
+  name: 'Barebells Caramel Cashew Protein Bar',
+  aliases: ['caramel cashew', 'barebells caramel cashew', 'caramel cashew bar'],
+  default_serving_amount: 55,
+  default_serving_unit: 'g',
+  default_serving_label: '1 bar (55g)',
+  grams_per_serving: 55,
+  macros_per_serving: {
+    calories: 200,
+    protein_g: 20,
+    carbs_g: 19,
+    fat_g: 8
+  }
+},
+{
+  id: 'xf-barebells-cookies-and-cream',
+  name: 'Barebells Cookies & Cream Protein Bar',
+  aliases: ['cookies and cream', 'barebells cookies and cream', 'cookies cream bar'],
+  default_serving_amount: 55,
+  default_serving_unit: 'g',
+  default_serving_label: '1 bar (55g)',
+  grams_per_serving: 55,
+  macros_per_serving: {
+    calories: 200,
+    protein_g: 20,
+    carbs_g: 20,
+    fat_g: 8
+  }
+},
+{
+  id: 'xf-barebells-salty-peanut',
+  name: 'Barebells Salty Peanut Protein Bar',
+  aliases: ['salty peanut', 'barebells salty peanut', 'peanut protein bar'],
+  default_serving_amount: 55,
+  default_serving_unit: 'g',
+  default_serving_label: '1 bar (55g)',
+  grams_per_serving: 55,
+  macros_per_serving: {
+    calories: 200,
+    protein_g: 20,
+    carbs_g: 18,
+    fat_g: 9
+  }
+},
+{
+  id: 'xf-barebells-white-chocolate-almond',
+  name: 'Barebells White Chocolate Almond Protein Bar',
+  aliases: ['white chocolate almond', 'white almond bar', 'barebells white almond'],
+  default_serving_amount: 55,
+  default_serving_unit: 'g',
+  default_serving_label: '1 bar (55g)',
+  grams_per_serving: 55,
+  macros_per_serving: {
+    calories: 200,
+    protein_g: 20,
+    carbs_g: 20,
+    fat_g: 9
+  }
+},
+{
+  id: 'xf-barebells-chocolate-dough',
+  name: 'Barebells Chocolate Dough Protein Bar',
+  aliases: ['chocolate dough', 'barebells chocolate dough', 'choco dough bar'],
+  default_serving_amount: 55,
+  default_serving_unit: 'g',
+  default_serving_label: '1 bar (55g)',
+  grams_per_serving: 55,
+  macros_per_serving: {
+    calories: 200,
+    protein_g: 20,
+    carbs_g: 18,
+    fat_g: 8
+  }
+},
+{
+  id: 'xf-barebells-peanut-butter',
+  name: 'Barebells Peanut Butter Protein Bar',
+  aliases: ['peanut butter', 'barebells peanut butter', 'pb protein bar'],
+  default_serving_amount: 55,
+  default_serving_unit: 'g',
+  default_serving_label: '1 bar (55g)',
+  grams_per_serving: 55,
+  macros_per_serving: {
+    calories: 210,
+    protein_g: 20,
+    carbs_g: 19,
+    fat_g: 9
+  }
+},
+{
+  id: 'xf-barebells-coco-caramel-almond',
+  name: 'Barebells Coco Caramel Almond Protein Bar',
+  aliases: ['coco caramel almond', 'barebells caramel almond', 'coconut caramel almond bar'],
+  default_serving_amount: 55,
+  default_serving_unit: 'g',
+  default_serving_label: '1 bar (55g)',
+  grams_per_serving: 55,
+  macros_per_serving: {
+    calories: 210,
+    protein_g: 20,
+    carbs_g: 20,
+    fat_g: 9
+  }
+},
+{
+  id: 'xf-barebells-minty-chocolate',
+  name: 'Barebells Minty Chocolate Soft Protein Bar',
+  aliases: ['mint chocolate', 'minty chocolate', 'barebells mint soft bar'],
+  default_serving_amount: 55,
+  default_serving_unit: 'g',
+  default_serving_label: '1 soft bar (55g)',
+  grams_per_serving: 55,
+  macros_per_serving: {
+    calories: 200,
+    protein_g: 16,
+    carbs_g: 18,
+    fat_g: 8
+  }
+},
+{
+  id: 'xf-barebells-vegan-caramel-peanut',
+  name: 'Barebells Vegan Caramel Peanut Protein Bar',
+  aliases: ['vegan caramel peanut', 'barebells vegan bar', 'vegan peanut bar'],
+  default_serving_amount: 55,
+  default_serving_unit: 'g',
+  default_serving_label: '1 vegan bar (55g)',
+  grams_per_serving: 55,
+  macros_per_serving: {
+    calories: 210,
+    protein_g: 15,
+    carbs_g: 20,
+    fat_g: 9
+  }
+},
+{
+  id: 'xf-barebells-caramel-cashew',
+  name: 'Barebells Caramel Cashew Protein Bar',
+  aliases: ['caramel cashew', 'barebells caramel cashew', 'caramel cashew bar', 'barebells bar caramel cashew'],
+  default_serving_amount: 55,
+  default_serving_unit: 'g',
+  default_serving_label: '1 bar (55g)',
+  grams_per_serving: 55,
+  macros_per_serving: { calories: null, protein_g: null, carbs_g: null, fat_g: null }
+},
+{
+  id: 'xf-barebells-cookies-and-cream',
+  name: 'Barebells Cookies & Cream Protein Bar',
+  aliases: ['cookies and cream', 'cookies & cream', 'barebells cookies and cream', 'cookies cream bar'],
+  default_serving_amount: 55,
+  default_serving_unit: 'g',
+  default_serving_label: '1 bar (55g)',
+  grams_per_serving: 55,
+  macros_per_serving: { calories: null, protein_g: null, carbs_g: null, fat_g: null }
+},
+{
+  id: 'xf-barebells-salty-peanut',
+  name: 'Barebells Salty Peanut Protein Bar',
+  aliases: ['salty peanut', 'barebells salty peanut', 'peanut protein bar', 'salty peanut bar'],
+  default_serving_amount: 55,
+  default_serving_unit: 'g',
+  default_serving_label: '1 bar (55g)',
+  grams_per_serving: 55,
+  macros_per_serving: { calories: null, protein_g: null, carbs_g: null, fat_g: null }
+},
+{
+  id: 'xf-barebells-white-chocolate-almond',
+  name: 'Barebells White Chocolate Almond Protein Bar',
+  aliases: ['white chocolate almond', 'barebells white almond', 'white chocolate bar', 'almond bar barebells'],
+  default_serving_amount: 55,
+  default_serving_unit: 'g',
+  default_serving_label: '1 bar (55g)',
+  grams_per_serving: 55,
+  macros_per_serving: { calories: null, protein_g: null, carbs_g: null, fat_g: null }
+},
+{
+  id: 'xf-barebells-chocolate-dough',
+  name: 'Barebells Chocolate Dough Protein Bar',
+  aliases: ['chocolate dough', 'barebells chocolate dough', 'choco dough bar', 'chocolate protein bar barebells'],
+  default_serving_amount: 55,
+  default_serving_unit: 'g',
+  default_serving_label: '1 bar (55g)',
+  grams_per_serving: 55,
+  macros_per_serving: { calories: null, protein_g: null, carbs_g: null, fat_g: null }
+},
+{
+  id: 'xf-barebells-peanut-butter',
+  name: 'Barebells Peanut Butter Protein Bar',
+  aliases: ['peanut butter', 'barebells peanut butter', 'pb protein bar', 'peanut butter bar'],
+  default_serving_amount: 55,
+  default_serving_unit: 'g',
+  default_serving_label: '1 bar (55g)',
+  grams_per_serving: 55,
+  macros_per_serving: { calories: null, protein_g: null, carbs_g: null, fat_g: null }
+},
+{
+  id: 'xf-barebells-coco-caramel-almond',
+  name: 'Barebells Coco Caramel Almond Protein Bar',
+  aliases: ['coco caramel almond', 'barebells caramel almond', 'coconut caramel almond bar'],
+  default_serving_amount: 55,
+  default_serving_unit: 'g',
+  default_serving_label: '1 bar (55g)',
+  grams_per_serving: 55,
+  macros_per_serving: { calories: null, protein_g: null, carbs_g: null, fat_g: null }
+},
+{
+  id: 'xf-barebells-minty-chocolate',
+  name: 'Barebells Minty Chocolate Soft Bar',
+  aliases: ['mint chocolate', 'minty chocolate', 'barebells mint soft bar', 'mint protein bar'],
+  default_serving_amount: 55,
+  default_serving_unit: 'g',
+  default_serving_label: '1 soft bar (55g)',
+  grams_per_serving: 55,
+  macros_per_serving: { calories: null, protein_g: null, carbs_g: null, fat_g: null }
+},
+{
+  id: 'xf-barebells-vegan-caramel-peanut',
+  name: 'Barebells Vegan Caramel Peanut Protein Bar',
+  aliases: ['vegan caramel peanut', 'barebells vegan bar', 'caramel peanut vegan', 'vegan peanut bar'],
+  default_serving_amount: 55,
+  default_serving_unit: 'g',
+  default_serving_label: '1 vegan bar (55g)',
+  grams_per_serving: 55,
+  macros_per_serving: { calories: null, protein_g: null, carbs_g: null, fat_g: null }
+},
+{
+  id: 'xf-barebells-birthday-cake',
+  name: 'Barebells Birthday Cake Protein Bar',
+  aliases: ['birthday cake', 'barebells birthday cake', 'birthday cake bar'],
+  default_serving_amount: 55,
+  default_serving_unit: 'g',
+  default_serving_label: '1 bar (55g)',
+  grams_per_serving: 55,
+  macros_per_serving: { calories: null, protein_g: null, carbs_g: null, fat_g: null }
+},
+{
+  id: 'xf-barebells-creamy-crisp',
+  name: 'Barebells Creamy Crisp Protein Bar',
+  aliases: ['creamy crisp', 'barebells creamy crisp', 'creamy crisp bar'],
+  default_serving_amount: 55,
+  default_serving_unit: 'g',
+  default_serving_label: '1 bar (55g)',
+  grams_per_serving: 55,
+  macros_per_serving: { calories: null, protein_g: null, carbs_g: null, fat_g: null }
+},
+{
+  id: 'xf-barebells-key-lime-pie',
+  name: 'Barebells Key Lime Pie Protein Bar',
+  aliases: ['key lime pie', 'barebells key lime', 'key lime bar'],
+  default_serving_amount: 55,
+  default_serving_unit: 'g',
+  default_serving_label: '1 bar (55g)',
+  grams_per_serving: 55,
+  macros_per_serving: { calories: null, protein_g: null, carbs_g: null, fat_g: null }
+},
+{
+  id: 'xf-barebells-lemon-cheesecake',
+  name: 'Barebells Lemon Cheesecake Protein Bar',
+  aliases: ['lemon cheesecake', 'barebells lemon cheesecake', 'lemon cheesecake bar'],
+  default_serving_amount: 55,
+  default_serving_unit: 'g',
+  default_serving_label: '1 bar (55g)',
+  grams_per_serving: 55,
+  macros_per_serving: { calories: null, protein_g: null, carbs_g: null, fat_g: null }
+},
+{
+  id: 'xf-barebells-marshmallow-peanut-road',
+  name: 'Barebells Marshmallow Peanut Road Protein Bar',
+  aliases: ['marshmallow peanut', 'peanut road', 'marshmallow bar barebells'],
+  default_serving_amount: 55,
+  default_serving_unit: 'g',
+  default_serving_label: '1 bar (55g)',
+  grams_per_serving: 55,
+  macros_per_serving: { calories: null, protein_g: null, carbs_g: null, fat_g: null }
+},
+{
+  id: 'xf-barebells-cookies-and-caramel',
+  name: 'Barebells Cookies & Caramel Protein Bar',
+  aliases: ['cookies caramel', 'cookies & caramel', 'barebells cookies caramel'],
+  default_serving_amount: 55,
+  default_serving_unit: 'g',
+  default_serving_label: '1 bar (55g)',
+  grams_per_serving: 55,
+  macros_per_serving: { calories: null, protein_g: null, carbs_g: null, fat_g: null }
+},
+{
+  id: 'xf-barebells-banana-caramel',
+  name: 'Barebells Banana Caramel Protein Bar',
+  aliases: ['banana caramel', 'barebells banana caramel', 'banana caramel bar'],
+  default_serving_amount: 55,
+  default_serving_unit: 'g',
+  default_serving_label: '1 bar (55g)',
+  grams_per_serving: 55,
+  macros_per_serving: { calories: null, protein_g: null, carbs_g: null, fat_g: null }
+},
+{
+  id: 'xf-barebells-caramel-choco',
+  name: 'Barebells Caramel Choco Soft Bar',
+  aliases: ['caramel choco', 'barebells caramel choco', 'soft caramel chocolate'],
+  default_serving_amount: 55,
+  default_serving_unit: 'g',
+  default_serving_label: '1 soft bar (55g)',
+  grams_per_serving: 55,
+  macros_per_serving: { calories: null, protein_g: null, carbs_g: null, fat_g: null }
+},
+{
+  id: 'xf-barebells-vegan-caramel-choco-chip',
+  name: 'Barebells Vegan Caramel Choco Chip Protein Bar',
+  aliases: ['vegan caramel choco chip', 'barebells vegan chip', 'vegan caramel bar'],
+  default_serving_amount: 55,
+  default_serving_unit: 'g',
+  default_serving_label: '1 vegan bar (55g)',
+  grams_per_serving: 55,
+  macros_per_serving: { calories: null, protein_g: null, carbs_g: null, fat_g: null }
+},
+{
+  id: 'xf-barebells-vegan-fudge-brownie',
+  name: 'Barebells Vegan Fudge Brownie Protein Bar',
+  aliases: ['vegan brownie', 'fudge brownie vegan', 'barebells vegan brownie'],
+  default_serving_amount: 55,
+  default_serving_unit: 'g',
+  default_serving_label: '1 vegan bar (55g)',
+  grams_per_serving: 55,
+  macros_per_serving: { calories: null, protein_g: null, carbs_g: null, fat_g: null }
+},
+{
+  id: 'xf-barebells-vegan-hazelnut-nougat',
+  name: 'Barebells Vegan Hazelnut Nougat Protein Bar',
+  aliases: ['vegan hazelnut nougat', 'barebells vegan nougat'],
+  default_serving_amount: 55,
+  default_serving_unit: 'g',
+  default_serving_label: '1 vegan bar (55g)',
+  grams_per_serving: 55,
+  macros_per_serving: { calories: null, protein_g: null, carbs_g: null, fat_g: null }
+},
+{
+  id: 'xf-canyon-7-grain-bread',
+  name: 'Canyon Bakehouse 7-Grain Bread',
+  aliases: ['7 grain bread', 'canyon 7 grain', 'gf 7 grain bread'],
+  default_serving_amount: 34,
+  default_serving_unit: 'g',
+  default_serving_label: '1 slice (34g)',
+  grams_per_serving: 34,
+  macros_per_serving: {
+    calories: 80,
+    protein_g: 2,
+    carbs_g: 15,
+    fat_g: 1.5
+  }
+},
+{
+  id: 'xf-canyon-mountain-white',
+  name: 'Canyon Bakehouse Mountain White Bread',
+  aliases: ['mountain white', 'canyon mountain white', 'gf white bread'],
+  default_serving_amount: 1,
+  default_serving_unit: 'slice',
+  default_serving_label: '1 slice',
+  grams_per_serving: null,
+  macros_per_serving: { calories: null, protein_g: null, carbs_g: null, fat_g: null }
+},
+{
+  id: 'xf-canyon-deli-rye-style',
+  name: 'Canyon Bakehouse Deli Rye Style (GF)',
+  aliases: ['gf rye', 'canyon rye style', 'gluten free rye bread'],
+  default_serving_amount: 1,
+  default_serving_unit: 'slice',
+  default_serving_label: '1 slice',
+  grams_per_serving: null,
+  macros_per_serving: { calories: null, protein_g: null, carbs_g: null, fat_g: null }
+},
+{
+  id: 'xf-canyon-honey-white',
+  name: 'Canyon Bakehouse Honey White Bread',
+  aliases: ['honey white bread', 'canyon honey white', 'gf honey bread'],
+  default_serving_amount: 1,
+  default_serving_unit: 'slice',
+  default_serving_label: '1 slice',
+  grams_per_serving: null,
+  macros_per_serving: { calories: null, protein_g: null, carbs_g: null, fat_g: null }
+},
+{
+  id: 'xf-bfree-white-loaf',
+  name: 'BFree Gluten-Free White Loaf',
+  aliases: ['bfree white bread', 'gf bfree white loaf'],
+  default_serving_amount: 1,
+  default_serving_unit: 'slice',
+  default_serving_label: '1 slice',
+  grams_per_serving: null,
+  macros_per_serving: { calories: null, protein_g: null, carbs_g: null, fat_g: null }
+},
+{
+  id: 'xf-bfree-brown-seeded-loaf',
+  name: 'BFree Brown Seeded Loaf',
+  aliases: ['bfree seeded loaf', 'gf brown seeded bread'],
+  default_serving_amount: 1,
+  default_serving_unit: 'slice',
+  default_serving_label: '1 slice',
+  grams_per_serving: null,
+  macros_per_serving: { calories: null, protein_g: null, carbs_g: null, fat_g: null }
+},
+{
+  id: 'xf-bfree-white-rolls',
+  name: 'BFree Soft White Rolls',
+  aliases: ['bfree white rolls', 'gf white rolls'],
+  default_serving_amount: 1,
+  default_serving_unit: 'roll',
+  default_serving_label: '1 roll',
+  grams_per_serving: null,
+  macros_per_serving: { calories: null, protein_g: null, carbs_g: null, fat_g: null }
+},
+{
+  id: 'xf-bfree-pita',
+  name: 'BFree Stone-Baked Pita Bread',
+  aliases: ['bfree pita', 'gf pita bread'],
+  default_serving_amount: 1,
+  default_serving_unit: 'pita',
+  default_serving_label: '1 pita',
+  grams_per_serving: null,
+  macros_per_serving: { calories: null, protein_g: null, carbs_g: null, fat_g: null }
+},
+{
+  id: 'xf-bfree-baguette',
+  name: 'BFree Bake-at-Home Demi Baguette',
+  aliases: ['bfree baguette', 'gf demi baguette'],
+  default_serving_amount: 0.5,
+  default_serving_unit: 'baguette',
+  default_serving_label: 'Half baguette',
+  grams_per_serving: null,
+  macros_per_serving: { calories: null, protein_g: null, carbs_g: null, fat_g: null }
+},
+{
+  id: 'xf-ener-g-tapioca-loaf',
+  name: 'Ener-G Tapioca Loaf',
+  aliases: ['tapioca loaf', 'ener-g bread', 'gf tapioca bread'],
+  default_serving_amount: 1,
+  default_serving_unit: 'slice',
+  default_serving_label: '1 slice',
+  grams_per_serving: null,
+  macros_per_serving: { calories: null, protein_g: null, carbs_g: null, fat_g: null }
+},
+{
+  id: 'xf-ener-g-raisin-loaf',
+  name: 'Ener-G Raisin Loaf',
+  aliases: ['ener-g raisin', 'gf raisin bread'],
+  default_serving_amount: 1,
+  default_serving_unit: 'slice',
+  default_serving_label: '1 slice',
+  grams_per_serving: null,
+  macros_per_serving: { calories: null, protein_g: null, carbs_g: null, fat_g: null }
+},
+{
+  id: 'xf-foodforlife-rice-almond',
+  name: 'Food For Life Rice Almond Bread',
+  aliases: ['rice almond bread', 'food for life almond bread'],
+  default_serving_amount: 1,
+  default_serving_unit: 'slice',
+  default_serving_label: '1 slice',
+  grams_per_serving: null,
+  macros_per_serving: { calories: null, protein_g: null, carbs_g: null, fat_g: null }
+},
+{
+  id: 'xf-foodforlife-sprouted-flax',
+  name: 'Food For Life Sprouted Flax Bread',
+  aliases: ['sprouted flax bread', 'gf flax bread'],
+  default_serving_amount: 1,
+  default_serving_unit: 'slice',
+  default_serving_label: '1 slice',
+  grams_per_serving: null,
+  macros_per_serving: { calories: null, protein_g: null, carbs_g: null, fat_g: null }
+},
+{
+  id: 'xf-foodforlife-red-rice',
+  name: 'Food For Life Bhutanese Red Rice Bread',
+  aliases: ['red rice bread', 'food for life red rice'],
+  default_serving_amount: 1,
+  default_serving_unit: 'slice',
+  default_serving_label: '1 slice',
+  grams_per_serving: null,
+  macros_per_serving: { calories: null, protein_g: null, carbs_g: null, fat_g: null }
+},
+{
+  id: 'xf-udis-white-sandwich',
+  name: 'Udi’s White Sandwich Bread',
+  aliases: ['udis white bread', 'gf white sandwich bread'],
+  default_serving_amount: 1,
+  default_serving_unit: 'slice',
+  default_serving_label: '1 slice',
+  grams_per_serving: null,
+  macros_per_serving: { calories: null, protein_g: null, carbs_g: null, fat_g: null }
+},
+{
+  id: 'xf-schar-artisan-white',
+  name: 'Schär Artisan Baker White Bread',
+  aliases: ['schar white bread', 'gf artisan white'],
+  default_serving_amount: 1,
+  default_serving_unit: 'slice',
+  default_serving_label: '1 slice',
+  grams_per_serving: null,
+  macros_per_serving: { calories: null, protein_g: null, carbs_g: null, fat_g: null }
+},
+{
+  id: 'xf-lnb-seeds-grains',
+  name: 'Little Northern Bakehouse Seeds & Grains Bread',
+  aliases: ['lnb seeds and grains', 'gf seeds and grains bread'],
+  default_serving_amount: 1,
+  default_serving_unit: 'slice',
+  default_serving_label: '1 slice',
+  grams_per_serving: null,
+  macros_per_serving: { calories: null, protein_g: null, carbs_g: null, fat_g: null }
+},
+{
+  id: 'xf-bfree-gf-high-protein-tortilla',
+  name: 'BFree Gluten Free High Protein Tortilla',
+  aliases: ['bfree gf tortilla', 'bfree high protein wrap', 'gf tortilla'],
+  default_serving_amount: 1,
+  default_serving_unit: 'tortilla',
+  default_serving_label: '1 tortilla',
+  grams_per_serving: null,
+  macros_per_serving: { calories: null, protein_g: null, carbs_g: null, fat_g: null }
+},
+{
+  id: 'xf-mi-rancho-organic-corn-tortilla',
+  name: 'Mi Rancho Organic Corn Tortilla',
+  aliases: ['mi rancho corn tortilla', 'organic corn tortilla', 'gf corn tortilla'],
+  default_serving_amount: 33,
+  default_serving_unit: 'g',
+  default_serving_label: '1 tortilla (33g)',
+  grams_per_serving: 33,
+  macros_per_serving: {
+    calories: 70,
+    protein_g: 0,
+    carbs_g: 14,
+    fat_g: 1
+  }
+}, 
+{
+  id: 'xf-mission-gf-soft-taco-wrap',
+  name: 'Mission Gluten Free Soft Taco Tortilla',
+  aliases: ['mission gf tortilla', 'mission gluten free wrap', 'gf soft taco wrap'],
+  default_serving_amount: 50,
+  default_serving_unit: 'g',
+  default_serving_label: '1 tortilla (50g)',
+  grams_per_serving: 50,
+  macros_per_serving: {
+    calories: 150,
+    protein_g: 3,
+    carbs_g: 26,
+    fat_g: 4.5
+  }
+},
+{
+  id: 'xf-rise-and-puff-gf-tortilla',
+  name: 'Rise & Puff Gluten Free Tortilla',
+  aliases: ['rise and puff gf tortilla', 'gf tortilla rise & puff'],
+  default_serving_amount: 1,
+  default_serving_unit: 'tortilla',
+  default_serving_label: '1 tortilla',
+  grams_per_serving: null,
+  macros_per_serving: { calories: null, protein_g: null, carbs_g: null, fat_g: null }
+},
+{
+  id: 'xf-woolworths-gf-corn-tortilla',
+  name: 'Woolworths Free From Gluten Corn Tortilla',
+  aliases: ['woolworths gf tortilla', 'gf corn tortilla woolworths'],
+  default_serving_amount: 1,
+  default_serving_unit: 'tortilla',
+  default_serving_label: '1 tortilla',
+  grams_per_serving: null,
+  macros_per_serving: { calories: null, protein_g: null, carbs_g: null, fat_g: null }
+},
+{
+  id: 'xf-la-tortilla-factory-gf-wrap',
+  name: 'La Tortilla Factory Gluten-Free Wrap',
+  aliases: ['la tortilla gf wrap', 'gf wrap la tortilla'],
+  default_serving_amount: 66,
+  default_serving_unit: 'g',
+  default_serving_label: '1 wrap (66g)',
+  grams_per_serving: 66,
+  macros_per_serving: {
+    calories: 190,
+    protein_g: 2,
+    carbs_g: 33,
+    fat_g: 8
+  }
+},
+{
+  id: 'xf-maria-ricardos-white-corn-tortilla',
+  name: 'Maria & Ricardo’s White Corn Tortilla',
+  aliases: ['maria ricardos tortilla', 'white corn tortilla', 'gf white corn tortilla'],
+  default_serving_amount: 52,
+  default_serving_unit: 'g',
+  default_serving_label: '1 tortilla (52g)',
+  grams_per_serving: 52,
+  macros_per_serving: {
+    calories: 110,
+    protein_g: 2,
+    carbs_g: 20,
+    fat_g: 1.5
+  }
+},
+{
+  id: 'xf-trader-joes-small-corn-tortilla',
+  name: 'Trader Joe’s Small Corn Tortilla',
+  aliases: ['tj corn tortilla', 'trader joes tortilla'],
+  default_serving_amount: 42,
+  default_serving_unit: 'g',
+  default_serving_label: '1 tortilla (42g)',
+  grams_per_serving: 42,
+  macros_per_serving: {
+    calories: 120,
+    protein_g: 3,
+    carbs_g: 23,
+    fat_g: 2
+  }
+},
+{
+  id: 'xf-mission-whole-wheat-tortilla',
+  name: 'Mission Whole Wheat Tortilla',
+  aliases: ['mission wheat tortilla', 'whole wheat flour tortilla'],
+  default_serving_amount: 70,
+  default_serving_unit: 'g',
+  default_serving_label: '1 tortilla (70g)',
+  grams_per_serving: 70,
+  macros_per_serving: {
+    calories: 210,
+    protein_g: 5,
+    carbs_g: 32,
+    fat_g: 2.5
+  }
+},
+{
+  id: 'xf-mission-25-cal-corn-tortilla',
+  name: 'Mission 25-Calorie Yellow Corn Tortilla',
+  aliases: ['low calorie corn tortilla', 'mission 25 cal tortilla'],
+  default_serving_amount: 1,
+  default_serving_unit: 'tortilla',
+  default_serving_label: '1 tortilla',
+  grams_per_serving: null,
+  macros_per_serving: {
+    calories: 25,
+    protein_g: null,
+    carbs_g: null,
+    fat_g: null
+  }
+},
+{
+  id: 'xf-generic-corn-tortilla',
+  name: 'Generic Corn Tortilla',
+  aliases: ['corn tortilla', 'basic corn tortilla'],
+  default_serving_amount: 1,
+  default_serving_unit: 'tortilla',
+  default_serving_label: '1 tortilla',
+  grams_per_serving: null,
+  macros_per_serving: { calories: null, protein_g: null, carbs_g: null, fat_g: null }
+},
+{
+  id: 'xf-generic-flour-tortilla',
+  name: 'Generic Flour Tortilla',
+  aliases: ['flour tortilla', 'white flour tortilla'],
+  default_serving_amount: 1,
+  default_serving_unit: 'tortilla',
+  default_serving_label: '1 tortilla',
+  grams_per_serving: null,
+  macros_per_serving: { calories: null, protein_g: null, carbs_g: null, fat_g: null }
+},
+{
+  id: 'xf-regular-white-bread',
+  name: 'White Bread (Regular)',
+  aliases: ['white bread', 'sandwich bread white'],
+  default_serving_amount: 1,
+  default_serving_unit: 'slice',
+  default_serving_label: '1 slice',
+  grams_per_serving: null,
+  macros_per_serving: { calories: null, protein_g: null, carbs_g: null, fat_g: null }
+},
+{
+  id: 'xf-regular-wheat-bread',
+  name: 'Whole Wheat Bread (Regular)',
+  aliases: ['wheat bread', 'whole wheat loaf'],
+  default_serving_amount: 1,
+  default_serving_unit: 'slice',
+  default_serving_label: '1 slice',
+  grams_per_serving: null,
+  macros_per_serving: { calories: null, protein_g: null, carbs_g: null, fat_g: null }
+},
+{
+  id: 'xf-regular-multigrain-bread',
+  name: 'Multigrain Bread (Regular)',
+  aliases: ['multigrain bread', 'grain bread'],
+  default_serving_amount: 1,
+  default_serving_unit: 'slice',
+  default_serving_label: '1 slice',
+  grams_per_serving: null,
+  macros_per_serving: { calories: null, protein_g: null, carbs_g: null, fat_g: null }
+},
+{
+  id: 'xf-dkb-21-whole-grains-and-seeds',
+  name: "Dave's Killer Bread 21 Whole Grains & Seeds",
+  aliases: ['dkb 21 whole grains', '21 grains seeds bread'],
+  default_serving_amount: 45,
+  default_serving_unit: 'g',
+  default_serving_label: '1 slice (45g)',
+  grams_per_serving: 45,
+  macros_per_serving: { calories: 110, protein_g: 6, carbs_g: 22, fat_g: 1.5 }
+},
+{
+  id: 'xf-dkb-good-seed',
+  name: "Dave's Killer Bread Good Seed",
+  aliases: ['dkb good seed bread'],
+  default_serving_amount: 45,
+  default_serving_unit: 'g',
+  default_serving_label: '1 slice (45g)',
+  grams_per_serving: 45,
+  macros_per_serving: { calories: 120, protein_g: 5, carbs_g: 23, fat_g: 2.5 }
+},
+{
+  id: 'xf-dkb-white-done-right',
+  name: "Dave's Killer Bread White Bread Done Right",
+  aliases: ['dkb white done right'],
+  default_serving_amount: 40,
+  default_serving_unit: 'g',
+  default_serving_label: '1 slice (40g)',
+  grams_per_serving: 40,
+  macros_per_serving: { calories: 110, protein_g: 4, carbs_g: 20, fat_g: 2 }
+},
+{
+  id: 'xf-dkb-powerseed',
+  name: "Dave's Killer Bread Powerseed",
+  aliases: ['dkb powerseed'],
+  default_serving_amount: 42,
+  default_serving_unit: 'g',
+  default_serving_label: '1 slice (42g)',
+  grams_per_serving: 42,
+  macros_per_serving: { calories: 90, protein_g: 5, carbs_g: 18, fat_g: 2 }
+},
+{
+  id: 'xf-dkb-100-whole-wheat',
+  name: "Dave's Killer Bread 100% Whole Wheat",
+  aliases: ['dkb whole wheat'],
+  default_serving_amount: 42,
+  default_serving_unit: 'g',
+  default_serving_label: '1 slice (42g)',
+  grams_per_serving: 42,
+  macros_per_serving: { calories: 100, protein_g: 4, carbs_g: 21, fat_g: 1.5 }
+},
+{
+  id: 'xf-dkb-oats-blues',
+  name: "Dave's Killer Bread Oats & Blues",
+  aliases: ['dkb oats blues'],
+  default_serving_amount: 42,
+  default_serving_unit: 'g',
+  default_serving_label: '1 slice (42g)',
+  grams_per_serving: 42,
+  macros_per_serving: { calories: 120, protein_g: 6, carbs_g: 19, fat_g: 3.5 }
+},
+{
+  id: 'xf-dkb-supreme-sourdough',
+  name: "Dave's Killer Bread Supreme Sourdough",
+  aliases: ['dkb sourdough'],
+  default_serving_amount: 54,
+  default_serving_unit: 'g',
+  default_serving_label: '1 slice (54g)',
+  grams_per_serving: 54,
+  macros_per_serving: { calories: 140, protein_g: 6, carbs_g: 28, fat_g: 2 }
+},
+{
+  id: 'xf-dkb-21-whole-grains-thin',
+  name: "Dave's Killer Bread 21 Whole Grains & Seeds Thin-Sliced",
+  aliases: ['dkb thin sliced 21 grains'],
+  default_serving_amount: 28,
+  default_serving_unit: 'g',
+  default_serving_label: '1 slice (28g)',
+  grams_per_serving: 28,
+  macros_per_serving: { calories: 60, protein_g: 3, carbs_g: 14, fat_g: 1 }
+},
+{
+  id: 'xf-arnold-bread-generic',
+  name: 'Arnold Bread (Generic)',
+  aliases: ['arnold sandwich bread'],
+  default_serving_amount: 63,
+  default_serving_unit: 'g',
+  default_serving_label: '2 slices (63g)',
+  grams_per_serving: 63,
+  macros_per_serving: { calories: 180, protein_g: 9, carbs_g: 27, fat_g: 4 }
+},
+{
+  id: 'xf-arnold-100-whole-wheat',
+  name: 'Arnold 100% Whole Wheat Bread',
+  aliases: ['arnold whole wheat'],
+  default_serving_amount: 43,
+  default_serving_unit: 'g',
+  default_serving_label: '1 slice (43g)',
+  grams_per_serving: 43,
+  macros_per_serving: { calories: 110, protein_g: 4, carbs_g: 22, fat_g: 1.5 }
+},
+{
+  id: 'xf-arnold-100-whole-wheat-large',
+  name: 'Arnold 100% Whole Wheat Bread (Large Slice)',
+  aliases: ['arnold wheat large'],
+  default_serving_amount: 49,
+  default_serving_unit: 'g',
+  default_serving_label: '1 slice (49g)',
+  grams_per_serving: 49,
+  macros_per_serving: { calories: 120, protein_g: 5, carbs_g: 24, fat_g: 2 }
+},
+{
+  id: 'xf-pepperidge-rye-seedless',
+  name: 'Pepperidge Farm Jewish Rye Bread (Seedless)',
+  aliases: ['pf rye', 'pepperidge rye'],
+  default_serving_amount: 32,
+  default_serving_unit: 'g',
+  default_serving_label: '1 slice (32g)',
+  grams_per_serving: 32,
+  macros_per_serving: { calories: 80, protein_g: 3, carbs_g: 14, fat_g: 1 }
+},
+{
+  id: 'xf-pepperidge-100-whole-wheat',
+  name: 'Pepperidge Farm 100% Whole Wheat Bread',
+  aliases: ['pf whole wheat'],
+  default_serving_amount: 49,
+  default_serving_unit: 'g',
+  default_serving_label: '1 slice (49g)',
+  grams_per_serving: 49,
+  macros_per_serving: { calories: 130, protein_g: 5, carbs_g: 23, fat_g: 2.5 }
+},
+{
+  id: 'xf-pepperidge-sourdough',
+  name: 'Pepperidge Farm Sourdough Bread',
+  aliases: ['pf sourdough'],
+  default_serving_amount: 43,
+  default_serving_unit: 'g',
+  default_serving_label: '1 slice (43g)',
+  grams_per_serving: 43,
+  macros_per_serving: { calories: 120, protein_g: 4, carbs_g: 22, fat_g: 1.5 }
+},
+{
+  id: 'xf-oroweat-100-whole-wheat',
+  name: 'Oroweat 100% Whole Wheat Bread',
+  aliases: ['oroweat whole wheat'],
+  default_serving_amount: 38,
+  default_serving_unit: 'g',
+  default_serving_label: '1 slice (38g)',
+  grams_per_serving: 38,
+  macros_per_serving: { calories: 100, protein_g: 4, carbs_g: 19, fat_g: 1 }
+},
+{
+  id: 'xf-oroweat-whole-grains-wheat',
+  name: 'Oroweat Whole Grains 100% Whole Wheat',
+  aliases: ['oroweat whole grains'],
+  default_serving_amount: 38,
+  default_serving_unit: 'g',
+  default_serving_label: '1 slice (38g)',
+  grams_per_serving: 38,
+  macros_per_serving: { calories: 100, protein_g: 4, carbs_g: 19, fat_g: 1 }
+},
+{
+  id: 'xf-oroweat-country-whole-wheat',
+  name: 'Oroweat Country 100% Whole Wheat Bread',
+  aliases: ['oroweat country wheat'],
+  default_serving_amount: 38,
+  default_serving_unit: 'g',
+  default_serving_label: '1 slice (38g)',
+  grams_per_serving: 38,
+  macros_per_serving: { calories: 100, protein_g: 4, carbs_g: 18, fat_g: 1.5 }
+},
+{
+  id: 'xf-naturesown-100-whole-wheat',
+  name: "Nature's Own 100% Whole Wheat Bread",
+  aliases: ['natures own wheat'],
+  default_serving_amount: 26,
+  default_serving_unit: 'g',
+  default_serving_label: '1 slice (26g)',
+  grams_per_serving: 26,
+  macros_per_serving: { calories: 60, protein_g: 4, carbs_g: 11, fat_g: 0.5 }
+},
+{
+  id: 'xf-naturesown-whole-wheat-70cal',
+  name: "Nature's Own 100% Whole Wheat Bread (70 cal slice)",
+  aliases: ['natures own wheat 70cal'],
+  default_serving_amount: 28,
+  default_serving_unit: 'g',
+  default_serving_label: '1 slice (28g)',
+  grams_per_serving: 28,
+  macros_per_serving: { calories: 70, protein_g: 3, carbs_g: 13, fat_g: 0.5 }
+},
+{
+  id: 'xf-naturesown-100-whole-grain',
+  name: "Nature's Own Whole Grain Wheat Bread",
+  aliases: ['natures own whole grain'],
+  default_serving_amount: 25,
+  default_serving_unit: 'g',
+  default_serving_label: '1 slice (25g)',
+  grams_per_serving: 25,
+  macros_per_serving: { calories: 60, protein_g: 4, carbs_g: 11, fat_g: 1 }
+}
+  // 👆 PASTE YOUR FOODS HERE 👆
+]
+
+// ──────────────────────────────────────────────────────────────────────────────
+// 🔄 DUPLICATE REMOVAL LOGIC - AUTOMATICALLY REMOVES IDENTICAL FOODS
+// ──────────────────────────────────────────────────────────────────────────────
+function removeDuplicateFoods(customFoods: FoodCatalogItem[], existingFoods: FoodCatalogItem[]): FoodCatalogItem[] {
+  const existingNames = new Set(existingFoods.map(food => food.name.toLowerCase()))
+  const existingAliases = new Set(existingFoods.flatMap(food => food.aliases.map(alias => alias.toLowerCase())))
+  
+  // Find duplicates (foods with same name or similar aliases)
+  const duplicates = new Set<string>()
+  const customFoodNames = new Set<string>()
+  
+  customFoods.forEach(customFood => {
+    customFoodNames.add(customFood.name.toLowerCase())
+    
+    // Check if this custom food is basically identical to an existing one
+    // BUT only consider it a duplicate if it has actual macro data (not null)
+    // If macros are null, it's a placeholder food and shouldn't be considered a duplicate
+    const hasValidMacros = customFood.macros_per_serving && 
+      customFood.macros_per_serving.calories !== null && 
+      customFood.macros_per_serving.protein_g !== null && 
+      customFood.macros_per_serving.carbs_g !== null && 
+      customFood.macros_per_serving.fat_g !== null
+    
+    const isDuplicate = hasValidMacros && (
+      existingNames.has(customFood.name.toLowerCase()) ||
+      customFood.aliases.some(alias => existingAliases.has(alias.toLowerCase())) ||
+      existingFoods.some(existingFood => {
+        // Check for very similar names (within 80% similarity)
+        const customName = customFood.name.toLowerCase()
+        const existingName = existingFood.name.toLowerCase()
+        return customName.includes(existingName) || existingName.includes(customName)
+      })
+    )
+    
+    if (isDuplicate) {
+      duplicates.add(customFood.name.toLowerCase())
+      console.log(`🔄 Removed duplicate: "${customFood.name}" - using your custom version instead`)
+    }
+  })
+  
+  // Remove duplicates from existing foods and keep only custom versions
+  const filteredExisting = existingFoods.filter(food => 
+    !duplicates.has(food.name.toLowerCase()) &&
+    !food.aliases.some(alias => customFoodNames.has(alias.toLowerCase()))
+  )
+  
+  return [...filteredExisting, ...customFoods]
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// 🎯 AUTOMATIC INTEGRATION - DO NOT MODIFY BELOW
+// ──────────────────────────────────────────────────────────────────────────────
+// Your custom foods are automatically included in the main food catalog
+// Duplicate foods are automatically removed in favor of your custom versions

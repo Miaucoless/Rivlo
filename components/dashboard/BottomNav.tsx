@@ -36,13 +36,13 @@ export function BottomNav() {
               key={href}
               href={href}
               className={cn(
-                'flex flex-col items-center gap-0.5 px-2 py-2 rounded-xl min-w-[40px] transition-colors',
+                'relative flex flex-col items-center gap-0.5 px-2 py-2 rounded-xl min-w-[40px] transition-colors',
                 isActive
                   ? 'text-primary'
                   : 'text-muted-foreground'
               )}
             >
-              <Icon className={cn('w-5 h-5 transition-transform', isActive && 'scale-110')} />
+              <Icon className={cn('w-5 h-5 transition-colors', isActive && 'text-foreground')} />
               <span className={cn('text-[10px] font-medium leading-none', isActive ? 'opacity-100' : 'opacity-70')}>
                 {label}
               </span>

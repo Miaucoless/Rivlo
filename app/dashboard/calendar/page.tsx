@@ -144,16 +144,13 @@ export default function CalendarPage() {
           <h2 className="text-xl font-bold">Calendar</h2>
           <p className="text-muted-foreground text-sm">Your workouts, meals, and check-ins at a glance</p>
         </div>
-        {/* Month stats */}
-        <div className="flex gap-3 text-xs">
-          <span className="flex items-center gap-1.5 text-emerald-400">
-            <Dumbbell className="w-3.5 h-3.5" /> {monthWorkouts} workouts
+        {/* Month stats - simplified */}
+        <div className="flex gap-6 text-sm">
+          <span className="flex items-center gap-2 text-emerald-400">
+            <Dumbbell className="w-4 h-4" /> {monthWorkouts} workouts
           </span>
-          <span className="flex items-center gap-1.5 text-blue-400">
-            <Apple className="w-3.5 h-3.5" /> {monthMeals} meal days
-          </span>
-          <span className="flex items-center gap-1.5 text-purple-400">
-            <BookOpen className="w-3.5 h-3.5" /> {monthJournals} journal entries
+          <span className="flex items-center gap-2 text-blue-400">
+            <Apple className="w-4 h-4" /> {monthMeals} meal days
           </span>
         </div>
       </div>
@@ -218,8 +215,7 @@ export default function CalendarPage() {
                   return (
                     <motion.button
                       key={dateStr}
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
+                      whileHover={{ opacity: 0.8 }}
                       onClick={() => {
                         setSelectedDate(day)
                         setExpandedType(null)
@@ -273,8 +269,9 @@ export default function CalendarPage() {
                   )}
                 </CardTitle>
                 {selectedDate && (
-                  <Button variant="ghost" size="icon-sm" onClick={openNewReminder} title="Add reminder">
-                    <Plus className="w-3.5 h-3.5" />
+                  <Button variant="outline" size="sm" onClick={openNewReminder} className="gap-2">
+                    <Bell className="w-4 h-4" />
+                    Add Reminder
                   </Button>
                 )}
               </div>
@@ -343,18 +340,14 @@ export default function CalendarPage() {
                                     </div>
                                   )}
 
-                                  {/* Stats row */}
-                                  <div className="grid grid-cols-2 gap-2">
-                                    {[
-                                      { icon: Clock, label: 'Duration', value: `${log.duration_min || 0}m` },
-                                      { icon: Flame, label: 'Burned', value: `${log.calories_burned_kcal || 0} kcal` },
-                                    ].map(({ icon: Icon, label, value }) => (
-                                      <div key={label} className="rounded-xl bg-muted/30 border border-border/50 px-2.5 py-2 text-center">
-                                        <Icon className="w-3.5 h-3.5 text-muted-foreground mx-auto mb-1" />
-                                        <p className="font-data text-xs font-semibold tabular-nums leading-none">{value}</p>
-                                        <p className="text-[10px] text-muted-foreground mt-0.5">{label}</p>
-                                      </div>
-                                    ))}
+                                  {/* Stats row - simplified */}
+                                  <div className="flex gap-4 text-sm">
+                                    <span className="flex items-center gap-1.5 text-muted-foreground">
+                                      <Clock className="w-4 h-4" /> {log.duration_min || 0}m
+                                    </span>
+                                    <span className="flex items-center gap-1.5 text-orange-400">
+                                      <Flame className="w-4 h-4" /> {log.calories_burned_kcal || 0} kcal
+                                    </span>
                                   </div>
 
                                   {/* Exercises */}
@@ -433,18 +426,61 @@ export default function CalendarPage() {
 
                             {/* Meal detail expansion */}
                             {event.type === 'meal' && isExpanded && selectedMeals.length > 0 && (
-                              <div className="mt-3 space-y-1.5" onClick={e => e.stopPropagation()}>
-                                {selectedMeals.map((meal) => (
-                                  <div key={meal.id} className="rounded-lg border border-border/50 bg-muted/20 px-3 py-2">
-                                    <div className="flex items-center justify-between gap-3">
-                                      <p className="text-sm font-medium truncate">{meal.name}</p>
-                                      <span className="text-[11px] text-muted-foreground shrink-0">{meal.time}</span>
-                                    </div>
-                                    <p className="mt-0.5 text-[11px] text-muted-foreground capitalize">
-                                      {meal.meal_type} · <span className="font-data">{meal.macros.calories}</span> kcal · <span className="font-data text-emerald-500">{meal.macros.protein_g}g</span> protein
-                                    </p>
+                              <div className="mt-3 space-y-3" onClick={e => e.stopPropagation()}>
+                                {/* Daily totals */}
+                                <div className="rounded-lg border border-border/50 bg-primary/5 px-3 py-2">
+                                  <p className="text-xs font-semibold text-primary mb-1">Daily Totals</p>
+                                  <div className="flex items-center gap-3 text-[11px]">
+                                    <span className="font-data">{selectedMeals.reduce((sum, meal) => sum + meal.macros.calories, 0)} kcal</span>
+                                    <span className="text-border/30">·</span>
+                                    <span className="font-data text-emerald-500">{selectedMeals.reduce((sum, meal) => sum + meal.macros.protein_g, 0)}g protein</span>
                                   </div>
-                                ))}
+                                </div>
+                                
+                                {/* Group meals by type */}
+                                {['breakfast', 'lunch', 'dinner', 'snack', 'drink'].map(mealType => {
+                                  const mealsByType = selectedMeals.filter(meal => meal.meal_type === mealType)
+                                  if (mealsByType.length === 0) return null
+                                  
+                                  const typeConfig = {
+                                    breakfast: { label: 'Breakfast', dot: 'bg-orange-400' },
+                                    lunch: { label: 'Lunch', dot: 'bg-blue-400' },
+                                    dinner: { label: 'Dinner', dot: 'bg-purple-400' },
+                                    snack: { label: 'Snack', dot: 'bg-emerald-400' },
+                                    drink: { label: 'Drink', dot: 'bg-rose-400' },
+                                  }
+                                  
+                                  const config = typeConfig[mealType as keyof typeof typeConfig]
+                                  const typeTotalCalories = mealsByType.reduce((sum, meal) => sum + meal.macros.calories, 0)
+                                  const typeTotalProtein = mealsByType.reduce((sum, meal) => sum + meal.macros.protein_g, 0)
+                                  
+                                  return (
+                                    <div key={mealType} className="space-y-2">
+                                      <div className="flex items-center gap-2 px-1">
+                                        <div className={`w-2 h-2 rounded-full ${config.dot}`} />
+                                        <p className="text-xs font-semibold capitalize">{config.label}</p>
+                                        <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground ml-auto">
+                                          <span className="font-data">{typeTotalCalories} kcal</span>
+                                          <span className="text-border/30">·</span>
+                                          <span className="font-data text-emerald-500">{typeTotalProtein}g</span>
+                                        </div>
+                                      </div>
+                                      <div className="space-y-1">
+                                        {mealsByType.map((meal) => (
+                                          <div key={meal.id} className="rounded-lg border border-border/30 bg-muted/10 px-3 py-2 ml-4">
+                                            <div className="flex items-center justify-between gap-3">
+                                              <p className="text-sm font-medium truncate">{meal.name}</p>
+                                              <span className="text-[11px] text-muted-foreground shrink-0">{meal.time}</span>
+                                            </div>
+                                            <p className="mt-0.5 text-[11px] text-muted-foreground">
+                                              <span className="font-data">{meal.macros.calories}</span> kcal · <span className="font-data text-emerald-500">{meal.macros.protein_g}g</span> protein
+                                            </p>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )
+                                })}
                               </div>
                             )}
 
@@ -582,7 +618,7 @@ export default function CalendarPage() {
                     key={color}
                     type="button"
                     onClick={() => setRColor(color)}
-                    className={`w-6 h-6 rounded-full ${dot} transition-all ${rColor === color ? 'ring-2 ring-offset-2 ring-offset-background ring-foreground scale-110' : 'opacity-60 hover:opacity-100'}`}
+                    className={`w-6 h-6 rounded-full ${dot} transition-all ${rColor === color ? 'ring-2 ring-offset-2 ring-offset-background ring-foreground' : 'opacity-60 hover:opacity-100'}`}
                   />
                 ))}
               </div>

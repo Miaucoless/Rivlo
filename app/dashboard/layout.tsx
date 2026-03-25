@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { Sidebar } from '@/components/dashboard/Sidebar'
 import { TopBar } from '@/components/dashboard/TopBar'
+
 import { useIsMobile } from '@/hooks/useIsMobile'
 import { useAppStore } from '@/store/useAppStore'
 import { useAuthInit } from '@/hooks/useAuthInit'

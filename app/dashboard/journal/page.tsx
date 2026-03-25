@@ -56,8 +56,8 @@ function MoodSelector({ value, onChange }: { value: MoodLevel; onChange: (v: Moo
           key={level}
           type="button"
           onClick={() => onChange(level)}
-          className={`text-2xl transition-all duration-200 hover:scale-110 ${
-            value === level ? 'scale-125 filter-none' : 'opacity-50'
+          className={`text-2xl transition-all duration-200 hover:opacity-80 ${
+            value === level ? 'filter-none' : 'opacity-50'
           }`}
           title={`Mood: ${level}/5`}
         >
@@ -589,8 +589,13 @@ export default function JournalPage() {
               placeholder="Search entries..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-9"
+              className="pl-9 pr-8"
             />
+            {search && (
+              <button type="button" onClick={() => setSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
 
           {/* Tag filter */}

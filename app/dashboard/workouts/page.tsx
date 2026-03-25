@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  CheckCircle, ChevronDown, ChevronUp, Circle, Copy, Dumbbell, Pencil, Play, Plus, Search,
+  CheckCircle, ChevronDown, ChevronUp, Circle, Copy, Dumbbell, Pencil, Play, PlayCircle, Plus, Search,
   SlidersHorizontal, Sparkles, Trash2, Trophy, X,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -20,7 +20,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { useAppStore } from '@/store/useAppStore'
 import { EXERCISE_LIBRARY, WORKOUTS } from '@/lib/mock-data'
-import type { ExerciseLibraryItem, Gender, MuscleGroup, UserProfile, Workout, WorkoutExercise, WorkoutSet, WorkoutSplit } from '@/types'
+import { EXERCISE_CLASSIFICATIONS } from '@/lib/exercise-classifications'
+import type { Exercise, ExerciseLibraryItem, Gender, MuscleGroup, UserProfile, Workout, WorkoutExercise, WorkoutSet, WorkoutSplit } from '@/types'
 import { formatVolumeValue, getTodayISO, getWeightUnitLabel, kgToLbs, lbsToKg } from '@/lib/utils'
 import { createUserWorkoutTemplate, deleteUserWorkoutTemplate, fetchUserWorkoutTemplates, updateUserWorkoutTemplate } from '@/lib/workout-templates'
 import { toast } from 'sonner'
@@ -117,9 +118,26 @@ function getDefaultTreadmillInclinePct(exercise: WorkoutExercise['exercise']) {
 }
 
 function getExerciseInputMode(exercise: WorkoutExercise['exercise']): ExerciseInputMode {
+  const classification = EXERCISE_CLASSIFICATIONS[exercise.id]
+  if (classification) {
+    const eq = exercise.equipment.toLowerCase()
+    switch (classification.primary_type) {
+      case 'intervals': return 'interval'
+      case 'distance': return 'run_walk'
+      case 'time':
+      case 'time_distance':
+        if (eq.includes('treadmill')) return 'treadmill'
+        if (eq.includes('bike') || eq.includes('cycling') || eq.includes('spin')) return 'bike'
+        if (eq.includes('rowing') || eq.includes('ski erg') || eq.includes('ski')) return 'rower'
+        if (eq.includes('stair') || eq.includes('elliptical') || eq.includes('versaclimber') || eq.includes('assault runner')) return 'level_cardio'
+        return 'basic_cardio'
+      default: return 'strength'
+    }
+  }
+
+  // Fallback: name/equipment string detection for exercises not in the classification map
   const name = exercise.name.toLowerCase()
   const equipment = exercise.equipment.toLowerCase()
-
   if (isIntervalExercise(exercise)) return 'interval'
   if (isTreadmillExercise(exercise)) return 'treadmill'
   if (isCardioExercise(exercise) && (name.includes('run') || name.includes('walk'))) return 'run_walk'
@@ -128,6 +146,10 @@ function getExerciseInputMode(exercise: WorkoutExercise['exercise']): ExerciseIn
   if (equipment.includes('elliptical') || equipment.includes('stair') || equipment.includes('versaclimber') || name.includes('versa')) return 'level_cardio'
   if (isCardioExercise(exercise)) return 'basic_cardio'
   return 'strength'
+}
+
+function isUnilateralExercise(exercise: WorkoutExercise['exercise']): boolean {
+  return EXERCISE_CLASSIFICATIONS[exercise.id]?.modifiers?.includes('unilateral') ?? false
 }
 
 function getDefaultSetMetrics(exercise: WorkoutExercise['exercise']) {
@@ -675,6 +697,8 @@ function WorkoutBuilderModal({
   const [splitType, setSplitType] = useState<WorkoutSplit>(defaultSplit)
   const [exerciseQuery, setExerciseQuery] = useState('')
   const [exercises, setExercises] = useState<EditableWorkoutExercise[]>([])
+  const [apiSuggestions, setApiSuggestions] = useState<ExerciseLibraryItem[]>([])
+  const [previewExercise, setPreviewExercise] = useState<Exercise | null>(null)
 
   useEffect(() => {
     if (!open) return
@@ -706,6 +730,22 @@ function WorkoutBuilderModal({
       })
       .sort((left, right) => scoreExerciseSuggestion(right, query) - scoreExerciseSuggestion(left, query))
       .slice(0, 8)
+  }, [exerciseQuery])
+
+  useEffect(() => {
+    const query = exerciseQuery.trim()
+    if (query.length < 2) { setApiSuggestions([]); return }
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/exercises?name=${encodeURIComponent(query)}`)
+        if (res.ok) {
+          const all: ExerciseLibraryItem[] = await res.json()
+          const localNames = new Set(EXERCISE_LIBRARY.map((i) => i.name.toLowerCase()))
+          setApiSuggestions(all.filter((i) => !localNames.has(i.name.toLowerCase())))
+        }
+      } catch { setApiSuggestions([]) }
+    }, 400)
+    return () => clearTimeout(timer)
   }, [exerciseQuery])
 
   const addExerciseFromLibrary = (item: ExerciseLibraryItem) => {
@@ -869,28 +909,44 @@ function WorkoutBuilderModal({
                 <p className="text-sm font-semibold">Search exercises</p>
               </div>
             </div>
-            <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto]">
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
               <div className="space-y-2">
                 <div className="relative">
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input value={exerciseQuery} onChange={(e) => setExerciseQuery(e.target.value)} placeholder="Search exercise variations" className="pl-9" />
+                  <Input value={exerciseQuery} onChange={(e) => setExerciseQuery(e.target.value)} placeholder="Search exercise variations" className="pl-9 pr-8" />
+                  {exerciseQuery && (
+                    <button type="button" onClick={() => setExerciseQuery('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
-                {exerciseQuery.trim().length >= 2 && filteredSuggestions.length > 0 && (
+                {exerciseQuery.trim().length >= 2 && (filteredSuggestions.length > 0 || apiSuggestions.length > 0) && (
                   <div className="max-h-72 overflow-y-auto rounded-xl border border-border/60 bg-background">
                     {filteredSuggestions.map((item) => (
-                      <button
-                        key={item.id}
-                        type="button"
-                        onClick={() => addExerciseFromLibrary(item)}
-                        className="flex w-full items-start justify-between gap-3 border-b border-border/40 px-3 py-3 text-left transition-colors last:border-b-0 hover:bg-muted/20"
-                      >
-                        <div>
+                      <button key={item.id} type="button" onClick={() => addExerciseFromLibrary(item)} className="flex w-full items-center gap-3 border-b border-border/40 px-3 py-2.5 text-left transition-colors last:border-b-0 hover:bg-muted/20">
+
+                        <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium">{item.name}</p>
-                          <p className="mt-1 text-xs text-muted-foreground">{item.equipment}</p>
+                          <p className="mt-0.5 text-xs text-muted-foreground">{item.equipment}</p>
                         </div>
-                        <span className="text-[10px] text-muted-foreground">{item.default_sets} x {item.default_reps}</span>
+                        <span className="flex-shrink-0 text-[10px] text-muted-foreground">{item.default_sets} × {item.default_reps}</span>
                       </button>
                     ))}
+                    {apiSuggestions.length > 0 && (
+                      <>
+                        {filteredSuggestions.length > 0 && <div className="px-3 py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground/50 bg-muted/20">More exercises</div>}
+                        {apiSuggestions.map((item) => (
+                          <button key={item.id} type="button" onClick={() => addExerciseFromLibrary(item)} className="flex w-full items-center gap-3 border-b border-border/40 px-3 py-2.5 text-left transition-colors last:border-b-0 hover:bg-muted/20">
+    
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium">{item.name}</p>
+                              <p className="mt-0.5 text-xs text-muted-foreground">{item.equipment}</p>
+                            </div>
+                            <span className="flex-shrink-0 text-[10px] text-muted-foreground">{item.default_sets} × {item.default_reps}</span>
+                          </button>
+                        ))}
+                      </>
+                    )}
                   </div>
                 )}
               </div>
@@ -907,6 +963,14 @@ function WorkoutBuilderModal({
                   <div>
                     <p className="text-sm font-semibold">{exercise.exercise.name}</p>
                     <p className="text-xs text-muted-foreground">{exercise.exercise.equipment}</p>
+                    <button
+                      type="button"
+                      onClick={() => setPreviewExercise(exercise.exercise)}
+                      className="mt-1 flex items-center gap-1 text-[11px] text-primary/70 hover:text-primary transition-colors"
+                    >
+                      <PlayCircle className="h-3 w-3" />
+                      How to do this
+                    </button>
                   </div>
                   <div className="flex items-center gap-1">
                     <Button
@@ -1124,6 +1188,7 @@ function WorkoutBuilderModal({
           </Button>
         </div>
       </DialogContent>
+      <ExercisePreviewDialog exercise={previewExercise} onClose={() => setPreviewExercise(null)} />
     </Dialog>
   )
 }
@@ -1173,6 +1238,41 @@ function ActiveWorkoutModal({
   )
   const [exerciseSearch, setExerciseSearch] = useState('')
   const [isCompleting, setIsCompleting] = useState(false)
+  const [apiLiveSuggestions, setApiLiveSuggestions] = useState<ExerciseLibraryItem[]>([])
+  const [timeUnits, setTimeUnits] = useState<Record<string, 'sec' | 'min'>>({})
+  const [previewExercise, setPreviewExercise] = useState<Exercise | null>(null)
+
+  const getTimeUnit = (key: string, defaultUnit: 'sec' | 'min') => timeUnits[key] ?? defaultUnit
+  const toggleTimeUnit = (key: string, defaultUnit: 'sec' | 'min') =>
+    setTimeUnits((prev) => ({ ...prev, [key]: (prev[key] ?? defaultUnit) === 'sec' ? 'min' : 'sec' }))
+
+  // Cardio duration stored as minutes in actual_reps
+  const displayCardio = (valueMin: number | undefined, unit: 'sec' | 'min') => {
+    if (valueMin === undefined || valueMin === 0) return ''
+    return unit === 'sec' ? String(Math.round(valueMin * 60)) : String(valueMin)
+  }
+  const parseCardio = (input: string, unit: 'sec' | 'min') => {
+    const v = parseFloat(input) || 0
+    return unit === 'sec' ? Math.round((v / 60) * 100) / 100 : v
+  }
+
+  // Interval work duration stored in seconds in interval_duration_sec
+  const displayWork = (valueSec: number | undefined, unit: 'sec' | 'min') => {
+    if (valueSec === undefined || valueSec === 0) return ''
+    return unit === 'min' ? String(Math.round((valueSec / 60) * 100) / 100) : String(valueSec)
+  }
+  const parseWork = (input: string, unit: 'sec' | 'min') => {
+    const v = parseFloat(input) || 0
+    return unit === 'min' ? Math.round(v * 60) : v
+  }
+
+  // Rest stored in seconds
+  const displayRest = (valueSec: number, unit: 'sec' | 'min') =>
+    unit === 'min' ? String(Math.round((valueSec / 60) * 100) / 100) : String(valueSec)
+  const parseRest = (input: string, unit: 'sec' | 'min') => {
+    const v = parseFloat(input) || 0
+    return unit === 'min' ? Math.round(v * 60) : v
+  }
 
   useEffect(() => {
     if (initialExercises && initialExercises.length > 0) {
@@ -1200,6 +1300,23 @@ function ActiveWorkoutModal({
       .sort((left, right) => scoreExerciseSuggestion(right, query) - scoreExerciseSuggestion(left, query))
       .slice(0, 8)
   }, [exerciseSearch])
+
+  useEffect(() => {
+    const query = exerciseSearch.trim()
+    if (query.length < 1) { setApiLiveSuggestions([]); return }
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/exercises?name=${encodeURIComponent(query)}`)
+        if (res.ok) {
+          const all: ExerciseLibraryItem[] = await res.json()
+          const localNames = new Set(EXERCISE_LIBRARY.map((i) => i.name.toLowerCase()))
+          setApiLiveSuggestions(all.filter((i) => !localNames.has(i.name.toLowerCase())))
+        }
+      } catch { setApiLiveSuggestions([]) }
+    }, 400)
+    return () => clearTimeout(timer)
+  }, [exerciseSearch])
+
   const summary = summarizeExercises(
     exercises.map((exercise) => ({
       exercise: exercise.exercise,
@@ -1442,13 +1559,13 @@ function ActiveWorkoutModal({
   }
 
   return (
-    <DialogContent className="max-h-[92vh] max-w-3xl overflow-y-auto">
+    <DialogContent className="max-h-[92vh] max-w-3xl overflow-y-auto p-4 sm:p-6">
       <DialogHeader>
         <DialogTitle>{workout.name}</DialogTitle>
       </DialogHeader>
 
       <div className="space-y-5">
-        <div className="grid gap-3 md:grid-cols-4">
+        <div className="grid grid-cols-3 gap-2">
           <div className="rounded-2xl border border-border/60 bg-card px-4 py-3">
             <p className="font-data text-2xl font-semibold">{progress}%</p>
             <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Progress</p>
@@ -1481,28 +1598,44 @@ function ActiveWorkoutModal({
               <p className="text-xs text-muted-foreground">Search and drop a movement into this live workout.</p>
             </div>
           </div>
-          <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto]">
+          <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
             <div className="space-y-2">
               <div className="relative">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input value={exerciseSearch} onChange={(e) => setExerciseSearch(e.target.value)} placeholder="Search exercise variations" className="pl-9" />
+                <Input value={exerciseSearch} onChange={(e) => setExerciseSearch(e.target.value)} placeholder="Search exercise variations" className="pl-9 pr-8" />
+                {exerciseSearch && (
+                  <button type="button" onClick={() => setExerciseSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
-              {exerciseSearch.trim().length >= 1 && liveSuggestions.length > 0 && (
+              {exerciseSearch.trim().length >= 1 && (liveSuggestions.length > 0 || apiLiveSuggestions.length > 0) && (
                 <div className="max-h-56 overflow-y-auto rounded-xl border border-border/60 bg-background">
                   {liveSuggestions.map((item) => (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => addExerciseToLiveWorkout(item)}
-                      className="flex w-full items-start justify-between gap-3 border-b border-border/40 px-3 py-3 text-left transition-colors last:border-b-0 hover:bg-muted/20"
-                    >
-                      <div>
+                    <button key={item.id} type="button" onClick={() => addExerciseToLiveWorkout(item)} className="flex w-full items-center gap-3 border-b border-border/40 px-3 py-2.5 text-left transition-colors last:border-b-0 hover:bg-muted/20">
+                      {item.gif_url && <img src={item.gif_url} alt="" className="h-11 w-11 flex-shrink-0 rounded-lg object-cover" />}
+                      <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium">{item.name}</p>
-                        <p className="mt-1 text-xs text-muted-foreground">{item.equipment}</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">{item.equipment}</p>
                       </div>
-                      <span className="text-[10px] text-muted-foreground">{item.default_sets} x {item.default_reps}</span>
+                      <span className="flex-shrink-0 text-[10px] text-muted-foreground">{item.default_sets} × {item.default_reps}</span>
                     </button>
                   ))}
+                  {apiLiveSuggestions.length > 0 && (
+                    <>
+                      {liveSuggestions.length > 0 && <div className="px-3 py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground/50 bg-muted/20">More exercises</div>}
+                      {apiLiveSuggestions.map((item) => (
+                        <button key={item.id} type="button" onClick={() => addExerciseToLiveWorkout(item)} className="flex w-full items-center gap-3 border-b border-border/40 px-3 py-2.5 text-left transition-colors last:border-b-0 hover:bg-muted/20">
+  
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium">{item.name}</p>
+                            <p className="mt-0.5 text-xs text-muted-foreground">{item.equipment}</p>
+                          </div>
+                          <span className="flex-shrink-0 text-[10px] text-muted-foreground">{item.default_sets} × {item.default_reps}</span>
+                        </button>
+                      ))}
+                    </>
+                  )}
                 </div>
               )}
             </div>
@@ -1521,8 +1654,16 @@ function ActiveWorkoutModal({
                 <div className="min-w-0">
                   <p className="text-sm font-semibold">{exercise.exercise.name}</p>
                   <p className="text-xs text-muted-foreground">{exercise.exercise.equipment}</p>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewExercise(exercise.exercise)}
+                    className="mt-1 flex items-center gap-1 text-[11px] text-primary/70 hover:text-primary transition-colors"
+                  >
+                    <PlayCircle className="h-3 w-3" />
+                    How to do this
+                  </button>
                   {prevData && prevData.sets.length > 0 && (
-                    <p className="mt-1 text-[11px] text-muted-foreground/70">
+                    <p className="mt-1 text-[11px] text-muted-foreground/70 truncate">
                       Last:{' '}
                       {prevData.sets.map((s, si) => {
                         const w = s.weight_kg > 0
@@ -1570,7 +1711,7 @@ function ActiveWorkoutModal({
 
               <div className="space-y-2">
                 {inputMode === 'treadmill' ? (
-                  <div className="grid grid-cols-[auto_1fr_1fr_1fr_auto] gap-2 px-3 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                  <div className="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 px-3 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
                     <span>Set</span>
                     <span>Speed MPH</span>
                     <span>Incline %</span>
@@ -1578,37 +1719,37 @@ function ActiveWorkoutModal({
                     <span>Done</span>
                   </div>
                 ) : inputMode === 'run_walk' ? (
-                  <div className="grid grid-cols-[auto_1fr_1fr_auto] gap-2 px-3 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                  <div className="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 px-3 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
                     <span>Set</span>
                     <span>Speed MPH</span>
                     <span>Minutes</span>
                     <span>Done</span>
                   </div>
                 ) : inputMode === 'bike' || inputMode === 'rower' ? (
-                  <div className="grid grid-cols-[auto_1fr_1fr_auto] gap-2 px-3 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                  <div className="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 px-3 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
                     <span>Set</span>
                     <span>Watts</span>
                     <span>Minutes</span>
                     <span>Done</span>
                   </div>
                 ) : inputMode === 'level_cardio' || inputMode === 'basic_cardio' ? (
-                  <div className="grid grid-cols-[auto_1fr_1fr_auto] gap-2 px-3 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                  <div className="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 px-3 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
                     <span>Set</span>
                     <span>Level</span>
                     <span>Minutes</span>
                     <span>Done</span>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-[auto_1fr_1fr_auto] gap-2 px-3 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                  <div className="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 px-3 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
                     <span>Set</span>
                     <span>Weight ({getWeightUnitLabel(unitSystem)})</span>
-                    <span>{isCardioExercise(exercise.exercise) ? 'Minutes' : 'Reps'}</span>
+                    <span>{isCardioExercise(exercise.exercise) ? 'Minutes' : isUnilateralExercise(exercise.exercise) ? 'Reps/Side' : 'Reps'}</span>
                     <span>Done</span>
                   </div>
                 )}
                 {exercise.sets.map((set, setIndex) => (
                   inputMode === 'treadmill' ? (
-                    <div key={`${exercise.exercise.id}-${setIndex}`} className={`grid grid-cols-[auto_1fr_1fr_1fr_auto_auto] gap-2 items-center rounded-xl border px-3 py-2 ${set.completed ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-border/50 bg-muted/10'}`}>
+                    <div key={`${exercise.exercise.id}-${setIndex}`} className={`grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto_auto] gap-2 items-center rounded-xl border px-3 py-2 ${set.completed ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-border/50 bg-muted/10'}`}>
                       <span className="font-data text-xs">{set.set_number}</span>
                       <Input
                         type="number"
@@ -1639,7 +1780,7 @@ function ActiveWorkoutModal({
                       </Button>
                     </div>
                   ) : inputMode === 'run_walk' ? (
-                    <div key={`${exercise.exercise.id}-${setIndex}`} className={`grid grid-cols-[auto_1fr_1fr_auto_auto] gap-2 items-center rounded-xl border px-3 py-2 ${set.completed ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-border/50 bg-muted/10'}`}>
+                    <div key={`${exercise.exercise.id}-${setIndex}`} className={`grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto_auto] gap-2 items-center rounded-xl border px-3 py-2 ${set.completed ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-border/50 bg-muted/10'}`}>
                       <span className="font-data text-xs">{set.set_number}</span>
                       <Input type="number" value={formatNumericInput(set.actual_speed_mph)} onChange={(e) => updateSet(exerciseIndex, setIndex, 'actual_speed_mph', e.target.value === '' ? undefined : Number(e.target.value))} disabled={set.completed} placeholder="Speed MPH" />
                       <Input type="number" value={formatNumericInput(set.actual_reps)} onChange={(e) => updateSet(exerciseIndex, setIndex, 'actual_reps', e.target.value === '' ? undefined : Number(e.target.value))} disabled={set.completed} placeholder="Minutes" />
@@ -1647,7 +1788,7 @@ function ActiveWorkoutModal({
                       <Button type="button" variant="ghost" size="icon-sm" onClick={() => removeSetFromExercise(exerciseIndex, setIndex)} disabled={exercise.sets.length <= 1}><X className="h-3.5 w-3.5" /></Button>
                     </div>
                   ) : inputMode === 'bike' || inputMode === 'rower' ? (
-                    <div key={`${exercise.exercise.id}-${setIndex}`} className={`grid grid-cols-[auto_1fr_1fr_auto_auto] gap-2 items-center rounded-xl border px-3 py-2 ${set.completed ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-border/50 bg-muted/10'}`}>
+                    <div key={`${exercise.exercise.id}-${setIndex}`} className={`grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto_auto] gap-2 items-center rounded-xl border px-3 py-2 ${set.completed ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-border/50 bg-muted/10'}`}>
                       <span className="font-data text-xs">{set.set_number}</span>
                       <Input type="number" value={formatNumericInput(set.actual_watts)} onChange={(e) => updateSet(exerciseIndex, setIndex, 'actual_watts', e.target.value === '' ? undefined : Number(e.target.value))} disabled={set.completed} placeholder="Watts" />
                       <Input type="number" value={formatNumericInput(set.actual_reps)} onChange={(e) => updateSet(exerciseIndex, setIndex, 'actual_reps', e.target.value === '' ? undefined : Number(e.target.value))} disabled={set.completed} placeholder="Minutes" />
@@ -1655,7 +1796,7 @@ function ActiveWorkoutModal({
                       <Button type="button" variant="ghost" size="icon-sm" onClick={() => removeSetFromExercise(exerciseIndex, setIndex)} disabled={exercise.sets.length <= 1}><X className="h-3.5 w-3.5" /></Button>
                     </div>
                   ) : inputMode === 'level_cardio' || inputMode === 'basic_cardio' ? (
-                    <div key={`${exercise.exercise.id}-${setIndex}`} className={`grid grid-cols-[auto_1fr_1fr_auto_auto] gap-2 items-center rounded-xl border px-3 py-2 ${set.completed ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-border/50 bg-muted/10'}`}>
+                    <div key={`${exercise.exercise.id}-${setIndex}`} className={`grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto_auto] gap-2 items-center rounded-xl border px-3 py-2 ${set.completed ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-border/50 bg-muted/10'}`}>
                       <span className="font-data text-xs">{set.set_number}</span>
                       <Input type="number" value={formatNumericInput(set.actual_machine_level)} onChange={(e) => updateSet(exerciseIndex, setIndex, 'actual_machine_level', e.target.value === '' ? undefined : Number(e.target.value))} disabled={set.completed} placeholder="Level" />
                       <Input type="number" value={formatNumericInput(set.actual_reps)} onChange={(e) => updateSet(exerciseIndex, setIndex, 'actual_reps', e.target.value === '' ? undefined : Number(e.target.value))} disabled={set.completed} placeholder="Minutes" />
@@ -1663,7 +1804,7 @@ function ActiveWorkoutModal({
                       <Button type="button" variant="ghost" size="icon-sm" onClick={() => removeSetFromExercise(exerciseIndex, setIndex)} disabled={exercise.sets.length <= 1}><X className="h-3.5 w-3.5" /></Button>
                     </div>
                   ) : (
-                    <div key={`${exercise.exercise.id}-${setIndex}`} className={`grid grid-cols-[auto_1fr_1fr_auto_auto] gap-2 items-center rounded-xl border px-3 py-2 ${set.completed ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-border/50 bg-muted/10'}`}>
+                    <div key={`${exercise.exercise.id}-${setIndex}`} className={`grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto_auto] gap-2 items-center rounded-xl border px-3 py-2 ${set.completed ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-border/50 bg-muted/10'}`}>
                       <span className="font-data text-xs">{set.set_number}</span>
                       <Input
                         type="number"
@@ -1681,7 +1822,7 @@ function ActiveWorkoutModal({
                         value={formatNumericInput(set.actual_reps)}
                         onChange={(e) => updateSet(exerciseIndex, setIndex, 'actual_reps', e.target.value === '' ? undefined : Number(e.target.value))}
                         disabled={set.completed}
-                        placeholder={isCardioExercise(exercise.exercise) ? 'Minutes' : 'Reps'}
+                        placeholder={isCardioExercise(exercise.exercise) ? 'Minutes' : isUnilateralExercise(exercise.exercise) ? 'Reps/side' : 'Reps'}
                       />
                       <button type="button" onClick={() => toggleSet(exerciseIndex, setIndex)}>
                         {set.completed ? <CheckCircle className="h-5 w-5 text-emerald-400" /> : <Circle className="h-5 w-5 text-muted-foreground" />}
@@ -1702,8 +1843,8 @@ function ActiveWorkoutModal({
           })}
         </div>
 
-        <div className="flex gap-2">
-          <Button variant="outline" className="flex-1" onClick={onPause}>Pause</Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" className="flex-1 min-w-[80px]" onClick={onPause}>Pause</Button>
           <Button
             variant="outline"
             className="flex-1 gap-2"
@@ -1722,7 +1863,95 @@ function ActiveWorkoutModal({
           </Button>
         </div>
       </div>
+      <ExercisePreviewDialog exercise={previewExercise} onClose={() => setPreviewExercise(null)} />
     </DialogContent>
+  )
+}
+
+interface YouTubeVideo {
+  id: string
+  title: string
+  channelTitle: string
+  thumbnailUrl: string
+  viewCount: string
+  durationSec: number
+}
+
+function formatDuration(sec: number): string {
+  const m = Math.floor(sec / 60)
+  const s = sec % 60
+  return m > 0 ? `${m}:${String(s).padStart(2, '0')}` : `0:${String(s).padStart(2, '0')}`
+}
+
+function ExercisePreviewDialog({ exercise, onClose }: { exercise: Exercise | null; onClose: () => void }) {
+  const [videos, setVideos] = useState<YouTubeVideo[]>([])
+  const [loading, setLoading] = useState(false)
+  const [activeId, setActiveId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!exercise) { setVideos([]); setActiveId(null); return }
+    setLoading(true)
+    setActiveId(null)
+    fetch(`/api/youtube?q=${encodeURIComponent(exercise.name)}`)
+      .then((r) => r.ok ? r.json() : [])
+      .then((data: YouTubeVideo[]) => { setVideos(data); if (data.length > 0) setActiveId(data[0].id) })
+      .catch(() => setVideos([]))
+      .finally(() => setLoading(false))
+  }, [exercise])
+
+  if (!exercise) return null
+
+  return (
+    <Dialog open={!!exercise} onOpenChange={(open) => { if (!open) onClose() }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-base">{exercise.name}</DialogTitle>
+        </DialogHeader>
+
+        {loading && (
+          <div className="flex items-center justify-center py-10">
+            <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          </div>
+        )}
+
+        {!loading && activeId && (
+          <div className="space-y-3">
+            <div className="relative aspect-video w-full overflow-hidden rounded-xl bg-black">
+              <iframe
+                key={activeId}
+                src={`https://www.youtube.com/embed/${activeId}?autoplay=1&rel=0`}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+                className="h-full w-full"
+              />
+            </div>
+
+            {videos.length > 1 && (
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {videos.map((v) => (
+                  <button
+                    key={v.id}
+                    type="button"
+                    onClick={() => setActiveId(v.id)}
+                    className={`flex-shrink-0 w-28 rounded-lg overflow-hidden border-2 text-left transition-colors ${activeId === v.id ? 'border-primary' : 'border-transparent hover:border-border'}`}
+                  >
+                    <img src={v.thumbnailUrl} alt={v.title} className="w-full aspect-video object-cover" />
+                    <div className="px-1.5 py-1">
+                      <p className="text-[10px] text-muted-foreground truncate">{v.viewCount}</p>
+                      <p className="text-[10px] text-muted-foreground">{formatDuration(v.durationSec)}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {!loading && videos.length === 0 && (
+          <div className="py-6 text-center text-sm text-muted-foreground">No short videos found.</div>
+        )}
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -1741,6 +1970,7 @@ export default function WorkoutsPage() {
     removeCustomWorkout,
   } = useAppStore()
 
+  const [previewExercise, setPreviewExercise] = useState<Exercise | null>(null)
   const [tab, setTab] = useState<'log' | 'saved'>('log')
   const [runningWorkout, setRunningWorkout] = useState<Workout | null>(null)
   const [activeWorkoutSession, setActiveWorkoutSession] = useState<PersistedActiveWorkoutSession | null>(null)
@@ -1943,6 +2173,24 @@ export default function WorkoutsPage() {
   useEffect(() => {
     setManualSuggestionIndex(0)
   }, [manualSearch, exerciseMuscleFilter, exerciseEquipmentFilter])
+
+  const [apiManualSuggestions, setApiManualSuggestions] = useState<ExerciseLibraryItem[]>([])
+
+  useEffect(() => {
+    const query = manualSearch.trim()
+    if (query.length < 2) { setApiManualSuggestions([]); return }
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/exercises?name=${encodeURIComponent(query)}`)
+        if (res.ok) {
+          const all: ExerciseLibraryItem[] = await res.json()
+          const localNames = new Set(EXERCISE_LIBRARY.map((i) => i.name.toLowerCase()))
+          setApiManualSuggestions(all.filter((i) => !localNames.has(i.name.toLowerCase())))
+        }
+      } catch { setApiManualSuggestions([]) }
+    }, 400)
+    return () => clearTimeout(timer)
+  }, [manualSearch])
 
   const manualSummary = useMemo(
     () =>
@@ -2329,7 +2577,7 @@ export default function WorkoutsPage() {
       <div className="space-y-5">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 className="font-display text-3xl font-bold tracking-tight">Workouts</h2>
+            <h2 className="font-display text-xl sm:text-3xl font-bold tracking-tight">Workouts</h2>
             <p className="mt-1 text-sm text-muted-foreground">Log what you did today, then save it as a workout if you want to reuse it later.</p>
           </div>
           <Button variant="outline" className="gap-2" onClick={() => { setEditingWorkout(null); setBuilderOpen(true) }}>
@@ -2351,21 +2599,21 @@ export default function WorkoutsPage() {
             </div>
           )}
 
-        <div className="grid gap-3 md:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <div className="rounded-2xl border border-border/60 bg-card px-4 py-4">
-            <p className="font-data text-2xl font-semibold">{manualSummary.caloriesBurned}</p>
-            <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Current est. kcal</p>
+            <p className="font-data text-xl sm:text-2xl font-semibold">{todayLoggedWorkouts.reduce((sum, log) => sum + (log.calories_burned_kcal || 0), 0)}</p>
+            <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Today's kcal burned</p>
           </div>
           <div className="rounded-2xl border border-border/60 bg-card px-4 py-4">
-            <p className="font-data text-2xl font-semibold">{manualExercises.length}</p>
-            <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Exercises in log</p>
+            <p className="font-data text-xl sm:text-2xl font-semibold">{todayLoggedWorkouts.length}</p>
+            <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Workouts today</p>
           </div>
           <div className="rounded-2xl border border-border/60 bg-card px-4 py-4">
-            <p className="font-data text-2xl font-semibold">{accountCustomWorkouts.length}</p>
+            <p className="font-data text-xl sm:text-2xl font-semibold">{accountCustomWorkouts.length}</p>
             <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Saved workouts</p>
           </div>
           <div className="rounded-2xl border border-border/60 bg-card px-4 py-4">
-            <p className="font-data text-2xl font-semibold">{totalCaloriesBurned}</p>
+            <p className="font-data text-xl sm:text-2xl font-semibold">{totalCaloriesBurned}</p>
             <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Total kcal logged</p>
           </div>
         </div>
@@ -2648,27 +2896,57 @@ export default function WorkoutsPage() {
                   {(manualSearch.trim().length >= 1 || exerciseMuscleFilter !== 'all' || exerciseEquipmentFilter !== 'all') && (
                     <div className="max-h-80 overflow-y-auto rounded-2xl border border-border/60 bg-background">
                       {manualSuggestions.length > 0 ? (
-                        Object.entries(groupedManualSuggestions).map(([category, items]) => (
-                          <div key={category} className="border-b border-border/40 last:border-b-0">
-                            <div className="bg-muted/20 px-4 py-2 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-                              {category}
-                            </div>
-                            {items.map((item) => {
-                              const globalIndex = manualSuggestions.findIndex((suggestion) => suggestion.id === item.id)
-                              const isActive = globalIndex === manualSuggestionIndex
+                        <>
+                          {Object.entries(groupedManualSuggestions).map(([category, items]) => (
+                            <div key={category} className="border-b border-border/40 last:border-b-0">
+                              <div className="bg-muted/20 px-4 py-2 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                                {category}
+                              </div>
+                              {items.map((item) => {
+                                const globalIndex = manualSuggestions.findIndex((suggestion) => suggestion.id === item.id)
+                                const isActive = globalIndex === manualSuggestionIndex
 
-                              return (
+                                return (
+                                  <button
+                                    key={item.id}
+                                    type="button"
+                                    onClick={() => addManualExerciseFromLibrary(item)}
+                                    onMouseEnter={() => setManualSuggestionIndex(globalIndex)}
+                                    className={`flex w-full items-center gap-3 px-4 py-3 text-left transition-colors ${isActive ? 'bg-muted/30' : 'hover:bg-muted/20'}`}
+                                  >
+  
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm font-medium">{item.name}</p>
+                                      <p className="mt-1 text-xs text-muted-foreground">{item.equipment}</p>
+                                      <div className="mt-1.5 flex flex-wrap gap-1">
+                                        {item.muscle_groups.map((group) => (
+                                          <span key={group} className="rounded-full bg-muted px-2 py-0.5 text-[10px] capitalize text-muted-foreground">
+                                            {group.replace('_', ' ')}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    </div>
+                                    <span className="flex-shrink-0 text-[10px] text-muted-foreground">{item.default_sets} x {item.default_reps}</span>
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          ))}
+                          {apiManualSuggestions.length > 0 && (
+                            <div className="border-t border-border/40">
+                              <div className="bg-muted/20 px-4 py-2 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">More exercises</div>
+                              {apiManualSuggestions.map((item) => (
                                 <button
                                   key={item.id}
                                   type="button"
                                   onClick={() => addManualExerciseFromLibrary(item)}
-                                  onMouseEnter={() => setManualSuggestionIndex(globalIndex)}
-                                  className={`flex w-full items-start justify-between gap-3 px-4 py-3 text-left transition-colors ${isActive ? 'bg-muted/30' : 'hover:bg-muted/20'}`}
+                                  className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/20"
                                 >
-                                  <div className="min-w-0">
+
+                                  <div className="flex-1 min-w-0">
                                     <p className="text-sm font-medium">{item.name}</p>
                                     <p className="mt-1 text-xs text-muted-foreground">{item.equipment}</p>
-                                    <div className="mt-2 flex flex-wrap gap-1">
+                                    <div className="mt-1.5 flex flex-wrap gap-1">
                                       {item.muscle_groups.map((group) => (
                                         <span key={group} className="rounded-full bg-muted px-2 py-0.5 text-[10px] capitalize text-muted-foreground">
                                           {group.replace('_', ' ')}
@@ -2676,12 +2954,38 @@ export default function WorkoutsPage() {
                                       ))}
                                     </div>
                                   </div>
-                                  <span className="text-[10px] text-muted-foreground">{item.default_sets} x {item.default_reps}</span>
+                                  <span className="flex-shrink-0 text-[10px] text-muted-foreground">{item.default_sets} x {item.default_reps}</span>
                                 </button>
-                              )
-                            })}
-                          </div>
-                        ))
+                              ))}
+                            </div>
+                          )}
+                        </>
+                      ) : apiManualSuggestions.length > 0 ? (
+                        <div>
+                          <div className="bg-muted/20 px-4 py-2 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Results</div>
+                          {apiManualSuggestions.map((item) => (
+                            <button
+                              key={item.id}
+                              type="button"
+                              onClick={() => addManualExerciseFromLibrary(item)}
+                              className="flex w-full items-center gap-3 border-b border-border/40 px-4 py-3 text-left transition-colors last:border-b-0 hover:bg-muted/20"
+                            >
+                              {item.gif_url && <img src={item.gif_url} alt="" className="h-12 w-12 flex-shrink-0 rounded-lg object-cover" />}
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium">{item.name}</p>
+                                <p className="mt-1 text-xs text-muted-foreground">{item.equipment}</p>
+                                <div className="mt-1.5 flex flex-wrap gap-1">
+                                  {item.muscle_groups.map((group) => (
+                                    <span key={group} className="rounded-full bg-muted px-2 py-0.5 text-[10px] capitalize text-muted-foreground">
+                                      {group.replace('_', ' ')}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                              <span className="flex-shrink-0 text-[10px] text-muted-foreground">{item.default_sets} x {item.default_reps}</span>
+                            </button>
+                          ))}
+                        </div>
                       ) : (
                         <div className="px-4 py-6 text-center">
                           <p className="text-sm text-muted-foreground">No exercises match your filters</p>
@@ -2703,14 +3007,33 @@ export default function WorkoutsPage() {
                         <p className="text-sm font-semibold">Adjust before adding</p>
                         <p className="mt-1 text-sm">{pendingExercise.exercise.name}</p>
                         <p className="text-xs text-muted-foreground">{pendingExercise.exercise.equipment}</p>
+                        <button
+                          type="button"
+                          onClick={() => setPreviewExercise(pendingExercise.exercise)}
+                          className="mt-1 flex items-center gap-1 text-[11px] text-primary/70 hover:text-primary transition-colors"
+                        >
+                          <PlayCircle className="h-3 w-3" />
+                          How to do this
+                        </button>
                       </div>
                       <Button variant="ghost" size="icon-sm" onClick={() => setPendingExercise(null)}>
                         <X className="h-3.5 w-3.5" />
                       </Button>
                     </div>
 
-                    <div className="space-y-2">
-                      {getExerciseInputMode(pendingExercise.exercise) === 'treadmill' ? (
+                    {(() => {
+                      const pendingMode = getExerciseInputMode(pendingExercise.exercise)
+                      return (
+                      <div className="space-y-2">
+                      {pendingMode === 'interval' ? (
+                        <div className="grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2 px-1 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                          <span>Round</span>
+                          <span>Intervals</span>
+                          <span>Work (sec)</span>
+                          <span>Rest (sec)</span>
+                          <span />
+                        </div>
+                      ) : pendingMode === 'treadmill' ? (
                         <div className="grid grid-cols-[80px_1fr_1fr_1fr_1fr_auto] gap-2 px-1 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
                           <span>Set</span>
                           <span>Minutes</span>
@@ -2719,7 +3042,7 @@ export default function WorkoutsPage() {
                           <span>Rest Sec</span>
                           <span />
                         </div>
-                      ) : getExerciseInputMode(pendingExercise.exercise) === 'run_walk' ? (
+                      ) : pendingMode === 'run_walk' ? (
                         <div className="grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2 px-1 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
                           <span>Set</span>
                           <span>Minutes</span>
@@ -2727,7 +3050,7 @@ export default function WorkoutsPage() {
                           <span>Rest Sec</span>
                           <span />
                         </div>
-                      ) : getExerciseInputMode(pendingExercise.exercise) === 'bike' || getExerciseInputMode(pendingExercise.exercise) === 'rower' ? (
+                      ) : pendingMode === 'bike' || pendingMode === 'rower' ? (
                         <div className="grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2 px-1 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
                           <span>Set</span>
                           <span>Minutes</span>
@@ -2735,7 +3058,7 @@ export default function WorkoutsPage() {
                           <span>Rest Sec</span>
                           <span />
                         </div>
-                      ) : getExerciseInputMode(pendingExercise.exercise) === 'level_cardio' || getExerciseInputMode(pendingExercise.exercise) === 'basic_cardio' ? (
+                      ) : pendingMode === 'level_cardio' || pendingMode === 'basic_cardio' ? (
                         <div className="grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2 px-1 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
                           <span>Set</span>
                           <span>Minutes</span>
@@ -2746,51 +3069,31 @@ export default function WorkoutsPage() {
                       ) : (
                         <div className="grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2 px-1 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
                           <span>Set</span>
-                          <span>{isCardioExercise(pendingExercise.exercise) ? 'Minutes' : 'Reps'}</span>
-                          <span>{isCardioExercise(pendingExercise.exercise)
-                            ? `Incline / Load (${weightUnitLabel})`
-                            : isAssistedPullExercise(pendingExercise.exercise)
-                              ? `Assistance (${weightUnitLabel})`
-                              : `Weight (${weightUnitLabel})`}</span>
+                          <span>{isUnilateralExercise(pendingExercise.exercise) ? 'Reps/Side' : 'Reps'}</span>
+                          <span>{isAssistedPullExercise(pendingExercise.exercise) ? `Assistance (${weightUnitLabel})` : `Weight (${weightUnitLabel})`}</span>
                           <span>Rest Sec</span>
                           <span />
                         </div>
                       )}
                       {pendingExercise.sets.map((set, setIndex) => (
-                        getExerciseInputMode(pendingExercise.exercise) === 'treadmill' ? (
-                          <div key={`${pendingExercise.instanceId}-${setIndex}`} className="grid grid-cols-[80px_1fr_1fr_1fr_1fr_auto] gap-2">
-                            <div className="flex items-center px-3 text-sm font-medium text-muted-foreground">
-                              Set {set.set_number}
-                            </div>
-                            <Input
-                              type="number"
-                              value={formatNumericInput(set.reps)}
-                              onChange={(e) => updatePendingSetField(setIndex, 'reps', e.target.value === '' ? 0 : Number(e.target.value))}
-                              placeholder="Minutes"
-                            />
-                            <Input
-                              type="number"
-                              value={formatNumericInput(set.speed_mph)}
-                              onChange={(e) => updatePendingSetField(setIndex, 'speed_mph', e.target.value === '' ? 0 : Number(e.target.value))}
-                              placeholder="Speed MPH"
-                            />
-                            <Input
-                              type="number"
-                              value={formatNumericInput(set.incline_pct)}
-                              onChange={(e) => updatePendingSetField(setIndex, 'incline_pct', e.target.value === '' ? 0 : Number(e.target.value))}
-                              placeholder="Incline %"
-                            />
-                            <Input
-                              type="number"
-                              value={formatNumericInput(set.rest_seconds)}
-                              onChange={(e) => updatePendingSetField(setIndex, 'rest_seconds', e.target.value === '' ? 0 : Number(e.target.value))}
-                              placeholder="Rest sec"
-                            />
-                            <Button variant="ghost" size="icon-sm" onClick={() => removeSetFromPendingExercise(setIndex)} disabled={pendingExercise.sets.length <= 1}>
-                              <X className="h-3.5 w-3.5" />
-                            </Button>
+                        pendingMode === 'interval' ? (
+                          <div key={`${pendingExercise.instanceId}-${setIndex}`} className="grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2">
+                            <div className="flex items-center px-3 text-sm font-medium text-muted-foreground">Rnd {set.set_number}</div>
+                            <Input type="number" min={1} value={formatNumericInput(set.reps)} onChange={(e) => updatePendingSetField(setIndex, 'reps', e.target.value === '' ? 1 : Math.max(1, Number(e.target.value)))} placeholder="# intervals" />
+                            <Input type="number" min={1} value={formatNumericInput(set.interval_duration_sec)} onChange={(e) => updatePendingSetField(setIndex, 'interval_duration_sec', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Work sec" />
+                            <Input type="number" min={0} value={formatNumericInput(set.rest_seconds)} onChange={(e) => updatePendingSetField(setIndex, 'rest_seconds', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Rest sec" />
+                            <Button variant="ghost" size="icon-sm" onClick={() => removeSetFromPendingExercise(setIndex)} disabled={pendingExercise.sets.length <= 1}><X className="h-3.5 w-3.5" /></Button>
                           </div>
-                        ) : getExerciseInputMode(pendingExercise.exercise) === 'run_walk' ? (
+                        ) : pendingMode === 'treadmill' ? (
+                          <div key={`${pendingExercise.instanceId}-${setIndex}`} className="grid grid-cols-[80px_1fr_1fr_1fr_1fr_auto] gap-2">
+                            <div className="flex items-center px-3 text-sm font-medium text-muted-foreground">Set {set.set_number}</div>
+                            <Input type="number" value={formatNumericInput(set.reps)} onChange={(e) => updatePendingSetField(setIndex, 'reps', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Minutes" />
+                            <Input type="number" value={formatNumericInput(set.speed_mph)} onChange={(e) => updatePendingSetField(setIndex, 'speed_mph', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Speed MPH" />
+                            <Input type="number" value={formatNumericInput(set.incline_pct)} onChange={(e) => updatePendingSetField(setIndex, 'incline_pct', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Incline %" />
+                            <Input type="number" value={formatNumericInput(set.rest_seconds)} onChange={(e) => updatePendingSetField(setIndex, 'rest_seconds', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Rest sec" />
+                            <Button variant="ghost" size="icon-sm" onClick={() => removeSetFromPendingExercise(setIndex)} disabled={pendingExercise.sets.length <= 1}><X className="h-3.5 w-3.5" /></Button>
+                          </div>
+                        ) : pendingMode === 'run_walk' ? (
                           <div key={`${pendingExercise.instanceId}-${setIndex}`} className="grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2">
                             <div className="flex items-center px-3 text-sm font-medium text-muted-foreground">Set {set.set_number}</div>
                             <Input type="number" value={formatNumericInput(set.reps)} onChange={(e) => updatePendingSetField(setIndex, 'reps', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Minutes" />
@@ -2798,7 +3101,7 @@ export default function WorkoutsPage() {
                             <Input type="number" value={formatNumericInput(set.rest_seconds)} onChange={(e) => updatePendingSetField(setIndex, 'rest_seconds', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Rest sec" />
                             <Button variant="ghost" size="icon-sm" onClick={() => removeSetFromPendingExercise(setIndex)} disabled={pendingExercise.sets.length <= 1}><X className="h-3.5 w-3.5" /></Button>
                           </div>
-                        ) : getExerciseInputMode(pendingExercise.exercise) === 'bike' || getExerciseInputMode(pendingExercise.exercise) === 'rower' ? (
+                        ) : pendingMode === 'bike' || pendingMode === 'rower' ? (
                           <div key={`${pendingExercise.instanceId}-${setIndex}`} className="grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2">
                             <div className="flex items-center px-3 text-sm font-medium text-muted-foreground">Set {set.set_number}</div>
                             <Input type="number" value={formatNumericInput(set.reps)} onChange={(e) => updatePendingSetField(setIndex, 'reps', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Minutes" />
@@ -2806,7 +3109,7 @@ export default function WorkoutsPage() {
                             <Input type="number" value={formatNumericInput(set.rest_seconds)} onChange={(e) => updatePendingSetField(setIndex, 'rest_seconds', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Rest sec" />
                             <Button variant="ghost" size="icon-sm" onClick={() => removeSetFromPendingExercise(setIndex)} disabled={pendingExercise.sets.length <= 1}><X className="h-3.5 w-3.5" /></Button>
                           </div>
-                        ) : getExerciseInputMode(pendingExercise.exercise) === 'level_cardio' || getExerciseInputMode(pendingExercise.exercise) === 'basic_cardio' ? (
+                        ) : pendingMode === 'level_cardio' || pendingMode === 'basic_cardio' ? (
                           <div key={`${pendingExercise.instanceId}-${setIndex}`} className="grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2">
                             <div className="flex items-center px-3 text-sm font-medium text-muted-foreground">Set {set.set_number}</div>
                             <Input type="number" value={formatNumericInput(set.reps)} onChange={(e) => updatePendingSetField(setIndex, 'reps', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Minutes" />
@@ -2816,43 +3119,22 @@ export default function WorkoutsPage() {
                           </div>
                         ) : (
                           <div key={`${pendingExercise.instanceId}-${setIndex}`} className="grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2">
-                            <div className="flex items-center px-3 text-sm font-medium text-muted-foreground">
-                              Set {set.set_number}
-                            </div>
-                            <Input
-                              type="number"
-                              value={formatNumericInput(set.reps)}
-                              onChange={(e) => updatePendingSetField(setIndex, 'reps', e.target.value === '' ? 0 : Number(e.target.value))}
-                              placeholder={isCardioExercise(pendingExercise.exercise) ? 'Minutes' : 'Reps'}
-                            />
-                            <Input
-                              type="number"
-                              value={formatWorkoutWeightInput(set.weight_kg, unitSystem)}
-                              onChange={(e) => updatePendingSetField(setIndex, 'weight_kg', parseWorkoutWeightInput(e.target.value, unitSystem))}
-                              placeholder={isCardioExercise(pendingExercise.exercise)
-                                ? `Incline / resistance (${weightUnitLabel})`
-                                : isAssistedPullExercise(pendingExercise.exercise)
-                                  ? `Assistance (${weightUnitLabel})`
-                                  : `Weight (${weightUnitLabel})`}
-                            />
-                            <Input
-                              type="number"
-                              value={formatNumericInput(set.rest_seconds)}
-                              onChange={(e) => updatePendingSetField(setIndex, 'rest_seconds', e.target.value === '' ? 0 : Number(e.target.value))}
-                              placeholder="Rest sec"
-                            />
-                            <Button variant="ghost" size="icon-sm" onClick={() => removeSetFromPendingExercise(setIndex)} disabled={pendingExercise.sets.length <= 1}>
-                              <X className="h-3.5 w-3.5" />
-                            </Button>
+                            <div className="flex items-center px-3 text-sm font-medium text-muted-foreground">Set {set.set_number}</div>
+                            <Input type="number" value={formatNumericInput(set.reps)} onChange={(e) => updatePendingSetField(setIndex, 'reps', e.target.value === '' ? 0 : Number(e.target.value))} placeholder={isUnilateralExercise(pendingExercise.exercise) ? 'Reps/side' : 'Reps'} />
+                            <Input type="number" value={formatWorkoutWeightInput(set.weight_kg, unitSystem)} onChange={(e) => updatePendingSetField(setIndex, 'weight_kg', parseWorkoutWeightInput(e.target.value, unitSystem))} placeholder={isAssistedPullExercise(pendingExercise.exercise) ? `Assistance (${weightUnitLabel})` : `Weight (${weightUnitLabel})`} />
+                            <Input type="number" value={formatNumericInput(set.rest_seconds)} onChange={(e) => updatePendingSetField(setIndex, 'rest_seconds', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Rest sec" />
+                            <Button variant="ghost" size="icon-sm" onClick={() => removeSetFromPendingExercise(setIndex)} disabled={pendingExercise.sets.length <= 1}><X className="h-3.5 w-3.5" /></Button>
                           </div>
                         )
                       ))}
                     </div>
+                  )
+                })()}
 
                     <div className="mt-3 flex gap-2">
                       <Button type="button" size="sm" variant="outline" onClick={addSetToPendingExercise}>
                         <Plus className="mr-1 h-3.5 w-3.5" />
-                        Add set
+                        {getExerciseInputMode(pendingExercise.exercise) === 'interval' ? 'Add round' : 'Add set'}
                       </Button>
                       <Button type="button" size="sm" variant="brand" onClick={confirmPendingExercise}>
                         Add exercise
@@ -2941,6 +3223,14 @@ export default function WorkoutsPage() {
                         <div>
                           <p className="text-sm font-semibold">{exercise.exercise.name}</p>
                           <p className="mt-1 text-xs text-muted-foreground">{exercise.exercise.equipment}</p>
+                          <button
+                            type="button"
+                            onClick={() => setPreviewExercise(exercise.exercise)}
+                            className="mt-1 flex items-center gap-1 text-[11px] text-primary/70 hover:text-primary transition-colors"
+                          >
+                            <PlayCircle className="h-3 w-3" />
+                            How to do this
+                          </button>
                         </div>
                         <div className="flex items-center gap-2">
                           <Badge variant="outline" className="capitalize">{exercise.exercise.difficulty}</Badge>
@@ -3186,8 +3476,13 @@ export default function WorkoutsPage() {
                       placeholder="Search saved workouts…"
                       value={savedWorkoutSearch}
                       onChange={(e) => setSavedWorkoutSearch(e.target.value)}
-                      className="pl-9"
+                      className="pl-9 pr-8"
                     />
+                    {savedWorkoutSearch && (
+                      <button type="button" onClick={() => setSavedWorkoutSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
                   <button
                     onClick={() => setSavedWorkoutFilterOpen(o => !o)}
@@ -3290,10 +3585,15 @@ export default function WorkoutsPage() {
                   <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     placeholder="Search premade workouts…"
-                    className="pl-9"
+                    className="pl-9 pr-8"
                     value={premadeSearch}
                     onChange={(e) => setPremadeSearch(e.target.value)}
                   />
+                  {premadeSearch && (
+                    <button type="button" onClick={() => setPremadeSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                   {premadeSearch && (
                     <button className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => setPremadeSearch('')}>
                       <X className="h-4 w-4" />
@@ -3480,6 +3780,8 @@ export default function WorkoutsPage() {
           />
         )}
       </Dialog>
+
+      <ExercisePreviewDialog exercise={previewExercise} onClose={() => setPreviewExercise(null)} />
     </div>
   )
 }

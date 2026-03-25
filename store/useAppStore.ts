@@ -104,6 +104,7 @@ interface AppStore {
 
   // Weight
   addWeightEntry: (entry: WeightEntry) => void
+  removeWeightEntry: (id: string) => void
 
   // Journal
   addJournalEntry: (entry: JournalEntry) => void
@@ -718,6 +719,19 @@ export const useAppStore = create<AppStore>()(
         const state = get()
         if (state.user && !state.isDemoMode) {
           void upsertWeightEntry(state.user.id, normalizedEntry)
+        }
+      },
+
+      removeWeightEntry: (id) => {
+        set((state) => withRefreshedNotifications(state, {
+          weightHistory: state.weightHistory.filter((weight) => weight.id !== id),
+        }))
+
+        const state = get()
+        if (state.user && !state.isDemoMode) {
+          // Note: You would need to implement deleteWeightEntryCloud in cloud-sync
+          // For now, this will only update local state
+          console.log('Weight entry deletion not yet synced to cloud')
         }
       },
 

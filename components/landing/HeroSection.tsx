@@ -11,8 +11,8 @@ import { useRouter } from 'next/navigation'
 function DashboardPreview() {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 30, scale: 0.96 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
+      initial={{ opacity: 0, y: 30 }}
+      animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.7, delay: 0.3, ease: [0.22, 0.61, 0.36, 1] }}
       className="relative w-full max-w-xl mx-auto"
     >

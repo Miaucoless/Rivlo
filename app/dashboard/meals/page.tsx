@@ -29,6 +29,8 @@ import {
   getKnownFoodCatalog,
   primeFoodSearchCache,
   sumMacros,
+  getAvailableUnits,
+  parseFraction,
 } from '@/lib/food-search'
 import { toast } from 'sonner'
 
@@ -81,17 +83,49 @@ function scoreSuggestion(item: FoodCatalogItem, query: string) {
 
   let score = 0
 
+  // Exact matches get highest priority
   if (baseName === normalizedQuery) score += 200
   if (normalizedName === normalizedQuery) score += 180
   if (aliases.includes(normalizedQuery)) score += 140
+  
+  // Startswith matches
   if (baseName.startsWith(normalizedQuery)) score += 110
   if (normalizedName.startsWith(normalizedQuery)) score += 90
+  
+  // Contains matches
   if (baseName.includes(normalizedQuery)) score += 60
   if (normalizedName.includes(normalizedQuery)) score += 45
 
+  // Token overlap
   const overlap = queryTokens.filter((token) => nameTokens.includes(token)).length
   score += overlap * 18
 
+  // Smart prioritization logic
+  const hasBrandKeywords = /kraft|heinz|general mills|kellogg|campbell|tyson|perdue|oreo|coca|pepsi|nike|adidas|sony|samsung|apple|google|microsoft|amazon|walmart|target|costco|whole foods|trader joe|fairlife|premier protein|orgain|quest|one bars|kind bars|clif bar|powerbar|pure protein|muscle milk|optimum nutrition|bsn|cellucor|musclepharm|myprotein|bulk|dymatize|universal|animal|ghost|legion|transparent|swole|kaged|jym|beast|mutant|hitech|hi-tech|pro sup|nutrex|mhp|mhp|blackstone|black stone|redcon1|hardcore|dark matter|force factor|six star|muscle tech|cell tech|hydroxycut|lipo|zantrex|xenadrine|thermogenic|fat burner|pre workout|bcaa|creatine|protein powder|whey|casein|isolate|concentrate|hydrolyzed|plant based|vegan|soy|pea|hemp|rice|egg|collagen|mass gainer|weight gainer|meal replacement|mrp|bar|shake|drink|mix|blend|complex|matrix|formula|system|tech|pro|advanced|ultimate|extreme|max|plus|ultra|super|mega|hyper|nitro|turbo|power|force|energy|fuel|charge|blast|rush|shock|impact|strike|boom|bang|furious|intense|vicious|brutal|hardcore|extreme|ultimate|pro|elite|gold|platinum|diamond|black|white|red|blue|green|purple|orange|yellow|pink|brown|grey|silver|bronze|copper|iron|steel|titanium|platinum|crystal|quantum|nuclear|atomic|molecular|cellular|genetic|bio|nano|micro|macro|mega|giga|tera|peta|exa|zetta|yotta/i.test(normalizedName)
+  
+  const isUserSearchingForBrand = hasBrandKeywords && queryTokens.some(token => 
+    /kraft|heinz|general|mill|kellogg|campbell|tyson|perdue|oreo|coca|pepsi|nike|adidas|sony|samsung|apple|google|microsoft|amazon|walmart|target|costco|whole|trader|joe|fairlife|premier|orgain|quest|kind|clif|powerbar|pure|muscle|optimum|bsn|cellucor|musclepharm|myprotein|bulk|dymatize|universal|animal|ghost|legion|transparent|swole|kaged|jym|beast|mutant|hi-tech|pro|sup|nutrex|mhp|blackstone|redcon|hardcore|dark|matter|force|factor|six|muscle|tech|cell|hydroxycut|lipo|zantrex|xenadrine|thermogenic|fat|burner|pre|workout|bcaa|creatine|protein|whey|casein|isolate|concentrate|hydrolyzed|plant|vegan|soy|pea|hemp|rice|egg|collagen|mass|gainer|weight|meal|replacement|mrp|bar|shake|drink|mix|blend|complex|matrix|formula|system|tech|pro|advanced|ultimate|extreme|max|plus|ultra|super|mega|hyper|nitro|turbo|power|force|energy|fuel|charge|blast|rush|shock|impact|strike|boom|bang|furious|intense|vicious|brutal|hardcore|elite|gold|platinum|diamond|black|white|red|blue|green|purple|orange|yellow|pink|brown|grey|silver|bronze|copper|iron|steel|titanium|crystal|quantum|nuclear|atomic|molecular|cellular|genetic|bio|nano|micro|macro|mega|giga|tera|peta|exa|zetta|yotta/i.test(token)
+  )
+  
+  // Penalize brand items unless user is specifically searching for brands
+  if (hasBrandKeywords && !isUserSearchingForBrand) {
+    score -= 150 // Heavy penalty for brand items in general searches
+  } else if (hasBrandKeywords && isUserSearchingForBrand) {
+    score += 50 // Boost brand items when user is searching for brands
+  }
+  
+  // Boost generic/basic foods
+  const isGenericFood = !hasBrandKeywords && (
+    item.id.startsWith('food-') || 
+    item.id.startsWith('ext-') ||
+    (item.name && !/\b(kraft|heinz|general|mill|kellogg|campbell|tyson|perdue|oreo|coca|pepsi|nike|adidas|sony|samsung|apple|google|microsoft|amazon|walmart|target|costco|whole|trader|joe|fairlife|premier|orgain|quest|kind|clif|powerbar|pure|muscle|optimum|bsn|cellucor|musclepharm|myprotein|bulk|dymatize|universal|animal|ghost|legion|transparent|swole|kaged|jym|beast|mutant|hi-tech|pro|sup|nutrex|mhp|blackstone|redcon|hardcore|dark|matter|force|factor|six|muscle|tech|cell|hydroxycut|lipo|zantrex|xenadrine|thermogenic|fat|burner|pre|workout|bcaa|creatine|protein|whey|casein|isolate|concentrate|hydrolyzed|plant|vegan|soy|pea|hemp|rice|egg|collagen|mass|gainer|weight|meal|replacement|mrp|bar|shake|drink|mix|blend|complex|matrix|formula|system|tech|pro|advanced|ultimate|extreme|max|plus|ultra|super|mega|hyper|nitro|turbo|power|force|energy|fuel|charge|blast|rush|shock|impact|strike|boom|bang|furious|intense|vicious|brutal|hardcore|elite|gold|platinum|diamond|black|white|red|blue|green|purple|orange|yellow|pink|brown|grey|silver|bronze|copper|iron|steel|titanium|platinum|crystal|quantum|nuclear|atomic|molecular|cellular|genetic|bio|nano|micro|macro|mega|giga|tera|peta|exa|zetta|yotta)\b/i.test(item.name))
+  )
+  
+  if (isGenericFood && !isUserSearchingForBrand) {
+    score += 25 // Boost generic foods in general searches
+  }
+
+  // Prefer clean names without parentheses (usually basic versions)
   if (!item.name.includes('(')) score += 22
   if (item.id.startsWith('food-') || item.id.startsWith('ext-')) score += 18
   if (item.id.startsWith('fatsecret-')) score += 12
@@ -269,6 +303,45 @@ function RecipeCard({ recipe, compact = false, onClick }: { recipe: Recipe; comp
   )
 }
 
+function AddToTodayButton({ recipe }: { recipe: Recipe }) {
+  const { addMealEntry } = useAppStore()
+  const [mealType, setMealType] = useState<string>(recipe.meal_type)
+  return (
+    <div className="flex gap-1.5">
+      <Select value={mealType} onValueChange={setMealType}>
+        <SelectTrigger className="h-8 text-xs flex-1">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="breakfast">Breakfast</SelectItem>
+          <SelectItem value="lunch">Lunch</SelectItem>
+          <SelectItem value="dinner">Dinner</SelectItem>
+          <SelectItem value="snack">Snack</SelectItem>
+        </SelectContent>
+      </Select>
+      <Button
+        size="sm"
+        variant="outline"
+        className="gap-1 text-xs shrink-0 px-3"
+        onClick={() => {
+          addMealEntry(getTodayISO(), {
+            id: `m-${Date.now()}`,
+            meal_type: mealType as MealType,
+            name: recipe.name,
+            macros: { calories: recipe.macros.calories, protein_g: recipe.macros.protein_g, carbs_g: recipe.macros.carbs_g, fat_g: recipe.macros.fat_g },
+            time: format(new Date(), 'h:mm a'),
+            recipe,
+          })
+          toast.success(`${recipe.name} added to ${mealType}.`)
+        }}
+      >
+        <Plus className="w-3 h-3" />
+        Add
+      </Button>
+    </div>
+  )
+}
+
 function MealEditorModal({
   open,
   onOpenChange,
@@ -294,6 +367,7 @@ function MealEditorModal({
   const [selectedSavedMealId, setSelectedSavedMealId] = useState<string>('')
   const [expandedSavedMealIds, setExpandedSavedMealIds] = useState<Record<string, boolean>>({})
   const [savedMealModalSearch, setSavedMealModalSearch] = useState('')
+  const [savedMealModalFilterType, setSavedMealModalFilterType] = useState<string>('all')
   const [recipeSearch, setRecipeSearch] = useState('')
   const [recipeTypeFilter, setRecipeTypeFilter] = useState<string>('all')
   // Saved-tab filter state
@@ -339,9 +413,14 @@ function MealEditorModal({
   const [savedMealIngName, setSavedMealIngName] = useState('')
   const [savedMealIngAmount, setSavedMealIngAmount] = useState('')
   const [savedMealIngUnit, setSavedMealIngUnit] = useState('g')
-  const [catalogSuggestions, setCatalogSuggestions] = useState<FoodCatalogItem[]>(getKnownFoodCatalog())
+  const [catalogSuggestions, setCatalogSuggestions] = useState<FoodCatalogItem[]>([])
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [searchLoading, setSearchLoading] = useState(false)
+
+  // Initialize catalog with full catalog including user history
+  useEffect(() => {
+    setCatalogSuggestions(getKnownFoodCatalog())
+  }, [])
 
   // Build a catalog from the user's own meal history and saved meal ingredients
   // so previously logged foods (incl. branded items) are always searchable
@@ -380,10 +459,12 @@ function MealEditorModal({
 
   // Merge user history (deduplicated) with the catalog
   const allCatalogItems = useMemo((): FoodCatalogItem[] => {
-    const staticKeys = new Set(catalogSuggestions.map(i => normalizeFoodText(i.name)))
-    const extras = userFoodCatalog.filter(i => !staticKeys.has(normalizeFoodText(i.name)))
-    return [...extras, ...catalogSuggestions]
-  }, [userFoodCatalog, catalogSuggestions])
+    const fullCatalog = getKnownFoodCatalog()
+    const userHistoryItems = userFoodCatalog.filter(i => 
+      !fullCatalog.some(catalog => normalizeFoodText(catalog.name) === normalizeFoodText(i.name))
+    )
+    return [...userHistoryItems, ...fullCatalog]
+  }, [userFoodCatalog])
 
   const filteredSuggestions = useMemo(() => {
     const q = normalizeFoodText(foodQuery)
@@ -405,11 +486,11 @@ function MealEditorModal({
     const catalogMatches = allCatalogItems
       .filter((item) => {
         const normalizedItemName = normalizeFoodText(item.name)
-        // Every query token must appear somewhere in the name or alias (order-independent)
-        const nameMatches = qTokens.every((token) => normalizedItemName.includes(token))
+        // At least one query token must appear in the name or alias (more flexible)
+        const nameMatches = qTokens.some((token) => normalizedItemName.includes(token))
         const aliasMatches = item.aliases.some((alias) => {
           const normalizedAlias = normalizeFoodText(alias)
-          return qTokens.every((token) => normalizedAlias.includes(token))
+          return qTokens.some((token) => normalizedAlias.includes(token))
         })
         const isDish = isDishCombination(item.name)
         const shouldInclude = !queryIsDish || !isDish
@@ -418,7 +499,7 @@ function MealEditorModal({
       .sort((left, right) => scoreSuggestion(right, foodQuery) - scoreSuggestion(left, foodQuery))
       .map((item) => ({ ...item, _isSavedMeal: false as const }))
 
-    return [...savedMatches, ...catalogMatches].slice(0, 30)
+    return [...savedMatches, ...catalogMatches].slice(0, 100)
   }, [allCatalogItems, foodQuery, savedMeals, source])
 
   const manualTotals = useMemo(() => {
@@ -434,19 +515,26 @@ function MealEditorModal({
   }, [searchItems])
 
   const searchUnitOptions = useMemo(() => {
+    const selectedFood = filteredSuggestions.find(item => 
+      (item._isSavedMeal ? item.name : item.name) === (searchItemName || foodQuery)
+    )
+    
+    if (selectedFood && !selectedFood._isSavedMeal) {
+      return getAvailableUnits(selectedFood).map(unit => ({
+        value: unit as SearchMeasureUnit,
+        label: unit
+      }))
+    }
+    
     const options: Array<{ value: SearchMeasureUnit; label: string }> = [
       { value: 'serving', label: 'Serving' },
       { value: 'g', label: 'g' },
       { value: 'oz', label: 'oz' },
+      { value: 'ml', label: 'ml' },
+      { value: 'fl_oz', label: 'fl oz' },
     ]
-
-    if (searchBaseMeasure?.servingMl && searchBaseMeasure.servingMl > 0) {
-      options.push({ value: 'ml', label: 'ml' })
-      options.push({ value: 'fl_oz', label: 'fl oz' })
-    }
-
     return options
-  }, [searchBaseMeasure])
+  }, [filteredSuggestions, searchItemName, foodQuery])
 
   const filteredModalRecipes = useMemo(() => {
     let list = allRecipes
@@ -457,6 +545,16 @@ function MealEditorModal({
     }
     return list
   }, [allRecipes, recipeSearch, recipeTypeFilter])
+
+  const filteredModalSavedMeals = useMemo(() => {
+    let list = savedMeals
+    if (savedMealModalFilterType !== 'all') list = list.filter(m => m.meal_type === savedMealModalFilterType)
+    if (savedMealModalSearch.trim()) {
+      const q = savedMealModalSearch.toLowerCase()
+      list = list.filter(m => m.name.toLowerCase().includes(q))
+    }
+    return list
+  }, [savedMeals, savedMealModalSearch, savedMealModalFilterType])
 
   const handleSourceChange = (nextSource: MealSource) => {
     if (source === 'recipe' && nextSource !== 'recipe') {
@@ -643,7 +741,7 @@ function MealEditorModal({
       return
     }
 
-    const amountNum = manualItemAmount ? Number(manualItemAmount) : undefined
+    const amountNum = manualItemAmount ? parseFraction(manualItemAmount) : undefined
 
     setManualItems((rows) => [
       ...rows,
@@ -904,38 +1002,94 @@ function MealEditorModal({
     if (source !== 'recipe' || !recipeId) return
     const recipe = allRecipes.find((r) => r.id === recipeId)
     if (!recipe) return
-    setMealType(recipe.meal_type)
+    // Only set meal type to recipe's default if no specific meal type was provided
+    if (!initialMealType) {
+      setMealType(recipe.meal_type)
+    }
     setRecipeMealName(recipe.name)
     setCalories(String(recipe.macros.calories))
     setProtein(String(recipe.macros.protein_g))
     setCarbs(String(recipe.macros.carbs_g))
     setFat(String(recipe.macros.fat_g))
-  }, [recipeId, source, allRecipes])
+  }, [recipeId, source, allRecipes, initialMealType])
 
   const handleSave = () => {
     if (source === 'search') {
-      const usingList = searchItems.length > 0
-      const singleName = (searchItemName.trim() || foodQuery.trim())
-      const singleCalories = Number(searchCalories)
-      const singleProtein = Number(searchProtein || 0)
-      const singleCarbs = Number(searchCarbs || 0)
-      const singleFat = Number(searchFat || 0)
+      const usingList = searchItems.length > 0;
+      const singleName = (searchItemName.trim() || foodQuery.trim());
+      const singleCalories = Number(searchCalories);
+      const singleProtein = Number(searchProtein || 0);
+      const singleCarbs = Number(searchCarbs || 0);
+      const singleFat = Number(searchFat || 0);
 
       if (!usingList && !singleName) {
-        toast.error('Add a search item first.')
-        return
+        toast.error('Add a search item first.');
+        return;
       }
 
       if (!usingList && (!Number.isFinite(singleCalories) || singleCalories <= 0)) {
-        toast.error('Calories must be a valid number greater than 0.')
-        return
+        toast.error('Calories must be a valid number greater than 0.');
+        return;
       }
 
       if (searchSaveAsTemplate && !searchMealName.trim()) {
-        toast.error('Add a meal name first.')
-        return
+        toast.error('Add a meal name first.');
+        return;
       }
 
+      // If usingList (multiple search items), add each as a separate meal entry
+      if (usingList && searchItems.length > 1) {
+        searchItems.forEach((item) => {
+          onSave({
+            meal_type: mealType,
+            name: item.name,
+            macros: {
+              calories: Math.round(item.macros.calories),
+              protein_g: Math.round(item.macros.protein_g),
+              carbs_g: Math.round(item.macros.carbs_g),
+              fat_g: Math.round(item.macros.fat_g),
+            },
+            time: time.trim() || format(new Date(), 'h:mm a'),
+            recipe: null,
+            meal_items: [
+              {
+                name: item.name,
+                macros: {
+                  calories: Math.round(item.macros.calories),
+                  protein_g: Math.round(item.macros.protein_g),
+                  carbs_g: Math.round(item.macros.carbs_g),
+                  fat_g: Math.round(item.macros.fat_g),
+                },
+              },
+            ],
+            entry_source: 'search',
+          });
+        });
+        if (searchSaveAsTemplate) {
+          // Save as a template with all items
+          onSaveTemplate({
+            name: searchMealName.trim() || 'Search meal',
+            meal_type: mealType,
+            macros: {
+              calories: Math.round(searchTotals.calories),
+              protein_g: Math.round(searchTotals.protein_g),
+              carbs_g: Math.round(searchTotals.carbs_g),
+              fat_g: Math.round(searchTotals.fat_g),
+            },
+            items: searchItems.map((item) => ({
+              input: item.name,
+              matched_name: item.name,
+              amount: 1,
+              unit: 'serving',
+              macros: item.macros,
+            })),
+          });
+        }
+        onOpenChange(false);
+        return;
+      }
+
+      // Single item (or only one in list) - keep original logic
       const finalMacros = usingList
         ? {
             calories: Math.round(searchTotals.calories),
@@ -948,7 +1102,7 @@ function MealEditorModal({
             protein_g: Math.round(singleProtein),
             carbs_g: Math.round(singleCarbs),
             fat_g: Math.round(singleFat),
-          }
+          };
 
       const finalName =
         searchMealName.trim() ||
@@ -956,7 +1110,7 @@ function MealEditorModal({
           ? searchItems.length === 1
             ? searchItems[0].name
             : 'Search meal total'
-          : singleName)
+          : singleName);
 
       const mealItems = usingList
         ? searchItems.map((item) => ({
@@ -978,7 +1132,7 @@ function MealEditorModal({
                 fat_g: Math.round(singleFat),
               },
             },
-          ]
+          ];
 
       if (searchSaveAsTemplate) {
         onSaveTemplate({
@@ -992,7 +1146,7 @@ function MealEditorModal({
             unit: 'serving',
             macros: item.macros,
           })),
-        })
+        });
       }
 
       onSave({
@@ -1003,10 +1157,10 @@ function MealEditorModal({
         recipe: null,
         meal_items: mealItems,
         entry_source: 'search',
-      })
+      });
 
-      onOpenChange(false)
-      return
+      onOpenChange(false);
+      return;
     }
 
     if (source === 'manual') {
@@ -1188,14 +1342,14 @@ function MealEditorModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[88vh] overflow-y-auto">
+      <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>
             {editingSavedMeal ? 'Edit saved meal' : editingMeal ? 'Edit meal entry' : 'Add meal entry'}
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-5 pr-1">
+        <div className="space-y-5 px-1 max-h-[70vh] overflow-y-auto">
           {!isMealTypeLocked && !editingMeal && !editingSavedMeal && (
             <div className="space-y-1.5">
               <Label>Meal type</Label>
@@ -1249,9 +1403,14 @@ function MealEditorModal({
                       setShowSuggestions(true)
                     }}
                     placeholder="e.g. chicken breast, Greek yogurt…"
-                    className="pl-9"
+                    className="pl-9 pr-8"
                     autoFocus
                   />
+                  {foodQuery && (
+                    <button type="button" onClick={() => { setFoodQuery(''); setSearchMealName(''); setSearchItemName(''); setSearchBaseMacros(null); setShowSuggestions(false) }} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
                 {showSuggestions && foodQuery.trim().length > 0 && (filteredSuggestions.length > 0 || searchLoading) && (
                   <div className="absolute z-20 mt-1 max-h-64 w-full overflow-y-auto rounded-lg border border-border bg-card shadow-xl">
@@ -1431,181 +1590,114 @@ function MealEditorModal({
             </TabsContent>
 
             <TabsContent value="saved" className="mt-0 space-y-3">
-              <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
-                  <Input
-                    value={savedMealModalSearch}
-                    onChange={e => setSavedMealModalSearch(e.target.value)}
-                    placeholder="Search saved meals…"
-                    className="pl-9 h-9"
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setSavedEntryFiltersOpen(o => !o)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm transition-colors ${
-                    savedEntryFiltersOpen || savedEntryMealTypeFilter !== 'all' || savedEntryNutritionFilters.length > 0
-                      ? 'border-primary/60 bg-primary/10 text-primary'
-                      : 'border-border/60 bg-muted/20 text-muted-foreground hover:text-foreground hover:border-border'
-                  }`}
-                >
-                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 2.5h11M3 6.5h7M5 10.5h3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-                  {(savedEntryMealTypeFilter !== 'all' || savedEntryNutritionFilters.length > 0) && (
-                    <span className="flex items-center justify-center w-4 h-4 rounded-full bg-primary text-primary-foreground text-[10px] font-semibold">
-                      {(savedEntryMealTypeFilter !== 'all' ? 1 : 0) + savedEntryNutritionFilters.length}
-                    </span>
-                  )}
-                  <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-150 ${savedEntryFiltersOpen ? 'rotate-180' : ''}`} />
-                </button>
+              {/* Search */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+                <Input
+                  value={savedMealModalSearch}
+                  onChange={e => setSavedMealModalSearch(e.target.value)}
+                  placeholder="Search saved meals…"
+                  className="pl-9 pr-8 h-9"
+                />
+                {savedMealModalSearch && (
+                  <button type="button" onClick={() => setSavedMealModalSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
-
-              {savedEntryFiltersOpen && (
-                <div className="rounded-xl border border-border/40 bg-muted/20 p-3 space-y-3">
-                  <div className="space-y-1.5">
-                    <p className="text-[10px] uppercase tracking-[0.12em] font-semibold text-muted-foreground">Meal type</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {(['all', 'breakfast', 'lunch', 'dinner', 'snack'] as const).map(t => (
-                        <button
-                          key={t}
-                          type="button"
-                          onClick={() => setSavedEntryMealTypeFilter(t)}
-                          className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${
-                            savedEntryMealTypeFilter === t
-                              ? 'bg-primary/15 border-primary/50 text-primary'
-                              : 'bg-background border-border/50 text-muted-foreground hover:text-foreground hover:border-border'
-                          }`}
-                        >
-                          {t === 'all' ? 'All' : t.charAt(0).toUpperCase() + t.slice(1)}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="space-y-1.5">
-                    <p className="text-[10px] uppercase tracking-[0.12em] font-semibold text-muted-foreground">Nutrition</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {[
-                        { key: 'high_protein', label: 'High Protein' },
-                        { key: 'low_calories', label: 'Low Calories' },
-                        { key: 'low_fat', label: 'Low Fat' },
-                        { key: 'high_carb', label: 'High Carb' },
-                      ].map(({ key, label }) => {
-                        const active = savedEntryNutritionFilters.includes(key)
-                        return (
-                          <button
-                            key={key}
-                            type="button"
-                            onClick={() => setSavedEntryNutritionFilters(prev => active ? prev.filter(f => f !== key) : [...prev, key])}
-                            className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${
-                              active
-                                ? 'bg-primary/15 border-primary/50 text-primary'
-                                : 'bg-background border-border/50 text-muted-foreground hover:text-foreground hover:border-border'
-                            }`}
-                          >
-                            {label}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </div>
-                  {(savedEntryMealTypeFilter !== 'all' || savedEntryNutritionFilters.length > 0) && (
-                    <button
-                      type="button"
-                      onClick={() => { setSavedEntryMealTypeFilter('all'); setSavedEntryNutritionFilters([]) }}
-                      className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      Clear all filters
-                    </button>
-                  )}
-                </div>
-              )}
-
+              {/* Filter chips */}
+              <div className="flex flex-wrap gap-1.5">
+                {(['all', 'breakfast', 'lunch', 'dinner', 'snack'] as const).map(t => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setSavedMealModalFilterType(t)}
+                    className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${
+                      savedMealModalFilterType === t
+                        ? 'bg-primary text-primary-foreground border-primary'
+                        : 'bg-muted/40 text-muted-foreground border-border/50 hover:text-foreground'
+                    }`}
+                  >
+                    {t === 'all' ? 'All' : t.charAt(0).toUpperCase() + t.slice(1)}
+                  </button>
+                ))}
+                <span className="text-[10px] text-muted-foreground ml-auto self-center tabular-nums">
+                  {filteredModalSavedMeals.length} meal{filteredModalSavedMeals.length !== 1 ? 's' : ''}
+                </span>
+              </div>
+              {/* List */}
+              <div className="max-h-52 overflow-y-auto overscroll-contain space-y-1.5 pr-0.5">
               {savedMeals.length === 0 ? (
-                <div className="py-10 text-center">
-                  <p className="text-sm text-muted-foreground">No saved meals yet.</p>
-                  <p className="text-xs text-muted-foreground/60 mt-1">Build a meal and save it as a template first.</p>
+                <div className="flex flex-col items-center justify-center py-12 border border-dashed border-border/60 rounded-xl">
+                  <p className="font-medium text-muted-foreground text-sm">No saved meals yet</p>
+                  <p className="text-xs text-muted-foreground/60 mt-1">Save a meal first to reuse it here</p>
                 </div>
-              ) : (() => {
-                const filtered = savedMeals
-                  .filter(m => !savedMealModalSearch.trim() || m.name.toLowerCase().includes(savedMealModalSearch.toLowerCase()))
-                  .filter(m => savedEntryMealTypeFilter === 'all' || m.meal_type === savedEntryMealTypeFilter)
-                  .filter(m => !savedEntryNutritionFilters.includes('high_protein') || m.macros.protein_g >= 25)
-                  .filter(m => !savedEntryNutritionFilters.includes('low_calories') || m.macros.calories <= 400)
-                  .filter(m => !savedEntryNutritionFilters.includes('low_fat') || m.macros.fat_g <= 10)
-                  .filter(m => !savedEntryNutritionFilters.includes('high_carb') || m.macros.carbs_g >= 50)
-                return filtered.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-4">No matches found</p>
-                ) : (
-                  <div className="max-h-52 overflow-y-auto overscroll-contain space-y-1.5 pr-0.5">
-                    {filtered.map(meal => {
-                      const isSelected = selectedSavedMealId === meal.id
-                      const typePresentation = mealTypePresentation(meal.meal_type)
-                      const isExpanded = expandedSavedMealIds[meal.id] || false
-                      return (
-                        <div
-                          key={meal.id}
-                          className={`rounded-xl border transition-all ${
-                            isSelected
-                              ? 'border-primary bg-primary/10'
-                              : 'border-border/50 bg-muted/20 hover:bg-muted/40 hover:border-border'
-                          }`}
-                        >
+              ) : filteredModalSavedMeals.length === 0 ? (
+                <p className="text-xs text-muted-foreground text-center py-8">No saved meals match.</p>
+              ) : (
+                filteredModalSavedMeals.map((meal) => {
+                  const isSelected = selectedSavedMealId === meal.id
+                  const isExpanded = expandedSavedMealIds[meal.id] || false
+                  return (
+                    <div
+                      key={meal.id}
+                      className={`rounded-xl border transition-all ${
+                        isSelected
+                          ? 'border-primary bg-primary/10'
+                          : 'border-border/50 bg-muted/20'
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setSelectedSavedMealId(meal.id)}
+                        className="w-full text-left px-3 py-2.5 hover:bg-muted/20 rounded-xl transition-colors"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium truncate">{meal.name}</p>
+                            <p className="font-data text-[11px] text-muted-foreground/60 mt-0.5 tabular-nums">
+                              {meal.macros.calories} kcal · <span className="text-emerald-500/70">{meal.macros.protein_g}g P</span> · {meal.macros.carbs_g}g C · {meal.macros.fat_g}g F
+                            </p>
+                          </div>
+                          {isSelected && <CheckCircle className="w-4 h-4 text-primary shrink-0" />}
+                        </div>
+                      </button>
+                      {meal.items.length > 0 && (
+                        <div className="px-3 pb-2.5">
                           <button
                             type="button"
-                            onClick={() => setSelectedSavedMealId(meal.id)}
-                            className="w-full text-left px-3 py-2.5"
+                            onClick={() => setExpandedSavedMealIds(prev => ({ ...prev, [meal.id]: !prev[meal.id] }))}
+                            className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
                           >
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-1.5">
-                                  <span className={`w-1.5 h-1.5 rounded-full ${typePresentation.dot}`} />
-                                  <p className="text-sm font-medium truncate">{meal.name}</p>
-                                </div>
-                                <p className="text-[10px] text-muted-foreground mt-0.5 capitalize">{meal.meal_type}</p>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <div className="text-right shrink-0">
-                                  <p className="font-data text-sm font-semibold tabular-nums">{meal.macros.calories}</p>
-                                  <p className="text-[10px] text-muted-foreground">kcal</p>
-                                </div>
-                                {meal.items.length > 0 && (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => { e.stopPropagation(); setExpandedSavedMealIds(prev => ({ ...prev, [meal.id]: !prev[meal.id] })) }}
-                                    className="shrink-0 p-1 rounded text-muted-foreground hover:text-foreground transition-colors"
-                                  >
-                                    <ChevronDown className={`w-4 h-4 transition-transform duration-150 ${isExpanded ? 'rotate-180' : ''}`} />
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-1.5 mt-1.5">
-                              <span className="font-data text-xs text-emerald-500">{meal.macros.protein_g}g P</span>
-                              <span className="text-[10px] text-border/40">·</span>
-                              <span className="font-data text-xs text-muted-foreground">{meal.macros.carbs_g}g C</span>
-                              <span className="text-[10px] text-border/40">·</span>
-                              <span className="font-data text-xs text-muted-foreground">{meal.macros.fat_g}g F</span>
-                            </div>
+                            <ChevronDown className={`w-3 h-3 transition-transform duration-150 ${isExpanded ? 'rotate-180' : ''}`} />
+                            {isExpanded ? 'Hide' : 'Show'} ingredients ({meal.items.length})
                           </button>
-                          {isExpanded && meal.items.length > 0 && (
-                            <div className="px-3 pb-2.5 pt-0 border-t border-border/30 mt-0.5 space-y-1">
-                              {meal.items.map((item, i) => (
-                                <div key={i} className="flex items-center gap-2 text-xs text-muted-foreground">
-                                  <span className="w-1 h-1 rounded-full bg-muted-foreground/40 shrink-0" />
-                                  <span className="truncate">{item.matched_name}</span>
-                                  {item.amount != null && (
-                                    <span className="font-data text-muted-foreground/50 ml-auto shrink-0">{item.amount}{item.unit}</span>
+                          {isExpanded && (
+                            <div className="mt-1.5 rounded-lg border border-border/40 divide-y divide-border/30">
+                              {meal.items.map((item, idx) => (
+                                <div key={idx} className="px-2.5 py-1.5">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="text-xs font-medium text-foreground/80 truncate">{item.matched_name}</span>
+                                    {item.amount != null && (
+                                      <span className="font-data text-[10px] text-muted-foreground/60 shrink-0">{item.amount}{item.unit}</span>
+                                    )}
+                                  </div>
+                                  {item.macros && (
+                                    <p className="font-data text-[10px] tabular-nums text-muted-foreground/55 mt-0.5">
+                                      {item.macros.calories} kcal · <span className="text-emerald-500/70">{item.macros.protein_g}g P</span> · {item.macros.carbs_g}g C · {item.macros.fat_g}g F
+                                    </p>
                                   )}
                                 </div>
                               ))}
                             </div>
                           )}
                         </div>
-                      )
-                    })}
-                  </div>
-                )
-              })()}
+                      )}
+                    </div>
+                  )
+                })
+              )}
+              </div>
             </TabsContent>
 
             <TabsContent value="manual" className="mt-0 space-y-4">
@@ -1691,7 +1783,7 @@ function MealEditorModal({
                             setSavedMealIngredients((prev) => [...prev, {
                               id: `ing-${Math.random().toString(36).slice(2)}`,
                               name: savedMealIngName.trim(),
-                              amount: savedMealIngAmount ? Number(savedMealIngAmount) : null,
+                              amount: savedMealIngAmount ? parseFraction(savedMealIngAmount) : null,
                               unit: savedMealIngUnit,
                             }])
                             setSavedMealIngName('')
@@ -1701,8 +1793,6 @@ function MealEditorModal({
                         className="flex-1"
                       />
                       <Input
-                        type="number"
-                        min="0"
                         placeholder="Amt"
                         value={savedMealIngAmount}
                         onChange={(e) => setSavedMealIngAmount(e.target.value)}
@@ -1711,7 +1801,15 @@ function MealEditorModal({
                       <Select value={savedMealIngUnit} onValueChange={setSavedMealIngUnit}>
                         <SelectTrigger className="w-20"><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          {['g', 'oz', 'ml', 'cup', 'tbsp', 'tsp', 'serving', 'piece', 'slice'].map(u => (
+                          {getAvailableUnits({
+                            id: 'manual',
+                            name: savedMealIngName,
+                            aliases: [],
+                            default_serving_amount: 1,
+                            default_serving_unit: 'g',
+                            default_serving_label: '1 g',
+                            macros_per_serving: { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 }
+                          }).map(u => (
                             <SelectItem key={u} value={u}>{u}</SelectItem>
                           ))}
                         </SelectContent>
@@ -1725,7 +1823,7 @@ function MealEditorModal({
                           setSavedMealIngredients((prev) => [...prev, {
                             id: `ing-${Math.random().toString(36).slice(2)}`,
                             name: savedMealIngName.trim(),
-                            amount: savedMealIngAmount ? Number(savedMealIngAmount) : null,
+                            amount: savedMealIngAmount ? parseFraction(savedMealIngAmount) : null,
                             unit: savedMealIngUnit,
                           }])
                           setSavedMealIngName('')
@@ -1748,12 +1846,9 @@ function MealEditorModal({
                   <Label className="text-xs">Amount</Label>
                   <div className="grid grid-cols-3 gap-2">
                     <Input
-                      type="number"
-                      min="0"
-                      step="1"
+                      placeholder="e.g. 200 or 1/3"
                       value={manualItemAmount}
                       onChange={(e) => setManualItemAmount(e.target.value)}
-                      placeholder="e.g. 200"
                       className="col-span-2"
                     />
                     <Select value={manualItemUnit} onValueChange={setManualItemUnit}>
@@ -1863,8 +1958,13 @@ function MealEditorModal({
                   value={recipeSearch}
                   onChange={e => setRecipeSearch(e.target.value)}
                   placeholder="Search recipes…"
-                  className="pl-9 h-9"
+                  className="pl-9 pr-8 h-9"
                 />
+                {recipeSearch && (
+                  <button type="button" onClick={() => setRecipeSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
 
               {/* Meal type filter chips */}
@@ -1973,7 +2073,10 @@ function MealEditorModal({
 
 function RecipeDetailModal({ recipe, onClose }: { recipe: Recipe; onClose: () => void }) {
   return (
-    <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+    <DialogContent
+      className="max-w-2xl max-h-[90vh] overflow-y-auto"
+      onOpenAutoFocus={(e) => e.preventDefault()}
+    >
       <DialogHeader>
         <DialogTitle className="font-display font-bold text-xl tracking-tight">
           {recipe.name}
@@ -2264,7 +2367,7 @@ function EditSavedMealModal({
   open: boolean
   onOpenChange: (open: boolean) => void
   meal: SavedMealTemplate | null
-  onSave: (payload: Omit<SavedMealTemplate, 'id' | 'updated_at'>, id: string) => void
+  onSave: (payload: Omit<SavedMealTemplate, 'id' | 'updated_at'>, id?: string) => void
 }) {
   type IngItem = {
     id: string
@@ -2280,24 +2383,53 @@ function EditSavedMealModal({
   const [query, setQuery] = useState('')
   const [suggestions, setSuggestions] = useState<FoodCatalogItem[]>([])
   const [showSugg, setShowSugg] = useState(false)
+  // Pending item — selected from suggestions, waiting for amount confirmation
+  const [pendingFood, setPendingFood] = useState<FoodCatalogItem | null>(null)
+  const [pendingAmount, setPendingAmount] = useState('')
+  const [pendingUnit, setPendingUnit] = useState('g')
+  // Manual ingredient entry mode
+  const [ingredientMode, setIngredientMode] = useState<'search' | 'manual'>('search')
+  const [manualIngName, setManualIngName] = useState('')
+  const [manualIngAmount, setManualIngAmount] = useState('')
+  const [manualIngUnit, setManualIngUnit] = useState('g')
+  const [manualIngCalories, setManualIngCalories] = useState('')
+  const [manualIngProtein, setManualIngProtein] = useState('')
+  const [manualIngCarbs, setManualIngCarbs] = useState('')
+  const [manualIngFat, setManualIngFat] = useState('')
   const queryRef = useRef<HTMLInputElement>(null)
+  const pendingAmountRef = useRef<HTMLInputElement>(null)
 
   // Load from meal whenever dialog opens
   useEffect(() => {
-    if (!open || !meal) return
-    setName(meal.name)
-    setMealType(meal.meal_type)
-    setItems(
-      meal.items.map(item => ({
-        id: `ing-${Math.random().toString(36).slice(2)}`,
-        name: item.matched_name,
-        amount: item.amount ?? 1,
-        unit: item.unit ?? 'serving',
-        macros: item.macros,
-      }))
-    )
+    if (!open) return
+    if (meal) {
+      setName(meal.name)
+      setMealType(meal.meal_type)
+      setItems(
+        meal.items.map(item => ({
+          id: `ing-${Math.random().toString(36).slice(2)}`,
+          name: item.matched_name,
+          amount: item.amount ?? 1,
+          unit: item.unit ?? 'serving',
+          macros: item.macros,
+        }))
+      )
+    } else {
+      setName('')
+      setMealType('breakfast')
+      setItems([])
+    }
     setQuery('')
     setShowSugg(false)
+    setPendingFood(null)
+    setIngredientMode('search')
+    setManualIngName('')
+    setManualIngAmount('')
+    setManualIngUnit('g')
+    setManualIngCalories('')
+    setManualIngProtein('')
+    setManualIngCarbs('')
+    setManualIngFat('')
   }, [open, meal])
 
   // Food search suggestions
@@ -2307,30 +2439,90 @@ function EditSavedMealModal({
     const catalog = getKnownFoodCatalog()
     const scored = catalog
       .map(item => ({ item, score: scoreSuggestion(item, q) }))
-      .filter(x => x.score > 0)
+      .filter(x => x.score >= 10) // Lower threshold to show more results
       .sort((a, b) => b.score - a.score)
-      .slice(0, 8)
+      .slice(0, 50)
       .map(x => x.item)
     setSuggestions(scored)
     setShowSugg(scored.length > 0)
   }, [query])
 
-  const addFood = (food: FoodCatalogItem) => {
-    setItems(prev => [...prev, {
-      id: `ing-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-      name: food.name,
-      amount: food.default_serving_amount,
-      unit: food.default_serving_unit,
-      macros: {
-        calories: Math.round(food.macros_per_serving.calories),
-        protein_g: Math.round(food.macros_per_serving.protein_g * 10) / 10,
-        carbs_g: Math.round(food.macros_per_serving.carbs_g * 10) / 10,
-        fat_g: Math.round(food.macros_per_serving.fat_g * 10) / 10,
-      },
-    }])
+  const selectFood = (food: FoodCatalogItem) => {
+    setPendingFood(food)
+    setPendingAmount(String(food.default_serving_amount))
+    setPendingUnit(food.default_serving_unit)
     setQuery('')
     setShowSugg(false)
+    setTimeout(() => pendingAmountRef.current?.focus(), 50)
+  }
+
+  const confirmPendingFood = () => {
+    if (!pendingFood) return
+    const amt = parseFloat(pendingAmount)
+    const baseAmt = pendingFood.default_serving_amount || 1
+    const ratio = Number.isFinite(amt) && amt > 0 ? amt / baseAmt : 1
+    setItems(prev => [...prev, {
+      id: `ing-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      name: pendingFood.name,
+      amount: Number.isFinite(amt) && amt > 0 ? amt : baseAmt,
+      unit: pendingUnit || pendingFood.default_serving_unit,
+      macros: {
+        calories: Math.round(pendingFood.macros_per_serving.calories * ratio),
+        protein_g: Math.round(pendingFood.macros_per_serving.protein_g * ratio * 10) / 10,
+        carbs_g: Math.round(pendingFood.macros_per_serving.carbs_g * ratio * 10) / 10,
+        fat_g: Math.round(pendingFood.macros_per_serving.fat_g * ratio * 10) / 10,
+      },
+    }])
+    setPendingFood(null)
+    setPendingAmount('')
     queryRef.current?.focus()
+  }
+
+  const addManualIngredient = () => {
+    const name = manualIngName.trim()
+    if (!name) {
+      toast.error('Ingredient name is required.')
+      return
+    }
+
+    const calories = Number(manualIngCalories)
+    const protein = Number(manualIngProtein || 0)
+    const carbs = Number(manualIngCarbs || 0)
+    const fat = Number(manualIngFat || 0)
+
+    if (!Number.isFinite(calories) || calories <= 0) {
+      toast.error('Calories must be a valid number greater than 0.')
+      return
+    }
+
+    const amount = manualIngAmount ? Number(manualIngAmount) : 1
+    if (!Number.isFinite(amount) || amount <= 0) {
+      toast.error('Amount must be a valid number greater than 0.')
+      return
+    }
+
+    setItems(prev => [...prev, {
+      id: `ing-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      name,
+      amount,
+      unit: manualIngUnit || 'serving',
+      macros: {
+        calories: Math.round(calories),
+        protein_g: Math.round(protein * 10) / 10,
+        carbs_g: Math.round(carbs * 10) / 10,
+        fat_g: Math.round(fat * 10) / 10,
+      },
+    }])
+
+    // Clear manual form
+    setManualIngName('')
+    setManualIngAmount('')
+    setManualIngUnit('g')
+    setManualIngCalories('')
+    setManualIngProtein('')
+    setManualIngCarbs('')
+    setManualIngFat('')
+    toast.success('Manual ingredient added.')
   }
 
   const totalMacros = useMemo(() => {
@@ -2347,32 +2539,45 @@ function EditSavedMealModal({
   }, [items])
 
   const handleSave = () => {
-    if (!meal) return
     if (!name.trim()) { toast.error('Meal name is required.'); return }
     const macros = totalMacros
       ? { calories: Math.round(totalMacros.calories), protein_g: Math.round(totalMacros.protein_g), carbs_g: Math.round(totalMacros.carbs_g), fat_g: Math.round(totalMacros.fat_g) }
-      : meal.macros
+      : meal?.macros ?? { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 }
     onSave({
       name: name.trim(),
       meal_type: mealType,
       macros,
       items: items.map(i => ({ input: i.name, matched_name: i.name, amount: i.amount, unit: i.unit, macros: i.macros })),
-    }, meal.id)
+    }, meal?.id)
     onOpenChange(false)
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md max-h-[90vh] flex flex-col gap-0 p-0">
-        <DialogHeader className="px-5 pt-5 pb-4 border-b border-border/40">
-          <DialogTitle>Edit saved meal</DialogTitle>
+        <DialogHeader className="px-5 pt-5 pb-4 border-b border-border/40 shrink-0">
+          <DialogTitle>{meal ? 'Edit saved meal' : 'New saved meal'}</DialogTitle>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-          {/* Name */}
+        {/* Scrollable ingredient list */}
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4 min-h-0">
+          {/* Name + meal type */}
           <div className="space-y-1.5">
             <Label>Meal name</Label>
             <Input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Morning Smoothie" />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Meal type</Label>
+            <Select value={mealType} onValueChange={(v) => setMealType(v as MealType)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {MEAL_TYPES.map((t) => (
+                  <SelectItem key={t} value={t}>{mealTypeLabel(t)}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Ingredients */}
@@ -2381,7 +2586,7 @@ function EditSavedMealModal({
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Ingredients</p>
               {totalMacros && (
                 <span className="font-data text-xs text-muted-foreground/70">
-                  {Math.round(totalMacros.calories)} kcal · {Math.round(totalMacros.protein_g)}g P · {Math.round(totalMacros.carbs_g)}g C · {Math.round(totalMacros.fat_g)}g F
+                  {fmtMacro(totalMacros.calories)} kcal · {fmtMacro(totalMacros.protein_g)}g P · {fmtMacro(totalMacros.carbs_g)}g C · {fmtMacro(totalMacros.fat_g)}g F
                 </span>
               )}
             </div>
@@ -2426,59 +2631,224 @@ function EditSavedMealModal({
               </div>
             )}
           </div>
-
-          {/* Add ingredient search */}
-          <div className="space-y-1.5">
-            <Label>Add ingredient</Label>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-              <Input
-                ref={queryRef}
-                placeholder="Search food…"
-                value={query}
-                onChange={e => setQuery(e.target.value)}
-                onFocus={() => { if (query.trim() && suggestions.length > 0) setShowSugg(true) }}
-                className="pl-9"
-              />
-              {query && (
-                <button
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  onClick={() => { setQuery(''); setShowSugg(false) }}
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              )}
-              {showSugg && suggestions.length > 0 && (
-                <>
-                  <div className="fixed inset-0 z-40" onClick={() => setShowSugg(false)} />
-                  <div className="absolute left-0 right-0 top-full z-50 mt-1 rounded-xl border border-border bg-background shadow-lg overflow-hidden">
-                    {suggestions.map(item => (
-                      <button
-                        key={item.id}
-                        className="w-full px-3 py-2.5 text-left hover:bg-muted/40 transition-colors border-b border-border/30 last:border-0"
-                        onClick={() => addFood(item)}
-                      >
-                        <p className="text-sm font-medium truncate">{item.name}</p>
-                        <div className="flex items-center gap-1.5 mt-0.5">
-                          <span className="font-data text-xs text-muted-foreground">{fmtMacro(item.macros_per_serving.calories)} kcal</span>
-                          <span className="text-[10px] text-border/50">·</span>
-                          <span className="font-data text-xs text-emerald-500/80">{fmtMacro(item.macros_per_serving.protein_g)}g P</span>
-                          <span className="text-[10px] text-border/50">·</span>
-                          <span className="font-data text-xs text-muted-foreground">{fmtMacro(item.macros_per_serving.carbs_g)}g C</span>
-                          <span className="text-[10px] text-border/50">·</span>
-                          <span className="font-data text-xs text-muted-foreground">{fmtMacro(item.macros_per_serving.fat_g)}g F</span>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
         </div>
 
-        <div className="px-5 py-4 border-t border-border/40">
-          <Button onClick={handleSave} className="w-full" variant="brand">Update saved meal</Button>
+        {/* Sticky add-ingredient section */}
+        <div className="shrink-0 border-t border-border/40 px-5 pt-3 pb-2 space-y-2 bg-background">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Add ingredient</p>
+
+          {/* Mode toggle */}
+          <div className="flex border border-border/60 rounded-lg p-0.5 bg-muted/30">
+            <button
+              onClick={() => setIngredientMode('search')}
+              className={`flex-1 py-1.5 px-3 rounded-md text-xs font-medium transition-colors ${
+                ingredientMode === 'search'
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              Search
+            </button>
+            <button
+              onClick={() => setIngredientMode('manual')}
+              className={`flex-1 py-1.5 px-3 rounded-md text-xs font-medium transition-colors ${
+                ingredientMode === 'manual'
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              Manual
+            </button>
+          </div>
+
+          {ingredientMode === 'search' ? (
+            <>
+              {/* Search input */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                <Input
+                  ref={queryRef}
+                  placeholder="Search food…"
+                  value={query}
+                  onChange={e => { setQuery(e.target.value); setPendingFood(null) }}
+                  onFocus={() => { if (query.trim() && suggestions.length > 0) setShowSugg(true) }}
+                  className="pl-9"
+                />
+                {query && (
+                  <button
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    onClick={() => { setQuery(''); setShowSugg(false); setPendingFood(null) }}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+                {showSugg && suggestions.length > 0 && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setShowSugg(false)} />
+                    <div className="absolute left-0 right-0 bottom-full z-50 mb-1 rounded-xl border border-border bg-background shadow-lg overflow-hidden max-h-48 overflow-y-auto">
+                      {suggestions.map(item => (
+                        <button
+                          key={item.id}
+                          className="w-full px-3 py-2.5 text-left hover:bg-muted/40 transition-colors border-b border-border/30 last:border-0"
+                          onClick={() => selectFood(item)}
+                        >
+                          <p className="text-sm font-medium truncate">{item.name}</p>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className="font-data text-xs text-muted-foreground">{fmtMacro(item.macros_per_serving.calories)} kcal</span>
+                            <span className="text-[10px] text-border/50">·</span>
+                            <span className="font-data text-xs text-emerald-500/80">{fmtMacro(item.macros_per_serving.protein_g)}g P</span>
+                            <span className="text-[10px] text-border/50">·</span>
+                            <span className="font-data text-xs text-muted-foreground">{fmtMacro(item.macros_per_serving.carbs_g)}g C</span>
+                            <span className="text-[10px] text-border/50">·</span>
+                            <span className="font-data text-xs text-muted-foreground">{fmtMacro(item.macros_per_serving.fat_g)}g F</span>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Pending item: adjust amount before adding */}
+              {pendingFood && (
+                <div className="flex items-center gap-2 rounded-lg border border-border/50 bg-muted/20 px-3 py-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium truncate">{pendingFood.name}</p>
+                  </div>
+                  <Input
+                    ref={pendingAmountRef}
+                    type="number"
+                    min={0}
+                    step="any"
+                    value={pendingAmount}
+                    onChange={e => setPendingAmount(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') confirmPendingFood() }}
+                    className="h-7 w-20 text-xs"
+                  />
+                  <Select value={pendingUnit} onValueChange={setPendingUnit}>
+                    <SelectTrigger className="h-7 w-16 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {pendingFood ? getAvailableUnits(pendingFood).map(unit => (
+                        <SelectItem key={unit} value={unit}>{unit}</SelectItem>
+                      )) : ['g', 'oz', 'cup', 'tbsp', 'tsp', 'piece', 'slice'].map(unit => (
+                        <SelectItem key={unit} value={unit}>{unit}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button size="sm" className="h-7 px-3 text-xs" onClick={confirmPendingFood}>Add</Button>
+                  <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0" onClick={() => setPendingFood(null)}>
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              {/* Manual ingredient form - matching existing design */}
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="flex flex-col">
+                    <label htmlFor="manual-ingredient-name" className="text-xs text-muted-foreground mb-1">Ingredient name</label>
+                    <Input
+                      id="manual-ingredient-name"
+                      placeholder="e.g. Chicken Breast"
+                      value={manualIngName}
+                      onChange={e => setManualIngName(e.target.value)}
+                      className="text-sm"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <div className="flex flex-col flex-grow">
+                      <label htmlFor="manual-amount" className="text-xs text-muted-foreground mb-1">Amount</label>
+                      <Input
+                        id="manual-amount"
+                        type="number"
+                        value={manualIngAmount}
+                        onChange={e => setManualIngAmount(e.target.value)}
+                        className="text-sm"
+                      />
+                    </div>
+                    <div className="flex flex-col justify-end">
+                      <Select value={manualIngUnit} onValueChange={setManualIngUnit}>
+                        <SelectTrigger className="w-20 text-sm">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {getAvailableUnits({
+                            id: 'manual',
+                            name: manualIngName,
+                            aliases: [],
+                            default_serving_amount: 1,
+                            default_serving_unit: 'g',
+                            default_serving_label: '1 g',
+                            macros_per_serving: { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 }
+                          }).map(unit => (
+                            <SelectItem key={unit} value={unit}>{unit}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </div>
+                <div className="grid grid-cols-4 gap-2">
+                  <div className="flex flex-col">
+                    <label htmlFor="manual-calories" className="text-xs text-muted-foreground mb-1">Calories</label>
+                    <Input
+                      id="manual-calories"
+                      type="number"
+                      value={manualIngCalories}
+                      onChange={e => setManualIngCalories(e.target.value)}
+                      className="text-sm"
+                    />
+                  </div>
+                  <div className="flex flex-col">
+                    <label htmlFor="manual-protein" className="text-xs text-muted-foreground mb-1">Protein (g)</label>
+                    <Input
+                      id="manual-protein"
+                      type="number"
+                      value={manualIngProtein}
+                      onChange={e => setManualIngProtein(e.target.value)}
+                      className="text-sm"
+                    />
+                  </div>
+                  <div className="flex flex-col">
+                    <label htmlFor="manual-carbs" className="text-xs text-muted-foreground mb-1">Carbs (g)</label>
+                    <Input
+                      id="manual-carbs"
+                      type="number"
+                      value={manualIngCarbs}
+                      onChange={e => setManualIngCarbs(e.target.value)}
+                      className="text-sm"
+                    />
+                  </div>
+                  <div className="flex flex-col">
+                    <label htmlFor="manual-fat" className="text-xs text-muted-foreground mb-1">Fat (g)</label>
+                    <Input
+                      id="manual-fat"
+                      type="number"
+                      value={manualIngFat}
+                      onChange={e => setManualIngFat(e.target.value)}
+                      className="text-sm"
+                    />
+                  </div>
+                </div>
+                <Button
+                  onClick={addManualIngredient}
+                  disabled={!manualIngName.trim() || !manualIngCalories || !manualIngAmount}
+                  className="w-full"
+                  size="sm"
+                >
+                  Add Manual Ingredient
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="px-5 py-4 border-t border-border/40 shrink-0">
+          <Button onClick={handleSave} className="w-full" variant="brand">{meal ? 'Update saved meal' : 'Save meal'}</Button>
         </div>
       </DialogContent>
     </Dialog>
@@ -2520,6 +2890,10 @@ export default function MealsPage() {
   const [editingSavedMeal, setEditingSavedMeal] = useState<SavedMealTemplate | null>(null)
   const [editSavedMealOpen, setEditSavedMealOpen] = useState(false)
   const [savedMealTargets, setSavedMealTargets] = useState<Partial<Record<string, MealType>>>({})
+  const [expandedSavedMeals, setExpandedSavedMeals] = useState<Record<string, boolean>>({})
+  const [savedMealSearchText, setSavedMealSearchText] = useState('')
+  const [savedMealFilterType, setSavedMealFilterType] = useState<string>('all')
+  const [savedMealFilterTag, setSavedMealFilterTag] = useState<string>('all')
   const [activeTab, setActiveTab] = useState('today')
   // Recipe filter state
   const [recipeFilterType, setRecipeFilterType] = useState<string>('all')
@@ -2529,6 +2903,21 @@ export default function MealsPage() {
   const [liveRecipes, setLiveRecipes] = useState<Recipe[]>([])
   const [liveRecipesLoading, setLiveRecipesLoading] = useState(false)
   const [liveSearchedQuery, setLiveSearchedQuery] = useState('')
+
+  // Debounced recipe search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const q = recipeSearchText.trim()
+      if (q && q.length >= 2 && q !== liveSearchedQuery) {
+        searchLiveRecipes()
+      } else if (!q) {
+        setLiveRecipes([])
+        setLiveSearchedQuery('')
+      }
+    }, 150) // Reduced to 150ms for better responsiveness
+
+    return () => clearTimeout(timer)
+  }, [recipeSearchText])
   // Grocery list state
   const [addItemOpen, setAddItemOpen] = useState(false)
   const [newItemName, setNewItemName] = useState('')
@@ -2756,7 +3145,7 @@ export default function MealsPage() {
 
   function addCustomIngredient() {
     const name = customIngName.trim()
-    const amount = parseFloat(customIngAmount)
+    const amount = parseFraction(customIngAmount)
     if (!name || isNaN(amount) || amount <= 0) return
     setCustomIngredients(prev => [...prev, { name, amount, unit: customIngUnit }])
     setCustomIngName('')
@@ -2831,6 +3220,11 @@ export default function MealsPage() {
     setEditSavedMealOpen(true)
   }
 
+  const openNewSavedMeal = () => {
+    setEditingSavedMeal(null)
+    setEditSavedMealOpen(true)
+  }
+
   const handleSaveMeal = (data: Omit<MealLogEntry, 'id'>) => {
     if (editingMeal) {
       updateMealEntry(today, editingMeal.id, data)
@@ -2894,10 +3288,6 @@ export default function MealsPage() {
 
   if (!user) return null
 
-  // Calorie progress %
-  const calProgress = user.calorie_target > 0 ? Math.min(100, Math.round((todayTotals.calories / user.calorie_target) * 100)) : 0
-  const proteinProgress = user.protein_target_g > 0 ? Math.min(100, Math.round((todayTotals.protein_g / user.protein_target_g) * 100)) : 0
-
   return (
     <div className="space-y-7">
       {/* Header */}
@@ -2919,27 +3309,22 @@ export default function MealsPage() {
           </div>
         </div>
 
-        {/* Macro snapshot bar */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {[
-            { label: 'Calories', value: todayTotals.calories, target: user.calorie_target, unit: 'kcal', bar: 'bg-emerald-500', progress: calProgress },
-            { label: 'Protein', value: todayTotals.protein_g, target: user.protein_target_g, unit: 'g', bar: 'bg-emerald-500', progress: proteinProgress },
-            { label: 'Carbs', value: todayTotals.carbs_g, target: null, unit: 'g', bar: 'bg-emerald-400', progress: null },
-            { label: 'Fat', value: todayTotals.fat_g, target: null, unit: 'g', bar: 'bg-emerald-300', progress: null },
-          ].map((stat) => (
-            <div key={stat.label} className="bg-card border border-border/50 rounded-xl p-4">
-              <div className="flex items-baseline justify-between mb-2">
-                <p className="font-data text-2xl font-bold leading-none tabular-nums">{stat.value}</p>
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{stat.unit}</p>
-              </div>
-              <p className="text-xs text-muted-foreground mb-2">{stat.label}{stat.target ? ` · ${stat.target} target` : ''}</p>
-              {stat.progress !== null && (
-                <div className="h-0.5 bg-muted rounded-full overflow-hidden">
-                  <div className={`h-full ${stat.bar} rounded-full transition-all duration-700`} style={{ width: `${stat.progress}%` }} />
-                </div>
-              )}
-            </div>
-          ))}
+        {/* Macro snapshot bar - simplified */}
+        <div className="flex gap-4 sm:gap-6">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">Calories</span>
+            <span className="font-data text-lg font-semibold tabular-nums">{todayTotals.calories}</span>
+            {user.calorie_target > 0 && (
+              <span className="text-xs text-muted-foreground">/ {user.calorie_target}</span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">Protein</span>
+            <span className="font-data text-lg font-semibold text-emerald-500 tabular-nums">{todayTotals.protein_g}g</span>
+            {user.protein_target_g > 0 && (
+              <span className="text-xs text-muted-foreground">/ {user.protein_target_g}g</span>
+            )}
+          </div>
         </div>
       </div>
 
@@ -2968,6 +3353,53 @@ export default function MealsPage() {
         </div>
 
         <TabsContent value="saved" className="mt-6 space-y-4">
+          {/* Search + New button */}
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+              <Input
+                placeholder="Search saved meals…"
+                value={savedMealSearchText}
+                onChange={e => setSavedMealSearchText(e.target.value)}
+                className="h-9 pl-9 pr-8"
+              />
+              {savedMealSearchText && (
+                <button type="button" onClick={() => setSavedMealSearchText('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+            <Button variant="brand" size="sm" className="gap-1.5 shrink-0" onClick={openNewSavedMeal}>
+              <Plus className="w-3.5 h-3.5" />
+              New Saved Meal
+            </Button>
+          </div>
+          {/* Filter dropdowns */}
+          <div className="flex gap-2">
+            <Select value={savedMealFilterType} onValueChange={setSavedMealFilterType}>
+              <SelectTrigger className="h-8 w-36 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All types</SelectItem>
+                <SelectItem value="breakfast">Breakfast</SelectItem>
+                <SelectItem value="lunch">Lunch</SelectItem>
+                <SelectItem value="dinner">Dinner</SelectItem>
+                <SelectItem value="snack">Snack</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={savedMealFilterTag} onValueChange={setSavedMealFilterTag}>
+              <SelectTrigger className="h-8 w-40 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All filters</SelectItem>
+                <SelectItem value="high-protein">High protein</SelectItem>
+                <SelectItem value="low-calorie">Low calorie</SelectItem>
+                <SelectItem value="low-carb">Low carb</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           {savedMeals.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 border border-dashed border-border/60 rounded-xl">
               <div className="w-12 h-12 rounded-2xl bg-muted/50 flex items-center justify-center mb-4">
@@ -2980,14 +3412,29 @@ export default function MealsPage() {
                 Build a Meal
               </Button>
             </div>
-          ) : (
+          ) : (() => {
+            const filteredSavedMeals = savedMeals.filter(m => {
+              const matchesSearch = !savedMealSearchText.trim() || m.name.toLowerCase().includes(savedMealSearchText.toLowerCase())
+              const matchesType = savedMealFilterType === 'all' || m.meal_type === savedMealFilterType
+              const matchesTag = savedMealFilterTag === 'all' ||
+                (savedMealFilterTag === 'high-protein' && m.macros.protein_g >= 25) ||
+                (savedMealFilterTag === 'low-calorie' && m.macros.calories <= 400) ||
+                (savedMealFilterTag === 'low-carb' && m.macros.carbs_g <= 20)
+              return matchesSearch && matchesType && matchesTag
+            })
+            return filteredSavedMeals.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-10 border border-dashed border-border/60 rounded-xl">
+                <p className="text-sm text-muted-foreground">No saved meals match your filters</p>
+              </div>
+            ) : (
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {savedMeals.map((meal) => (
+              {filteredSavedMeals.map((meal) => (
                 (() => {
                   const type = mealTypePresentation(meal.meal_type)
                   const selectedTarget = savedMealTargets[meal.id] ?? meal.meal_type
                   const selectedTargetType = mealTypePresentation(selectedTarget)
                   const MealTypeIcon = type.icon
+                  const isExpanded = expandedSavedMeals[meal.id] || false
 
                   return (
                     <div
@@ -3034,71 +3481,72 @@ export default function MealsPage() {
                           ))}
                         </div>
 
-                        <div className="mt-4 flex flex-wrap gap-1.5">
-                          {meal.items.slice(0, 3).map((item, idx) => (
-                            <span key={idx} className="max-w-[140px] truncate rounded-full border border-border/50 bg-muted/20 px-2.5 py-1 text-[10px] text-muted-foreground">
-                              {item.matched_name}
-                            </span>
-                          ))}
-                          {meal.items.length > 3 && (
-                            <span className="rounded-full border border-border/50 bg-muted/20 px-2.5 py-1 text-[10px] text-muted-foreground">
-                              +{meal.items.length - 3} more
-                            </span>
-                          )}
-                          {meal.items.length === 0 && (
-                            <span className="rounded-full border border-dashed border-border/50 bg-transparent px-2.5 py-1 text-[10px] text-muted-foreground">
-                              Quick template
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="mt-5 rounded-2xl border border-border/60 bg-muted/10 p-3.5">
-                          <div className="mb-2 flex items-center justify-between gap-3">
-                            <div>
-                              <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Add To Today</p>
-                              <p className="text-xs text-muted-foreground">Choose the meal slot before adding it.</p>
-                            </div>
-                            <Badge variant="outline" className={`capitalize ${selectedTargetType.chip}`}>
-                              {selectedTargetType.label}
-                            </Badge>
-                          </div>
-                          <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
-                            <Select
-                              value={selectedTarget}
-                              onValueChange={(value) => setSavedMealTargets((current) => ({ ...current, [meal.id]: value as MealType }))}
+                        {/* Expandable ingredients */}
+                        {meal.items.length > 0 && (
+                          <div className="mt-4">
+                            <button
+                              type="button"
+                              onClick={() => setExpandedSavedMeals(prev => ({ ...prev, [meal.id]: !prev[meal.id] }))}
+                              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
                             >
-                              <SelectTrigger className="bg-background">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {MEAL_TYPES.map((typeOption) => (
-                                  <SelectItem key={typeOption} value={typeOption}>
-                                    {mealTypeLabel(typeOption)}
-                                  </SelectItem>
+                              <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-150 ${isExpanded ? 'rotate-180' : ''}`} />
+                              {isExpanded ? 'Hide' : 'Show'} ingredients ({meal.items.length})
+                            </button>
+                            {isExpanded && (
+                              <div className="mt-2 rounded-lg border border-border/40 divide-y divide-border/30">
+                                {meal.items.map((item, idx) => (
+                                  <div key={idx} className="px-3 py-2">
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span className="text-xs font-medium text-foreground/80 truncate">{item.matched_name}</span>
+                                      {item.amount != null && (
+                                        <span className="font-data text-[10px] text-muted-foreground/60 shrink-0">{item.amount}{item.unit}</span>
+                                      )}
+                                    </div>
+                                    {item.macros && (
+                                      <p className="font-data text-[10px] tabular-nums text-muted-foreground/55 mt-0.5">
+                                        {item.macros.calories} kcal · <span className="text-emerald-500/70">{item.macros.protein_g}g P</span> · {item.macros.carbs_g}g C · {item.macros.fat_g}g F
+                                      </p>
+                                    )}
+                                  </div>
                                 ))}
-                              </SelectContent>
-                            </Select>
-                            <Button size="sm" variant="outline" className="px-4" onClick={() => handleAddSavedMealToToday(meal)}>
-                              Add
-                            </Button>
+                              </div>
+                            )}
                           </div>
-                        </div>
+                        )}
+                      </div>
 
-                        <div className="mt-3 flex items-center gap-2 border-t border-border/50 pt-3">
-                          <Button size="sm" variant="outline" className="flex-1 text-xs" onClick={() => openEditSavedMeal(meal)}>
-                            Edit saved meal
-                          </Button>
-                          <Button size="sm" variant="ghost" className="text-xs text-destructive/60 hover:text-destructive" onClick={() => handleDeleteSavedMealTemplate(meal.id)}>
-                            Delete
-                          </Button>
-                        </div>
+                      <div className="px-4 pb-4 pt-3 flex items-center gap-2 border-t border-border/20">
+                        <Select
+                          value={selectedTarget}
+                          onValueChange={(v) => setSavedMealTargets(prev => ({ ...prev, [meal.id]: v as MealType }))}
+                        >
+                          <SelectTrigger className="h-8 text-xs flex-1">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {MEAL_TYPES.map((t) => (
+                              <SelectItem key={t} value={t}>{mealTypeLabel(t)}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Button variant="brand" size="sm" className="gap-1.5 text-xs h-8 shrink-0" onClick={() => handleAddSavedMealToToday(meal)}>
+                          <Plus className="w-3 h-3" />
+                          Add
+                        </Button>
+                        <Button variant="ghost" size="icon-sm" className="h-8 w-8 text-muted-foreground hover:text-foreground" onClick={() => openEditSavedMeal(meal)}>
+                          <Pencil className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button variant="ghost" size="icon-sm" className="h-8 w-8 text-destructive/60 hover:text-destructive" onClick={() => handleDeleteSavedMealTemplate(meal.id)}>
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
                       </div>
                     </div>
                   )
                 })()
               ))}
             </div>
-          )}
+          )
+        })()}
         </TabsContent>
 
         {/* Today log tab */}
@@ -3116,42 +3564,26 @@ export default function MealsPage() {
               { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 }
             )
 
-            type MealItem = NonNullable<MealLogEntry['meal_items']>[number]
-            type FlatRow =
-              | { kind: 'meal'; meal: MealLogEntry; isExpandable: boolean }
-              | { kind: 'flat-item'; meal: MealLogEntry; item: MealItem; itemIdx: number }
-
-            const rows: FlatRow[] = meals.flatMap((meal): FlatRow[] => {
-              const isExpandable = !!meal.recipe || meal.entry_source === 'saved'
-              if (!isExpandable && meal.meal_items && meal.meal_items.length > 0) {
-                return meal.meal_items.map((item, itemIdx): FlatRow => ({
-                  kind: 'flat-item',
-                  meal,
-                  item,
-                  itemIdx,
-                }))
-              }
-              return [{ kind: 'meal', meal, isExpandable }]
-            })
+            const rows = meals.map((meal) => ({
+              meal,
+              isExpandable: !!meal.recipe || meal.entry_source === 'saved',
+            }))
 
             return (
               <div key={mealType} className="bg-card border border-border/20 rounded-xl overflow-hidden">
                 {/* Section header */}
                 <div className="flex items-center justify-between px-4 py-3 border-b border-border/20">
                   <div className="flex items-center gap-3">
-                    <div className={`w-2 h-2 rounded-full ${theme.badge.split(' ')[0]}`} />
-                    <span className="font-semibold text-sm">{mealTypeLabel(mealType)}</span>
-                    {meals.length > 0 && (
-                      <span className="font-data text-xs text-muted-foreground/50 flex gap-1.5 items-center">
-                        <span>{totalMacros.calories} kcal</span>
-                        <span className="opacity-40">·</span>
-                        <span>{totalMacros.protein_g}g P</span>
-                        <span className="opacity-40">·</span>
-                        <span>{totalMacros.carbs_g}g C</span>
-                        <span className="opacity-40">·</span>
-                        <span>{totalMacros.fat_g}g F</span>
-                      </span>
-                    )}
+                    <div>
+                      <h3 className="font-display font-black text-2xl sm:text-3xl tracking-tight leading-none text-foreground [text-shadow:0_4px_18px_rgba(24,180,81,0.55)] underline decoration-primary decoration-[3px] underline-offset-[5px]">
+                        {mealTypeLabel(mealType)}
+                      </h3>
+                      {meals.length > 0 && (
+                        <p className="font-data text-[11px] tabular-nums text-muted-foreground/70 mt-2">
+                          {totalMacros.calories} kcal · {totalMacros.protein_g}g P · {totalMacros.carbs_g}g C · {totalMacros.fat_g}g F
+                        </p>
+                      )}
+                    </div>
                   </div>
                   <Button variant="ghost" size="sm" className="h-7 gap-1.5 text-xs text-muted-foreground hover:text-foreground" onClick={() => openAdd(mealType)}>
                     <Plus className="w-3.5 h-3.5" />
@@ -3170,43 +3602,8 @@ export default function MealsPage() {
                   </button>
                 ) : (
                   <div>
-                    {rows.map((row, rowIdx) => {
+                    {rows.map(({ meal, isExpandable }, rowIdx) => {
                       const borderClass = rowIdx < rows.length - 1 ? 'border-b border-border/20' : ''
-
-                      if (row.kind === 'flat-item') {
-                        return (
-                          <div key={`${row.meal.id}-flat-${row.itemIdx}`} className={`flex items-center gap-3 px-4 py-2.5 hover:bg-muted/20 transition-colors group ${borderClass}`}>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium text-foreground leading-tight">{row.item.name}</p>
-                              <div className="flex items-center gap-1.5 mt-0.5">
-                                {row.item.amount != null && (
-                                  <>
-                                    <span className="text-[11px] font-data text-muted-foreground/40">{row.item.amount}{row.item.unit}</span>
-                                    <span className="text-[11px] text-border/40">·</span>
-                                  </>
-                                )}
-                                <span className="text-[11px] font-data text-muted-foreground/55">{row.item.macros.calories} kcal</span>
-                                <span className="text-[11px] text-border/40">·</span>
-                                <span className="text-[11px] font-data text-muted-foreground/55">{row.item.macros.protein_g}g P</span>
-                                <span className="text-[11px] text-border/40">·</span>
-                                <span className="text-[11px] font-data text-muted-foreground/55">{row.item.macros.carbs_g}g C</span>
-                                <span className="text-[11px] text-border/40">·</span>
-                                <span className="text-[11px] font-data text-muted-foreground/55">{row.item.macros.fat_g}g F</span>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <Button size="icon-sm" variant="ghost" className="h-7 w-7" onClick={() => openEdit(row.meal)}>
-                                <Pencil className="w-3.5 h-3.5" />
-                              </Button>
-                              <Button size="icon-sm" variant="ghost" className="h-7 w-7 text-destructive/60 hover:text-destructive" onClick={() => handleDeleteMeal(row.meal.id)}>
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </Button>
-                            </div>
-                          </div>
-                        )
-                      }
-
-                      const { meal, isExpandable } = row
                       const expanded = expandedMeals[meal.id] || false
                       return (
                         <div key={meal.id} className={`flex flex-col px-4 py-3 hover:bg-muted/20 transition-colors group ${borderClass}`}>
@@ -3217,21 +3614,15 @@ export default function MealsPage() {
                                   className="flex items-center gap-1.5 text-left"
                                   onClick={() => setExpandedMeals(prev => ({ ...prev, [meal.id]: !prev[meal.id] }))}
                                 >
-                                  <span className="text-sm font-semibold text-foreground">{meal.name}</span>
-                                  <ChevronDown className={`w-3.5 h-3.5 flex-shrink-0 text-muted-foreground/50 transition-transform duration-150 ${expanded ? 'rotate-180' : ''}`} />
+                                  <span className="font-semibold text-base text-foreground leading-snug">{meal.name}</span>
+                                  <ChevronDown className={`w-3.5 h-3.5 flex-shrink-0 text-muted-foreground/40 transition-transform duration-150 ${expanded ? 'rotate-180' : ''}`} />
                                 </button>
                               ) : (
-                                <p className="text-sm font-semibold text-foreground">{meal.name}</p>
+                                <p className="font-semibold text-base text-foreground leading-snug">{meal.name}</p>
                               )}
-                              <div className="flex items-center gap-1.5 mt-0.5">
-                                <span className="text-[11px] font-data text-muted-foreground/55">{meal.macros.calories} kcal</span>
-                                <span className="text-[11px] text-border/40">·</span>
-                                <span className="text-[11px] font-data text-muted-foreground/55">{meal.macros.protein_g}g P</span>
-                                <span className="text-[11px] text-border/40">·</span>
-                                <span className="text-[11px] font-data text-muted-foreground/55">{meal.macros.carbs_g}g C</span>
-                                <span className="text-[11px] text-border/40">·</span>
-                                <span className="text-[11px] font-data text-muted-foreground/55">{meal.macros.fat_g}g F</span>
-                              </div>
+                              <p className="font-data text-[11px] tabular-nums text-muted-foreground/65 mt-0.5">
+                                {meal.macros.calories} kcal · <span className="text-emerald-500/70">{meal.macros.protein_g}g P</span> · {meal.macros.carbs_g}g C · {meal.macros.fat_g}g F
+                              </p>
                             </div>
                             <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                               <Button size="icon-sm" variant="ghost" className="h-7 w-7" onClick={() => openEdit(meal)}>
@@ -3242,30 +3633,37 @@ export default function MealsPage() {
                               </Button>
                             </div>
                           </div>
-                          {/* Expanded ingredients for saved meals and recipes */}
-                          {isExpandable && expanded && meal.meal_items && meal.meal_items.length > 0 && (
+                          {/* Expanded ingredients */}
+                          {isExpandable && expanded && (
                             <div className="mt-2 ml-1 space-y-1.5 pl-3 border-l border-border/30">
-                              {meal.meal_items.map((item, itemIndex) => (
-                                <div key={`${meal.id}-item-${itemIndex}`}>
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="text-xs font-medium text-foreground/70 leading-tight">{item.name}</span>
-                                    {item.amount != null && (
-                                      <span className="text-[11px] font-data text-muted-foreground/40">{item.amount}{item.unit}</span>
+                              {meal.recipe ? (
+                                // Show recipe ingredients
+                                meal.recipe.ingredients.map((ingredient, ingredientIndex) => (
+                                  <div key={`${meal.id}-recipe-ingredient-${ingredientIndex}`}>
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-xs text-foreground/80 leading-tight">{ingredient.name}</span>
+                                      <span className="font-data text-[10px] text-muted-foreground/55">{ingredient.amount} {ingredient.unit}</span>
+                                    </div>
+                                  </div>
+                                ))
+                              ) : meal.meal_items && meal.meal_items.length > 0 ? (
+                                // Show meal items (for saved meals)
+                                meal.meal_items.map((item, itemIndex) => (
+                                  <div key={`${meal.id}-item-${itemIndex}`}>
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-xs text-foreground/80 leading-tight">{item.name}</span>
+                                      {item.amount != null && (
+                                        <span className="font-data text-[10px] text-muted-foreground/55">{item.amount}{item.unit}</span>
+                                      )}
+                                    </div>
+                                    {item.macros.calories > 0 && (
+                                      <p className="font-data text-[10px] tabular-nums text-muted-foreground/55 mt-0.5">
+                                        {item.macros.calories} kcal · {item.macros.protein_g}g P · {item.macros.carbs_g}g C · {item.macros.fat_g}g F
+                                      </p>
                                     )}
                                   </div>
-                                  {item.macros.calories > 0 && (
-                                    <div className="flex items-center gap-1.5 mt-0.5">
-                                      <span className="text-[11px] font-data text-muted-foreground/50">{item.macros.calories} kcal</span>
-                                      <span className="text-[11px] text-border/30">·</span>
-                                      <span className="text-[11px] font-data text-muted-foreground/50">{item.macros.protein_g}g P</span>
-                                      <span className="text-[11px] text-border/30">·</span>
-                                      <span className="text-[11px] font-data text-muted-foreground/50">{item.macros.carbs_g}g C</span>
-                                      <span className="text-[11px] text-border/30">·</span>
-                                      <span className="text-[11px] font-data text-muted-foreground/50">{item.macros.fat_g}g F</span>
-                                    </div>
-                                  )}
-                                </div>
-                              ))}
+                                ))
+                              ) : null}
                             </div>
                           )}
                         </div>
@@ -3281,79 +3679,76 @@ export default function MealsPage() {
         {/* Recipe Library Tab */}
         <TabsContent value="recipes" className="mt-6 space-y-4">
           {/* Search bar with live search button + create recipe */}
-          <div className="flex gap-2">
-            <div className="relative flex-1">
+          <div className="space-y-2">
+            <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
               <Input
                 placeholder="Search recipes…"
                 value={recipeSearchText}
                 onChange={e => { setRecipeSearchText(e.target.value); if (!e.target.value) { setLiveRecipes([]); setLiveSearchedQuery('') } }}
+                onFocus={e => e.target.select()}
                 onKeyDown={e => { if (e.key === 'Enter') searchLiveRecipes() }}
-                className="h-9 pl-9"
+                className="h-9 pl-9 pr-8"
               />
+              {recipeSearchText && (
+                <button type="button" onClick={() => { setRecipeSearchText(''); setLiveRecipes([]); setLiveSearchedQuery('') }} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
-            <Button
-              size="sm"
-              variant="outline"
-              className="gap-1.5 shrink-0"
-              onClick={searchLiveRecipes}
-              disabled={!recipeSearchText.trim() || liveRecipesLoading}
-            >
-              {liveRecipesLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Globe className="w-3.5 h-3.5" />}
-              Search live
-            </Button>
-            <Button
-              size="sm"
-              variant="brand"
-              className="gap-1.5 shrink-0"
-              onClick={() => setCreateRecipeOpen(true)}
-            >
-              <Plus className="w-3.5 h-3.5" />
-              Create Recipe
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1.5 flex-1"
+                onClick={searchLiveRecipes}
+                disabled={!recipeSearchText.trim() || liveRecipesLoading}
+              >
+                {liveRecipesLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Globe className="w-3.5 h-3.5" />}
+                Search live
+              </Button>
+              <Button
+                size="sm"
+                variant="brand"
+                className="gap-1.5 flex-1"
+                onClick={() => setCreateRecipeOpen(true)}
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Create Recipe
+              </Button>
+            </div>
           </div>
 
           <CreateRecipeDialog open={createRecipeOpen} onOpenChange={setCreateRecipeOpen} />
           {/* Filter row */}
-          <div className="flex flex-wrap gap-2">
-            {/* Meal type pills */}
-            {(['all', 'breakfast', 'lunch', 'dinner', 'snack'] as const).map(t => (
-              <button
-                key={t}
-                onClick={() => setRecipeFilterType(t)}
-                className={`px-3 py-1 rounded-full text-xs font-medium border transition-all ${
-                  recipeFilterType === t
-                    ? 'bg-primary text-primary-foreground border-primary'
-                    : 'bg-muted/40 text-muted-foreground border-border/50 hover:text-foreground hover:border-border'
-                }`}
-              >
-                {t === 'all' ? 'All types' : t.charAt(0).toUpperCase() + t.slice(1)}
-              </button>
-            ))}
-            <span className="w-px bg-border/50 mx-1 self-stretch" />
-            {/* Tag filters */}
-            {([
-              { id: 'all', label: 'All' },
-              { id: 'high-protein', label: 'High protein' },
-              { id: 'low-calorie', label: 'Low calorie' },
-              { id: 'low-carb', label: 'Low carb' },
-              { id: 'quick', label: 'Quick (<15 min)' },
-              { id: 'vegetarian', label: 'Vegetarian' },
-              { id: 'meal-prep', label: 'Meal prep' },
-              { id: 'high-fiber', label: 'High fiber' },
-            ] as const).map(({ id, label }) => (
-              <button
-                key={id}
-                onClick={() => setRecipeFilterTag(id)}
-                className={`px-3 py-1 rounded-full text-xs font-medium border transition-all ${
-                  recipeFilterTag === id
-                    ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'
-                    : 'bg-muted/40 text-muted-foreground border-border/50 hover:text-foreground hover:border-border'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
+          <div className="flex gap-2">
+            <Select value={recipeFilterType} onValueChange={setRecipeFilterType}>
+              <SelectTrigger className="h-8 w-36 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All types</SelectItem>
+                <SelectItem value="breakfast">Breakfast</SelectItem>
+                <SelectItem value="lunch">Lunch</SelectItem>
+                <SelectItem value="dinner">Dinner</SelectItem>
+                <SelectItem value="snack">Snack</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={recipeFilterTag} onValueChange={setRecipeFilterTag}>
+              <SelectTrigger className="h-8 w-40 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All filters</SelectItem>
+                <SelectItem value="high-protein">High protein</SelectItem>
+                <SelectItem value="low-calorie">Low calorie</SelectItem>
+                <SelectItem value="low-carb">Low carb</SelectItem>
+                <SelectItem value="quick">Quick (&lt;15 min)</SelectItem>
+                <SelectItem value="vegetarian">Vegetarian</SelectItem>
+                <SelectItem value="meal-prep">Meal prep</SelectItem>
+                <SelectItem value="high-fiber">High fiber</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           {/* Live results */}
           {liveRecipes.length > 0 && (
@@ -3383,30 +3778,7 @@ export default function MealsPage() {
                       <RecipeCard recipe={recipe} />
                     </div>
                     <div className="px-4 pb-4">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="w-full text-xs gap-1.5"
-                        onClick={() => {
-                          addMealEntry(today, {
-                            id: `m-${Date.now()}`,
-                            meal_type: recipe.meal_type,
-                            name: recipe.name,
-                            macros: {
-                              calories: recipe.macros.calories,
-                              protein_g: recipe.macros.protein_g,
-                              carbs_g: recipe.macros.carbs_g,
-                              fat_g: recipe.macros.fat_g,
-                            },
-                            time: format(new Date(), 'h:mm a'),
-                            recipe,
-                          })
-                          toast.success(`${recipe.name} added to today's meals.`)
-                        }}
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                        Add to today
-                      </Button>
+                      <AddToTodayButton recipe={recipe} />
                     </div>
                   </motion.div>
                 ))}
@@ -3445,33 +3817,16 @@ export default function MealsPage() {
                       <div onClick={() => setSelectedRecipe(recipe)} className="cursor-pointer">
                         <RecipeCard recipe={recipe} />
                       </div>
-                      <div className="px-4 pb-4 flex gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="flex-1 text-xs gap-1.5"
-                          onClick={() => {
-                            addMealEntry(today, {
-                              id: `m-${Date.now()}`,
-                              meal_type: recipe.meal_type,
-                              name: recipe.name,
-                              macros: { calories: recipe.macros.calories, protein_g: recipe.macros.protein_g, carbs_g: recipe.macros.carbs_g, fat_g: recipe.macros.fat_g },
-                              time: format(new Date(), 'h:mm a'),
-                              recipe,
-                            })
-                            toast.success(`${recipe.name} added to today's meals.`)
-                          }}
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                          Add to today
-                        </Button>
+                      <div className="px-4 pb-4 space-y-1.5">
+                        <AddToTodayButton recipe={recipe} />
                         <Button
                           size="sm"
                           variant="ghost"
-                          className="text-xs text-destructive/60 hover:text-destructive px-3"
+                          className="w-full text-xs text-destructive/60 hover:text-destructive"
                           onClick={() => removeCustomRecipe(recipe.id)}
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          <Trash2 className="w-3.5 h-3.5 mr-1" />
+                          Delete
                         </Button>
                       </div>
                     </motion.div>
@@ -3506,25 +3861,7 @@ export default function MealsPage() {
                   <RecipeCard recipe={recipe} />
                 </div>
                 <div className="px-4 pb-4">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="w-full text-xs gap-1.5"
-                    onClick={() => {
-                      addMealEntry(today, {
-                        id: `m-${Date.now()}`,
-                        meal_type: recipe.meal_type,
-                        name: recipe.name,
-                        macros: { calories: recipe.macros.calories, protein_g: recipe.macros.protein_g, carbs_g: recipe.macros.carbs_g, fat_g: recipe.macros.fat_g },
-                        time: format(new Date(), 'h:mm a'),
-                        recipe,
-                      })
-                      toast.success(`${recipe.name} added to today's meals.`)
-                    }}
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    Add to today
-                  </Button>
+                  <AddToTodayButton recipe={recipe} />
                 </div>
               </motion.div>
             ))}
@@ -4144,10 +4481,8 @@ export default function MealsPage() {
                       className="flex-1 min-w-0"
                     />
                     <Input
-                      type="number"
-                      min="0"
-                      step="any"
-                      placeholder="Amount"
+                      type="text"
+                      placeholder="e.g. 200 or 1/3"
                       value={customIngAmount}
                       onChange={(e) => setCustomIngAmount(e.target.value)}
                       onKeyDown={(e) => e.key === 'Enter' && addCustomIngredient()}
@@ -4156,7 +4491,15 @@ export default function MealsPage() {
                     <Select value={customIngUnit} onValueChange={setCustomIngUnit}>
                       <SelectTrigger className="w-20"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        {['g', 'oz', 'lb', 'ml', 'cup', 'tbsp', 'tsp', 'serving', 'piece', 'slice', 'ground'].map(u => (
+                        {getAvailableUnits({
+                          id: 'manual',
+                          name: customIngName,
+                          aliases: [],
+                          default_serving_amount: 1,
+                          default_serving_unit: 'g',
+                          default_serving_label: '1 g',
+                          macros_per_serving: { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 }
+                        }).map(u => (
                           <SelectItem key={u} value={u}>{u}</SelectItem>
                         ))}
                       </SelectContent>
