@@ -529,7 +529,7 @@ export const useAppStore = create<AppStore>()(
       workoutLogs: [],
       mealEntries: {},
       waterLogs: {},
-      waterUnit: 'ml',
+      waterUnit: 'oz',
       weeklyMealPlan: null,
       groceryList: null,
       streak: 0,

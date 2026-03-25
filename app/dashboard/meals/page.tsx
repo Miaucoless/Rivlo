@@ -8,7 +8,7 @@ import { format, startOfWeek, subDays } from 'date-fns'
 import {
   ChefHat, ShoppingCart, Clock, Users, Flame,
   CheckCircle, Circle, Download, Plus, Zap, Pencil, Trash2, X, CalendarDays,
-  Coffee, Soup, Moon, Cookie, GlassWater, Search, Loader2, Globe, BookOpen, ChevronDown,
+  Coffee, Soup, Moon, Cookie, GlassWater, Search, BookOpen, ChevronDown,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -3253,25 +3253,6 @@ export default function MealsPage() {
   const [recipeFilterType, setRecipeFilterType] = useState<string>('all')
   const [recipeFilterTag, setRecipeFilterTag] = useState<string>('all')
   const [recipeSearchText, setRecipeSearchText] = useState('')
-  // Live recipe search
-  const [liveRecipes, setLiveRecipes] = useState<Recipe[]>([])
-  const [liveRecipesLoading, setLiveRecipesLoading] = useState(false)
-  const [liveSearchedQuery, setLiveSearchedQuery] = useState('')
-
-  // Debounced recipe search
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      const q = recipeSearchText.trim()
-      if (q && q.length >= 2 && q !== liveSearchedQuery) {
-        searchLiveRecipes()
-      } else if (!q) {
-        setLiveRecipes([])
-        setLiveSearchedQuery('')
-      }
-    }, 150) // Reduced to 150ms for better responsiveness
-
-    return () => clearTimeout(timer)
-  }, [recipeSearchText])
   // Grocery list state
   const [addItemOpen, setAddItemOpen] = useState(false)
   const [newItemName, setNewItemName] = useState('')
@@ -3317,22 +3298,6 @@ export default function MealsPage() {
   const groceryProgress = grocery && grocery.items.length > 0
     ? Math.round((grocery.items.filter((i) => i.checked).length / grocery.items.length) * 100)
     : 0
-
-  async function searchLiveRecipes() {
-    const q = recipeSearchText.trim()
-    if (!q || q === liveSearchedQuery) return
-    setLiveRecipesLoading(true)
-    try {
-      const res = await fetch(`/api/recipes?query=${encodeURIComponent(q)}`)
-      const data = await res.json()
-      setLiveRecipes(Array.isArray(data) ? data : [])
-      setLiveSearchedQuery(q)
-    } catch {
-      toast.error('Live recipe search failed.')
-    } finally {
-      setLiveRecipesLoading(false)
-    }
-  }
 
   const filteredRecipes = useMemo(() => {
     let list = RECIPES
@@ -4032,45 +3997,31 @@ export default function MealsPage() {
 
         {/* Recipe Library Tab */}
         <TabsContent value="recipes" className="mt-6 space-y-4">
-          {/* Search bar with live search button + create recipe */}
-          <div className="space-y-2">
-            <div className="relative">
+          {/* Search + create recipe */}
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
               <Input
                 placeholder="Search recipes…"
                 value={recipeSearchText}
-                onChange={e => { setRecipeSearchText(e.target.value); if (!e.target.value) { setLiveRecipes([]); setLiveSearchedQuery('') } }}
-                onFocus={e => e.target.select()}
-                onKeyDown={e => { if (e.key === 'Enter') searchLiveRecipes() }}
+                onChange={e => setRecipeSearchText(e.target.value)}
                 className="h-9 pl-9 pr-8"
               />
               {recipeSearchText && (
-                <button type="button" onClick={() => { setRecipeSearchText(''); setLiveRecipes([]); setLiveSearchedQuery('') }} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
+                <button type="button" onClick={() => setRecipeSearchText('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
                   <X className="w-3.5 h-3.5" />
                 </button>
               )}
             </div>
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                className="gap-1.5 flex-1"
-                onClick={searchLiveRecipes}
-                disabled={!recipeSearchText.trim() || liveRecipesLoading}
-              >
-                {liveRecipesLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Globe className="w-3.5 h-3.5" />}
-                Search live
-              </Button>
-              <Button
-                size="sm"
-                variant="brand"
-                className="gap-1.5 flex-1"
-                onClick={() => setCreateRecipeOpen(true)}
-              >
-                <Plus className="w-3.5 h-3.5" />
-                Create Recipe
-              </Button>
-            </div>
+            <Button
+              size="sm"
+              variant="brand"
+              className="gap-1.5 shrink-0"
+              onClick={() => setCreateRecipeOpen(true)}
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Create Recipe
+            </Button>
           </div>
 
           <CreateRecipeDialog open={createRecipeOpen} onOpenChange={setCreateRecipeOpen} />
@@ -4104,45 +4055,6 @@ export default function MealsPage() {
               </SelectContent>
             </Select>
           </div>
-          {/* Live results */}
-          {liveRecipes.length > 0 && (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <Globe className="w-3.5 h-3.5 text-emerald-400" />
-                <p className="text-xs font-semibold text-emerald-400">
-                  {liveRecipes.length} live results for &ldquo;{liveSearchedQuery}&rdquo;
-                </p>
-                <button
-                  onClick={() => { setLiveRecipes([]); setLiveSearchedQuery('') }}
-                  className="ml-auto text-xs text-muted-foreground hover:text-foreground"
-                >
-                  Clear
-                </button>
-              </div>
-              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {liveRecipes.map((recipe, idx) => (
-                  <motion.div
-                    key={recipe.id}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.2, delay: idx * 0.03 }}
-                    className="bg-card border border-emerald-500/20 rounded-xl overflow-hidden hover:border-emerald-500/40 transition-all duration-200"
-                  >
-                    <div onClick={() => setSelectedRecipe(recipe)} className="cursor-pointer">
-                      <RecipeCard recipe={recipe} />
-                    </div>
-                    <div className="px-4 pb-4">
-                      <AddToTodayButton recipe={recipe} />
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
-              <div className="border-t border-border/50 pt-2">
-                <p className="text-xs text-muted-foreground">Library recipes below</p>
-              </div>
-            </div>
-          )}
-
           {/* My Recipes (custom) */}
           {customRecipes.length > 0 && (
             <div className="space-y-3">
