@@ -2639,6 +2639,96 @@ const CUSTOM_FOOD_CATALOG: FoodCatalogItem[] = [
   default_serving_label: '1 scoop (26g)',
   grams_per_serving: 26,
   macros_per_serving: { calories: 86, protein_g: 20, carbs_g: 1, fat_g: 0 }
+},
+{
+  id: 'kf-lifeway-plain-lowfat',
+  name: 'Lifeway Kefir – Plain Lowfat',
+  aliases: ['lifeway plain lowfat kefir'],
+  default_serving_amount: 240,
+  default_serving_unit: 'ml',
+  default_serving_label: '1 cup (240 ml)',
+  grams_per_serving: 240,
+  macros_per_serving: {
+    calories: 104,
+    protein_g: 9.2,
+    carbs_g: 12,
+    fat_g: 2.5
+  }
+},
+{
+  id: 'kf-lifeway-strawberry-lowfat',
+  name: 'Lifeway Kefir – Strawberry Lowfat',
+  aliases: ['lifeway strawberry kefir'],
+  default_serving_amount: 240,
+  default_serving_unit: 'ml',
+  default_serving_label: '1 cup (240 ml)',
+  grams_per_serving: 240,
+  macros_per_serving: {
+    calories: 140,
+    protein_g: 8,
+    carbs_g: 20,
+    fat_g: 2
+  }
+},
+{
+  id: 'kf-lifeway-blueberry-lowfat',
+  name: 'Lifeway Kefir – Blueberry Lowfat',
+  aliases: ['lifeway blueberry kefir'],
+  default_serving_amount: 240,
+  default_serving_unit: 'ml',
+  default_serving_label: '1 cup (240 ml)',
+  grams_per_serving: 240,
+  macros_per_serving: {
+    calories: 150,
+    protein_g: 8,
+    carbs_g: 22,
+    fat_g: 2
+  }
+},
+{
+  id: 'kf-lifeway-mixed-berry-lowfat',
+  name: 'Lifeway Kefir – Mixed Berry Lowfat',
+  aliases: ['lifeway mixed berry kefir'],
+  default_serving_amount: 240,
+  default_serving_unit: 'ml',
+  default_serving_label: '1 cup (240 ml)',
+  grams_per_serving: 240,
+  macros_per_serving: {
+    calories: 150,
+    protein_g: 8,
+    carbs_g: 22,
+    fat_g: 2
+  }
+},
+{
+  id: 'kf-lifeway-pomegranate-lowfat',
+  name: 'Lifeway Kefir – Pomegranate Lowfat',
+  aliases: ['lifeway pomegranate kefir'],
+  default_serving_amount: 240,
+  default_serving_unit: 'ml',
+  default_serving_label: '1 cup (240 ml)',
+  grams_per_serving: 240,
+  macros_per_serving: {
+    calories: 150,
+    protein_g: 8,
+    carbs_g: 22,
+    fat_g: 2
+  }
+},
+{
+  id: 'kf-lifeway-strawberry-banana',
+  name: 'Lifeway Kefir – Strawberry Banana',
+  aliases: ['lifeway strawberry banana kefir'],
+  default_serving_amount: 240,
+  default_serving_unit: 'ml',
+  default_serving_label: '1 cup (240 ml)',
+  grams_per_serving: 240,
+  macros_per_serving: {
+    calories: 140,
+    protein_g: 8,
+    carbs_g: 20,
+    fat_g: 2
+  }
 }
   // 👆 PASTE YOUR FOODS HERE 👆
 ]

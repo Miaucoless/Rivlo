@@ -291,20 +291,6 @@ export default function TrackingPage() {
     }
   }).filter(Boolean) as { date: string; calories: number; protein: number; target: number; protein_target: number }[]
 
-  // Workout frequency
-  const workoutFreqData = Array.from({ length: 8 }, (_, i) => {
-    const weekStart = subDays(new Date(), (7 - i) * 7)
-    const weekEnd = subDays(new Date(), (6 - i) * 7)
-    const count = workoutLogs.filter((w) => {
-      const d = new Date(w.date)
-      return d >= weekStart && d <= weekEnd
-    }).length
-    return {
-      week: format(weekStart, 'MMM d'),
-      workouts: count,
-    }
-  })
-
   // Personal records — derived from actual logged workout sets
   const prMap = new Map<string, { weight: number; date: string }>()
   for (const log of workoutLogs) {
@@ -427,7 +413,6 @@ export default function TrackingPage() {
           <TabsList>
             <TabsTrigger value="weight">Weight</TabsTrigger>
             <TabsTrigger value="nutrition">Nutrition</TabsTrigger>
-            <TabsTrigger value="workouts">Workouts</TabsTrigger>
             <TabsTrigger value="prs">Personal Records</TabsTrigger>
           </TabsList>
 
@@ -617,34 +602,6 @@ export default function TrackingPage() {
               </CardContent>
             </Card>
           </div>
-        </TabsContent>
-
-        {/* Workouts tab */}
-        <TabsContent value="workouts">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm">Weekly Workout Frequency</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div
-                className="overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden -mx-2 px-2"
-                style={{ touchAction: 'pan-x' } as React.CSSProperties}
-              >
-                <div style={{ minWidth: 560 }}>
-                  <ResponsiveContainer width="100%" height={220}>
-                    <BarChart data={workoutFreqData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="week" tick={{ fontSize: 10 }} />
-                      <YAxis tick={{ fontSize: 10 }} domain={[0, 7]} />
-                      <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(16, 185, 129, 0.08)' }} />
-                      <ReferenceLine y={3} stroke="#10b981" strokeDasharray="4 2" label={{ value: 'Goal (3/wk)', position: 'right', fontSize: 10 }} />
-                      <Bar dataKey="workouts" fill="#10b981" opacity={0.8} radius={[3, 3, 0, 0]} name="workouts" maxBarSize={48} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
         </TabsContent>
 
         {/* PRs tab */}
