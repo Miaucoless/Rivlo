@@ -559,6 +559,7 @@ export const useAppStore = create<AppStore>()(
           groceryList: cloud.groceryList ? null : localState.groceryList,
           customRecipes: cloud.customRecipes.length === 0 ? localState.customRecipes : [],
           customWorkouts: cloud.customWorkouts.length === 0 ? localState.customWorkouts : [],
+          waterLogs: Object.keys(cloud.waterLogs).length === 0 ? localState.waterLogs : {},
         }
 
         const shouldSeedAnyBucket =
@@ -571,6 +572,7 @@ export const useAppStore = create<AppStore>()(
           seedPayload.calendarReminders.length > 0 ||
           seedPayload.customRecipes.length > 0 ||
           seedPayload.customWorkouts.length > 0 ||
+          Object.keys(seedPayload.waterLogs).length > 0 ||
           !!seedPayload.weeklyMealPlan ||
           !!seedPayload.groceryList
 

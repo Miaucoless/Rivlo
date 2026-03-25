@@ -33,6 +33,7 @@ export type CloudSeedPayload = {
   groceryList: GroceryList | null
   customRecipes: Recipe[]
   customWorkouts: Workout[]
+  waterLogs: Record<string, WaterEntry[]>
 }
 
 type MetadataAppState = {
@@ -547,8 +548,13 @@ export async function seedCloudFromLocal(userId: string, payload: CloudSeedPaylo
     meals.map((meal) => upsertMealEntry(userId, date, meal))
   )
 
+  const waterTasks = Object.values(payload.waterLogs).flatMap((entries) =>
+    entries.map((entry) => upsertWaterLog(userId, entry))
+  )
+
   const tasks: Promise<unknown>[] = [
     ...mealTasks,
+    ...waterTasks,
     ...payload.workoutLogs.map((log) => upsertWorkoutLog(userId, log)),
     ...payload.weightHistory.map((entry) => upsertWeightEntry(userId, entry)),
     ...payload.journalEntries.map((entry) => upsertJournalEntry(userId, entry)),
