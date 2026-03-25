@@ -505,6 +505,7 @@ function MealEditorModal({
 
   const [source, setSource] = useState<MealSource>('search')
   const [recentMultipliers, setRecentMultipliers] = useState<Record<string, string>>({})
+  const [selectedRecentMealKeys, setSelectedRecentMealKeys] = useState<Record<string, boolean>>({})
   const [selectedSavedMealId, setSelectedSavedMealId] = useState<string>('')
   const [expandedSavedMealIds, setExpandedSavedMealIds] = useState<Record<string, boolean>>({})
   const [savedMealModalSearch, setSavedMealModalSearch] = useState('')
@@ -1471,6 +1472,42 @@ function MealEditorModal({
       return
     }
 
+    if (source === 'recent') {
+      const selectedRows = recentMeals.filter((row) => selectedRecentMealKeys[row.key])
+      if (selectedRows.length === 0) {
+        toast.error('Select at least one recent meal first.')
+        return
+      }
+
+      for (const row of selectedRows) {
+        const multiplierText = recentMultipliers[row.key] ?? '1'
+        const multiplier = Number(multiplierText)
+        if (!Number.isFinite(multiplier) || multiplier <= 0) {
+          toast.error('Each selected recent meal needs a serving size greater than 0.')
+          return
+        }
+      }
+
+      for (const row of selectedRows) {
+        const multiplier = Number(recentMultipliers[row.key] ?? '1')
+        const scaledEntry = scaleMealLogEntry(row.entry, multiplier)
+        onSave({
+          meal_type: row.entry.meal_type,
+          name: scaledEntry.name,
+          macros: scaledEntry.macros,
+          time: time.trim() || format(new Date(), 'h:mm a'),
+          recipe: scaledEntry.recipe,
+          recipe_amount: scaledEntry.recipe_amount,
+          meal_items: scaledEntry.meal_items || [],
+          entry_source: scaledEntry.entry_source,
+          saved_meal_template_id: scaledEntry.saved_meal_template_id,
+        })
+      }
+
+      onOpenChange(false)
+      return
+    }
+
     if (!recipeId) {
       toast.error('Select a recipe first.')
       return
@@ -1912,7 +1949,20 @@ function MealEditorModal({
                     return (
                       <div key={key} className="rounded-xl border border-border/50 bg-muted/20 p-3">
                         <div className="min-w-0">
-                          <p className="text-sm font-medium truncate">{entry.name}</p>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedRecentMealKeys((prev) => ({ ...prev, [key]: !prev[key] }))}
+                            className="flex items-center gap-2 text-left w-full"
+                          >
+                            <span
+                              className={`w-4 h-4 rounded border shrink-0 ${
+                                selectedRecentMealKeys[key]
+                                  ? 'bg-primary border-primary'
+                                  : 'border-border bg-background'
+                              }`}
+                            />
+                            <p className="text-sm font-medium truncate">{entry.name}</p>
+                          </button>
                           <p className="font-data text-[10px] text-muted-foreground/60 mt-0.5 tabular-nums whitespace-nowrap overflow-hidden text-ellipsis">
                             {shortDate} · {entry.meal_type} · {scaled.macros.calories} kcal · <span className="text-emerald-500/70">{fmtMacro(scaled.macros.protein_g)}g P</span> · {fmtMacro(scaled.macros.carbs_g)}g C · {fmtMacro(scaled.macros.fat_g)}g F
                           </p>
@@ -2361,7 +2411,13 @@ function MealEditorModal({
           </Tabs>
 
           <Button onClick={handleSave} className="w-full" variant="brand">
-            {editingSavedMeal ? 'Update saved meal' : editingMeal ? 'Save changes' : 'Add meal'}
+            {editingSavedMeal
+              ? 'Update saved meal'
+              : editingMeal
+                ? 'Save changes'
+                : source === 'recent'
+                  ? 'Add meals'
+                  : 'Add meal'}
           </Button>
         </div>
       </DialogContent>

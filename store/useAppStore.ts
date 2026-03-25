@@ -694,6 +694,14 @@ export const useAppStore = create<AppStore>()(
         ;(async () => {
           const resp = await updateProfileCloud(state.user!.id, updates)
           if (!resp.success || !resp.user) {
+            const err = String(resp.error || '')
+            const missingWaterGoalColumn =
+              updates.water_goal_ml != null &&
+              (err.includes('water_goal_ml') || err.includes('schema cache'))
+
+            // If the DB column is not migrated yet, keep the local value and avoid noisy toasts.
+            if (missingWaterGoalColumn) return
+
             if (resp.error) toast.error(resp.error)
             return
           }
