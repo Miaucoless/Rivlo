@@ -457,13 +457,9 @@ export default function TrackingPage() {
                 <CardTitle className="text-sm">Weight Over Time</CardTitle>
               </CardHeader>
               <CardContent>
-                <div
-                  className="overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden -mx-2 px-2"
-                  style={{ touchAction: 'pan-x' } as React.CSSProperties}
-                >
-                  <div style={{ minWidth: 560 }}>
-                    <ResponsiveContainer width="100%" height={220}>
-                      <AreaChart data={weightChartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                <div className="w-full">
+                  <ResponsiveContainer width="100%" height={220}>
+                    <AreaChart data={weightChartData} margin={{ top: 6, right: 10, left: 0, bottom: 0 }}>
                         <defs>
                           <linearGradient id="wt-grad" x1="0" y1="0" x2="0" y2="1">
                             <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
@@ -476,12 +472,12 @@ export default function TrackingPage() {
                           tick={{ fontSize: 10 }}
                           domain={weightAxisDomain}
                           tickFormatter={(value) => `${Number(value).toFixed(0)}`}
+                          width={38}
                         />
                         <Tooltip content={<CustomTooltip unitSystem={unitSystem} />} cursor={{ fill: 'rgba(16, 185, 129, 0.08)' }} />
                         <Area type="monotone" dataKey="weight" stroke="#10b981" strokeWidth={2} fill="url(#wt-grad)" dot={false} name="weight" />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
+                    </AreaChart>
+                  </ResponsiveContainer>
                 </div>
               </CardContent>
             </Card>
@@ -491,25 +487,21 @@ export default function TrackingPage() {
                 <CardTitle className="text-sm">Body Fat % Trend</CardTitle>
               </CardHeader>
               <CardContent>
-                <div
-                  className="overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden -mx-2 px-2"
-                  style={{ touchAction: 'pan-x' } as React.CSSProperties}
-                >
-                  <div style={{ minWidth: 560 }}>
-                    <ResponsiveContainer width="100%" height={220}>
-                      <LineChart data={weightChartData.filter(d => d.bodyFat)} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                <div className="w-full">
+                  <ResponsiveContainer width="100%" height={220}>
+                    <LineChart data={weightChartData.filter(d => d.bodyFat)} margin={{ top: 6, right: 10, left: 0, bottom: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="date" tick={{ fontSize: 10 }} interval={Math.floor(weightChartData.length / 6)} />
                         <YAxis
                           tick={{ fontSize: 10 }}
                           domain={bodyFatAxisDomain}
                           tickFormatter={(value) => `${Number(value).toFixed(1)}%`}
+                          width={42}
                         />
                         <Tooltip content={<CustomTooltip unitSystem={unitSystem} />} cursor={{ fill: 'rgba(16, 185, 129, 0.08)' }} />
                         <Line type="monotone" dataKey="bodyFat" stroke="#10b981" strokeWidth={2} dot={false} name="bodyFat" />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
+                    </LineChart>
+                  </ResponsiveContainer>
                 </div>
               </CardContent>
             </Card>

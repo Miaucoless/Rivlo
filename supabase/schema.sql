@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS profiles (
   protein_target_g INTEGER NOT NULL DEFAULT 150,
   carb_target_g INTEGER NOT NULL DEFAULT 200,
   fat_target_g  INTEGER NOT NULL DEFAULT 70,
+  water_goal_ml INTEGER,
   onboarded     BOOLEAN NOT NULL DEFAULT false,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -52,7 +53,8 @@ ALTER TABLE profiles
   CHECK (preferred_workout_time IN ('early_morning','morning','afternoon','evening','late_night','flexible')),
   ADD COLUMN IF NOT EXISTS preferred_foods TEXT[] DEFAULT '{}',
   ADD COLUMN IF NOT EXISTS avoided_foods TEXT[] DEFAULT '{}',
-  ADD COLUMN IF NOT EXISTS notification_preferences JSONB NOT NULL DEFAULT '{"daily_workout_reminder": true, "meal_logging_reminder": true, "weekly_progress_summary": false, "goal_milestone_alerts": true}'::jsonb;
+  ADD COLUMN IF NOT EXISTS notification_preferences JSONB NOT NULL DEFAULT '{"daily_workout_reminder": true, "meal_logging_reminder": true, "weekly_progress_summary": false, "goal_milestone_alerts": true}'::jsonb,
+  ADD COLUMN IF NOT EXISTS water_goal_ml INTEGER;
 
 -- ─── Meals / Nutrition ──────────────────────────────────────────────────────────
 
