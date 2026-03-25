@@ -1907,19 +1907,20 @@ function MealEditorModal({
                     const multiplierText = recentMultipliers[key] ?? '1'
                     const multiplier = Number(multiplierText)
                     const scaled = scaleMealLogEntry(entry, Number.isFinite(multiplier) ? multiplier : 0)
+                    const shortDate = format(new Date(date), 'MM/dd/yy')
 
                     return (
                       <div key={key} className="rounded-xl border border-border/50 bg-muted/20 p-3">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-medium truncate">{entry.name}</p>
-                            <p className="font-data text-[11px] text-muted-foreground/60 mt-0.5 tabular-nums">
-                              {date} · {entry.meal_type} · {scaled.macros.calories} kcal · <span className="text-emerald-500/70">{fmtMacro(scaled.macros.protein_g)}g P</span> · {fmtMacro(scaled.macros.carbs_g)}g C · {fmtMacro(scaled.macros.fat_g)}g F
-                            </p>
-                          </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium truncate">{entry.name}</p>
+                          <p className="font-data text-[10px] text-muted-foreground/60 mt-0.5 tabular-nums whitespace-nowrap overflow-hidden text-ellipsis">
+                            {shortDate} · {entry.meal_type} · {scaled.macros.calories} kcal · <span className="text-emerald-500/70">{fmtMacro(scaled.macros.protein_g)}g P</span> · {fmtMacro(scaled.macros.carbs_g)}g C · {fmtMacro(scaled.macros.fat_g)}g F
+                          </p>
+                        </div>
 
-                          <div className="w-20 shrink-0">
-                            <Label className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">x</Label>
+                        <div className="flex items-end gap-2 mt-3">
+                          <div className="w-24 shrink-0">
+                            <Label className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Servings</Label>
                             <Input
                               value={multiplierText}
                               onChange={(e) => setRecentMultipliers((prev) => ({ ...prev, [key]: e.target.value }))}
@@ -1927,16 +1928,15 @@ function MealEditorModal({
                               className="h-8 mt-1"
                             />
                           </div>
-                        </div>
 
-                        <div className="grid grid-cols-2 gap-2 mt-3">
                           <Button
                             type="button"
                             variant="outline"
+                            className="flex-1 h-9"
                             onClick={() => {
                               const m = Number(multiplierText)
                               if (!Number.isFinite(m) || m <= 0) {
-                                toast.error('Enter a multiplier greater than 0.')
+                                toast.error('Enter a serving size greater than 0.')
                                 return
                               }
                               const scaledEntry = scaleMealLogEntry(entry, m)
@@ -1954,31 +1954,6 @@ function MealEditorModal({
                             }}
                           >
                             Quick add
-                          </Button>
-                          <Button
-                            type="button"
-                            onClick={() => {
-                              const m = Number(multiplierText)
-                              if (!Number.isFinite(m) || m <= 0) {
-                                toast.error('Enter a multiplier greater than 0.')
-                                return
-                              }
-                              const scaledEntry = scaleMealLogEntry(entry, m)
-                              onSave({
-                                meal_type: entry.meal_type,
-                                name: scaledEntry.name,
-                                macros: scaledEntry.macros,
-                                time: format(new Date(), 'h:mm a'),
-                                recipe: scaledEntry.recipe,
-                                recipe_amount: scaledEntry.recipe_amount,
-                                meal_items: scaledEntry.meal_items || [],
-                                entry_source: scaledEntry.entry_source,
-                                saved_meal_template_id: scaledEntry.saved_meal_template_id,
-                              })
-                              onOpenChange(false)
-                            }}
-                          >
-                            Add &amp; close
                           </Button>
                         </div>
                       </div>

@@ -58,6 +58,8 @@ import {
   deleteWaterLog,
   upsertWorkoutLog,
 } from '@/lib/cloud-sync'
+import { updateProfile as updateProfileCloud } from '@/lib/auth'
+import { toast } from 'sonner'
 import { formatWeightValue, getTodayISO } from '@/lib/utils'
 
 interface AppStore {
@@ -671,10 +673,35 @@ export const useAppStore = create<AppStore>()(
         await state.hydrateFromCloud(state.user.id)
       },
 
-      updateProfile: (updates) =>
+      updateProfile: (updates) => {
+        // Optimistic local update (instant UI response)
         set((state) => withRefreshedNotifications(state, {
           user: state.user ? { ...state.user, ...updates } : null,
-        })),
+        }))
+
+        const state = get()
+        if (!state.user || state.isDemoMode) return
+
+        // Local fallback (per-origin) so goal doesn't "feel" lost if cloud update fails.
+        if (typeof window !== 'undefined' && updates.water_goal_ml != null) {
+          try {
+            window.localStorage.setItem(`rivlo-water-goal-ml:${state.user.id}`, String(updates.water_goal_ml))
+          } catch {
+            // ignore
+          }
+        }
+
+        ;(async () => {
+          const resp = await updateProfileCloud(state.user!.id, updates)
+          if (!resp.success || !resp.user) {
+            if (resp.error) toast.error(resp.error)
+            return
+          }
+          set((s) => withRefreshedNotifications(s, { user: resp.user }))
+        })().catch((err) => {
+          toast.error(String(err))
+        })
+      },
 
       loginDemo: () =>
         set((state) => withRefreshedNotifications(state, {
