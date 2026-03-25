@@ -720,7 +720,7 @@ export default function DashboardPage() {
                                                   <span className="text-[11px] font-medium text-foreground/70 truncate">{ingredient.name}</span>
                                                   <span className="text-[10px] font-data text-muted-foreground/40">{ingredient.amount} {ingredient.unit}</span>
                                                 </div>
-                                                {ingredient.calories_per_unit && (
+                                                {(ingredient.calories_per_unit ?? 0) > 0 && (
                                                   <div className="flex items-center gap-1.5 mt-0.5">
                                                     <span className="text-[10px] font-data text-muted-foreground/50">{Math.round(ingredient.calories_per_unit * ingredient.amount)} kcal</span>
                                                     <span className="text-[10px] text-border/30">·</span>
