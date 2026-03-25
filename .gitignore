@@ -22,6 +22,10 @@
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+debug-store.js
+expose-store.js
+manual-sync.js
+test-sync.js
 
 # local env files
 .env*.local

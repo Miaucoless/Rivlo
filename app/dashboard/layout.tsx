@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { Sidebar } from '@/components/dashboard/Sidebar'
 import { TopBar } from '@/components/dashboard/TopBar'
+import { ExposeStore } from '@/components/ExposeStore'
 
 import { useIsMobile } from '@/hooks/useIsMobile'
 import { useAppStore } from '@/store/useAppStore'
@@ -85,6 +86,7 @@ export default function DashboardLayout({
 
   return (
     <div className="flex min-h-screen bg-background relative">
+      {process.env.NODE_ENV === 'production' ? null : <ExposeStore />}
       {/* Subtle ambient gradient */}
       <div className="pointer-events-none fixed inset-0 bg-gradient-to-br from-emerald-500/[0.03] via-transparent to-transparent" />
       <Sidebar />

@@ -155,6 +155,7 @@ function mealToRow(userId: string, date: string, meal: MealLogEntry) {
     notes: JSON.stringify({
       time: meal.time,
       recipe: meal.recipe,
+      recipe_amount: (meal as any).recipe_amount,
       meal_items: meal.meal_items,
       entry_source: meal.entry_source,
       original_meal_type: meal.meal_type,
@@ -167,6 +168,7 @@ function mealFromRow(row: any): { date: string; meal: MealLogEntry } {
   const metadata = parseJsonNotes<{
     time?: string
     recipe?: MealLogEntry['recipe']
+    recipe_amount?: any
     meal_items?: MealLogEntry['meal_items']
     entry_source?: MealLogEntry['entry_source']
     original_meal_type?: MealLogEntry['meal_type']
@@ -186,6 +188,7 @@ function mealFromRow(row: any): { date: string; meal: MealLogEntry } {
       },
       time: metadata?.time ?? toTimeLabel(row.logged_at),
       recipe: metadata?.recipe ?? null,
+      ...(metadata?.recipe_amount ? { recipe_amount: metadata.recipe_amount } : {}),
       meal_items: metadata?.meal_items,
       entry_source: metadata?.entry_source,
     },
@@ -291,6 +294,21 @@ function recipeFromRow(row: any): Recipe {
 export async function fetchCloudState(userId: string): Promise<CloudHydrationData | null> {
   const supabase = createClient()
 
+  const isMissingRelation = (err: unknown) => {
+    if (!err || typeof err !== 'object') return false
+    const anyErr = err as { code?: string; message?: string }
+    return anyErr.code === '42P01' || (anyErr.message?.includes('does not exist') ?? false)
+  }
+
+  const selectOrEmpty = async <T>(promise: Promise<{ data: T; error: any }>, empty: T) => {
+    const resp = await promise
+    if (resp.error && isMissingRelation(resp.error)) {
+      console.warn('Cloud table missing; treating as empty:', resp.error?.message ?? resp.error)
+      return { data: empty, error: null as any }
+    }
+    return resp
+  }
+
   const [
     mealsResp,
     workoutsResp,
@@ -311,7 +329,10 @@ export async function fetchCloudState(userId: string): Promise<CloudHydrationDat
     supabase.from('grocery_lists').select('*').eq('user_id', userId).order('week_start', { ascending: false }).limit(1).maybeSingle(),
     supabase.from('recipes').select('*').eq('user_id', userId).order('created_at', { ascending: false }),
     supabase.from('workout_templates').select('*').eq('user_id', userId).order('updated_at', { ascending: false }),
-    supabase.from('water_logs').select('*').eq('user_id', userId).order('logged_at', { ascending: false }),
+    selectOrEmpty(
+      supabase.from('water_logs').select('*').eq('user_id', userId).order('logged_at', { ascending: false }),
+      [] as any[]
+    ),
     fetchMetadataAppState(userId),
   ])
 

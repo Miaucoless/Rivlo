@@ -68,6 +68,8 @@ export interface Recipe {
   prep_time_min: number
   cook_time_min: number
   servings: number
+  yield_quantity?: number
+  yield_unit?: string
   ingredients: Ingredient[]
   instructions: string[]
   macros: Macros
@@ -84,6 +86,9 @@ export interface MealEntry {
   custom_name?: string
   macros: Macros
   logged_at: string
+  recipe_amount?:
+    | { kind: 'servings'; servings: number }
+    | { kind: 'units'; units: number }
 }
 
 export interface DailyNutrition {

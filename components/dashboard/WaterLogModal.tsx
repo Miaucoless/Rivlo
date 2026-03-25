@@ -96,7 +96,7 @@ export function WaterLogModal({ open, onOpenChange, onAdd }: WaterLogModalProps)
           {/* Today's log */}
           <div className="border-t border-border pt-3">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-              Today's Log
+              Today&apos;s Log
             </p>
             {todayEntries.length === 0 ? (
               <p className="text-xs text-muted-foreground text-center py-2">No entries yet today</p>

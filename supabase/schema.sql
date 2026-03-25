@@ -71,6 +71,7 @@ CREATE TABLE IF NOT EXISTS meal_entries (
   logged_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+DROP INDEX IF EXISTS idx_meal_entries_user_date;
 CREATE INDEX idx_meal_entries_user_date ON meal_entries(user_id, date);
 
 -- ─── Recipes ────────────────────────────────────────────────────────────────────
@@ -134,6 +135,7 @@ CREATE TABLE IF NOT EXISTS workout_logs (
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+DROP INDEX IF EXISTS idx_workout_logs_user_date;
 CREATE INDEX idx_workout_logs_user_date ON workout_logs(user_id, date);
 
 -- ─── Saved Workout Templates ───────────────────────────────────────────────────
@@ -154,6 +156,7 @@ CREATE TABLE IF NOT EXISTS workout_templates (
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+DROP INDEX IF EXISTS idx_workout_templates_user_updated;
 CREATE INDEX idx_workout_templates_user_updated ON workout_templates(user_id, updated_at DESC);
 
 -- ─── Weight Tracking ────────────────────────────────────────────────────────────
@@ -170,7 +173,21 @@ CREATE TABLE IF NOT EXISTS weight_entries (
   UNIQUE(user_id, date)
 );
 
+DROP INDEX IF EXISTS idx_weight_entries_user_date;
 CREATE INDEX idx_weight_entries_user_date ON weight_entries(user_id, date);
+
+-- ─── Water Tracking ─────────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS water_logs (
+  id            UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  user_id       UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+  date          DATE NOT NULL,
+  amount_ml     INTEGER NOT NULL,
+  logged_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+DROP INDEX IF EXISTS idx_water_logs_user_logged_at;
+CREATE INDEX idx_water_logs_user_logged_at ON water_logs(user_id, logged_at DESC);
 
 -- ─── Journal Entries ────────────────────────────────────────────────────────────
 
@@ -189,6 +206,7 @@ CREATE TABLE IF NOT EXISTS journal_entries (
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+DROP INDEX IF EXISTS idx_journal_entries_user_date;
 CREATE INDEX idx_journal_entries_user_date ON journal_entries(user_id, date);
 
 -- ─── Row Level Security (RLS) ────────────────────────────────────────────────────
@@ -201,21 +219,43 @@ ALTER TABLE grocery_lists ENABLE ROW LEVEL SECURITY;
 ALTER TABLE workout_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE workout_templates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE weight_entries ENABLE ROW LEVEL SECURITY;
+ALTER TABLE water_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE journal_entries ENABLE ROW LEVEL SECURITY;
 
 -- Profiles: users can only read/write their own profile
-CREATE POLICY "profiles_own" ON profiles FOR ALL USING (auth.uid() = id);
+DROP POLICY IF EXISTS profiles_own ON profiles;
+CREATE POLICY profiles_own ON profiles FOR ALL USING (auth.uid() = id);
 
 -- All other tables: users can only access their own data
-CREATE POLICY "meal_entries_own" ON meal_entries FOR ALL USING (auth.uid() = user_id);
-CREATE POLICY "recipes_own_or_public" ON recipes FOR SELECT USING (auth.uid() = user_id OR is_public = true);
-CREATE POLICY "recipes_own_write" ON recipes FOR ALL USING (auth.uid() = user_id);
-CREATE POLICY "meal_plans_own" ON meal_plans FOR ALL USING (auth.uid() = user_id);
-CREATE POLICY "grocery_lists_own" ON grocery_lists FOR ALL USING (auth.uid() = user_id);
-CREATE POLICY "workout_logs_own" ON workout_logs FOR ALL USING (auth.uid() = user_id);
-CREATE POLICY "workout_templates_own" ON workout_templates FOR ALL USING (auth.uid() = user_id);
-CREATE POLICY "weight_entries_own" ON weight_entries FOR ALL USING (auth.uid() = user_id);
-CREATE POLICY "journal_entries_own" ON journal_entries FOR ALL USING (auth.uid() = user_id);
+DROP POLICY IF EXISTS meal_entries_own ON meal_entries;
+CREATE POLICY meal_entries_own ON meal_entries FOR ALL USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS recipes_own_or_public ON recipes;
+CREATE POLICY recipes_own_or_public ON recipes FOR SELECT USING (auth.uid() = user_id OR is_public = true);
+
+DROP POLICY IF EXISTS recipes_own_write ON recipes;
+CREATE POLICY recipes_own_write ON recipes FOR ALL USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS meal_plans_own ON meal_plans;
+CREATE POLICY meal_plans_own ON meal_plans FOR ALL USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS grocery_lists_own ON grocery_lists;
+CREATE POLICY grocery_lists_own ON grocery_lists FOR ALL USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS workout_logs_own ON workout_logs;
+CREATE POLICY workout_logs_own ON workout_logs FOR ALL USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS workout_templates_own ON workout_templates;
+CREATE POLICY workout_templates_own ON workout_templates FOR ALL USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS weight_entries_own ON weight_entries;
+CREATE POLICY weight_entries_own ON weight_entries FOR ALL USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS water_logs_own ON water_logs;
+CREATE POLICY water_logs_own ON water_logs FOR ALL USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS journal_entries_own ON journal_entries;
+CREATE POLICY journal_entries_own ON journal_entries FOR ALL USING (auth.uid() = user_id);
 
 -- ─── Auto-update updated_at ──────────────────────────────────────────────────────
 
@@ -227,12 +267,15 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS profiles_updated_at ON profiles;
 CREATE TRIGGER profiles_updated_at BEFORE UPDATE ON profiles
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
+DROP TRIGGER IF EXISTS journal_entries_updated_at ON journal_entries;
 CREATE TRIGGER journal_entries_updated_at BEFORE UPDATE ON journal_entries
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
+DROP TRIGGER IF EXISTS workout_templates_updated_at ON workout_templates;
 CREATE TRIGGER workout_templates_updated_at BEFORE UPDATE ON workout_templates
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
@@ -252,6 +295,39 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION handle_new_user();
+
+-- ─── User App State (for saved meals, supplements, calendar reminders) ──────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS user_app_state (
+  user_id   UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  saved_meals        JSONB NOT NULL DEFAULT '[]',
+  supplements        JSONB NOT NULL DEFAULT '[]',
+  calendar_reminders JSONB NOT NULL DEFAULT '[]',
+  updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE user_app_state ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can read own app state" ON user_app_state;
+CREATE POLICY "Users can read own app state"
+  ON user_app_state FOR SELECT
+  USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can insert own app state" ON user_app_state;
+CREATE POLICY "Users can insert own app state"
+  ON user_app_state FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can update own app state" ON user_app_state;
+CREATE POLICY "Users can update own app state"
+  ON user_app_state FOR UPDATE
+  USING (auth.uid() = user_id);
+
+-- Auto-update updated_at for user_app_state
+DROP TRIGGER IF EXISTS user_app_state_updated_at ON user_app_state;
+CREATE TRIGGER user_app_state_updated_at BEFORE UPDATE ON user_app_state
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at();

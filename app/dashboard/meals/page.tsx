@@ -36,7 +36,7 @@ import { toast } from 'sonner'
 
 const MEAL_TYPES = ['breakfast', 'lunch', 'dinner', 'snack', 'drink'] as const
 type MealType = (typeof MEAL_TYPES)[number]
-type MealSource = 'search' | 'saved' | 'recipe' | 'manual'
+type MealSource = 'search' | 'saved' | 'recent' | 'recipe' | 'manual'
 type SearchMeasureUnit = 'serving' | 'g' | 'oz' | 'ml' | 'fl_oz'
 
 type ManualItemRow = {
@@ -49,6 +49,46 @@ type ManualItemRow = {
     protein_g: number
     carbs_g: number
     fat_g: number
+  }
+}
+
+function scaleMealLogEntry(meal: MealLogEntry, multiplier: number): MealLogEntry {
+  const m = Number.isFinite(multiplier) ? multiplier : 1
+  const safe = Math.max(0, m)
+  const roundMacro = (n: number) => Math.round(n * 10) / 10
+
+  const scaledMealItems = meal.meal_items?.map((item) => ({
+    ...item,
+    macros: {
+      calories: Math.round((item.macros?.calories ?? 0) * safe),
+      protein_g: roundMacro((item.macros?.protein_g ?? 0) * safe),
+      carbs_g: roundMacro((item.macros?.carbs_g ?? 0) * safe),
+      fat_g: roundMacro((item.macros?.fat_g ?? 0) * safe),
+    },
+    amount: item.amount != null ? item.amount * safe : item.amount,
+  }))
+
+  const recipe_amount = (meal as any).recipe_amount as
+    | { kind: 'servings'; servings: number }
+    | { kind: 'units'; units: number }
+    | undefined
+
+  const scaledRecipeAmount = recipe_amount
+    ? recipe_amount.kind === 'servings'
+      ? { kind: 'servings' as const, servings: recipe_amount.servings * safe }
+      : { kind: 'units' as const, units: recipe_amount.units * safe }
+    : undefined
+
+  return {
+    ...meal,
+    macros: {
+      calories: Math.round((meal.macros?.calories ?? 0) * safe),
+      protein_g: roundMacro((meal.macros?.protein_g ?? 0) * safe),
+      carbs_g: roundMacro((meal.macros?.carbs_g ?? 0) * safe),
+      fat_g: roundMacro((meal.macros?.fat_g ?? 0) * safe),
+    },
+    meal_items: scaledMealItems,
+    ...(scaledRecipeAmount ? { recipe_amount: scaledRecipeAmount } : {}),
   }
 }
 
@@ -303,11 +343,65 @@ function RecipeCard({ recipe, compact = false, onClick }: { recipe: Recipe; comp
   )
 }
 
+type RecipeAmountMode = 'servings' | 'units'
+
+function getRecipeAmountDefaults(recipe: Recipe): { mode: RecipeAmountMode; servings: string; units: string } {
+  const hasYield = Number(recipe.yield_quantity) > 0 && !!recipe.yield_unit
+  return {
+    mode: hasYield ? 'units' : 'servings',
+    servings: '1',
+    units: '1',
+  }
+}
+
+function scaleRecipeMacros(recipe: Recipe, mode: RecipeAmountMode, rawValue: string) {
+  const value = Number(rawValue)
+  const safeValue = Number.isFinite(value) ? value : 0
+
+  let multiplier = 0
+  if (mode === 'servings') {
+    multiplier = safeValue
+  } else {
+    const yieldQty = Number(recipe.yield_quantity)
+    if (Number.isFinite(yieldQty) && yieldQty > 0) {
+      multiplier = safeValue / yieldQty
+    }
+  }
+
+  const clampMultiplier = Math.max(0, multiplier)
+  const roundMacro = (n: number) => Math.round(n * 10) / 10
+
+  return {
+    multiplier: clampMultiplier,
+    macros: {
+      calories: Math.round((recipe.macros.calories || 0) * clampMultiplier),
+      protein_g: roundMacro((recipe.macros.protein_g || 0) * clampMultiplier),
+      carbs_g: roundMacro((recipe.macros.carbs_g || 0) * clampMultiplier),
+      fat_g: roundMacro((recipe.macros.fat_g || 0) * clampMultiplier),
+    },
+  }
+}
+
 function AddToTodayButton({ recipe }: { recipe: Recipe }) {
   const { addMealEntry } = useAppStore()
   const [mealType, setMealType] = useState<string>(recipe.meal_type)
+  const defaults = useMemo(() => getRecipeAmountDefaults(recipe), [recipe])
+  const [amountMode, setAmountMode] = useState<RecipeAmountMode>(defaults.mode)
+  const [servings, setServings] = useState(defaults.servings)
+  const [units, setUnits] = useState(defaults.units)
+  const hasYield = Number(recipe.yield_quantity) > 0 && !!recipe.yield_unit
+
+  useEffect(() => {
+    setAmountMode(defaults.mode)
+    setServings(defaults.servings)
+    setUnits(defaults.units)
+  }, [defaults.mode, defaults.servings, defaults.units])
+
+  const selectedValue = amountMode === 'servings' ? servings : units
+  const scaled = useMemo(() => scaleRecipeMacros(recipe, amountMode, selectedValue), [recipe, amountMode, selectedValue])
+
   return (
-    <div className="flex gap-1.5">
+    <div className="flex gap-1.5 items-center">
       <Select value={mealType} onValueChange={setMealType}>
         <SelectTrigger className="h-8 text-xs flex-1">
           <SelectValue />
@@ -319,18 +413,47 @@ function AddToTodayButton({ recipe }: { recipe: Recipe }) {
           <SelectItem value="snack">Snack</SelectItem>
         </SelectContent>
       </Select>
+      <Select value={amountMode} onValueChange={(v) => setAmountMode(v as RecipeAmountMode)}>
+        <SelectTrigger className="h-8 text-xs w-[96px]">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="servings">Servings</SelectItem>
+          <SelectItem value="units" disabled={!hasYield}>{hasYield ? (recipe.yield_unit || 'Units') : 'Units'}</SelectItem>
+        </SelectContent>
+      </Select>
+      <Input
+        className="h-8 text-xs w-[84px]"
+        type="number"
+        min={0.1}
+        step={0.1}
+        value={selectedValue}
+        onChange={(e) => {
+          const v = e.target.value
+          if (amountMode === 'servings') setServings(v)
+          else setUnits(v)
+        }}
+        placeholder={amountMode === 'servings' ? '1' : '2'}
+      />
       <Button
         size="sm"
         variant="outline"
         className="gap-1 text-xs shrink-0 px-3"
         onClick={() => {
+          if (scaled.multiplier <= 0) {
+            toast.error(`Enter a ${amountMode === 'servings' ? 'serving amount' : 'unit amount'} greater than 0.`)
+            return
+          }
           addMealEntry(getTodayISO(), {
             id: `m-${Date.now()}`,
             meal_type: mealType as MealType,
             name: recipe.name,
-            macros: { calories: recipe.macros.calories, protein_g: recipe.macros.protein_g, carbs_g: recipe.macros.carbs_g, fat_g: recipe.macros.fat_g },
+            macros: scaled.macros,
             time: format(new Date(), 'h:mm a'),
             recipe,
+            recipe_amount: amountMode === 'servings'
+              ? { kind: 'servings', servings: Number(servings) }
+              : { kind: 'units', units: Number(units) },
           })
           toast.success(`${recipe.name} added to ${mealType}.`)
         }}
@@ -364,6 +487,8 @@ function MealEditorModal({
   const allRecipes = useMemo(() => [...customRecipes, ...RECIPES], [customRecipes])
 
   const [source, setSource] = useState<MealSource>('search')
+  const [recentMealSearch, setRecentMealSearch] = useState('')
+  const [recentMealMultipliers, setRecentMealMultipliers] = useState<Record<string, string>>({})
   const [selectedSavedMealId, setSelectedSavedMealId] = useState<string>('')
   const [expandedSavedMealIds, setExpandedSavedMealIds] = useState<Record<string, boolean>>({})
   const [savedMealModalSearch, setSavedMealModalSearch] = useState('')
@@ -377,6 +502,9 @@ function MealEditorModal({
   const [mealType, setMealType] = useState<MealType>(initialMealType ?? 'breakfast')
   const [recipeId, setRecipeId] = useState<string>('')
   const [recipeMealName, setRecipeMealName] = useState('')
+  const [recipeAmountMode, setRecipeAmountMode] = useState<RecipeAmountMode>('servings')
+  const [recipeServings, setRecipeServings] = useState('1')
+  const [recipeUnits, setRecipeUnits] = useState('1')
   const [calories, setCalories] = useState('')
   const [protein, setProtein] = useState('')
   const [carbs, setCarbs] = useState('')
@@ -565,6 +693,77 @@ function MealEditorModal({
     }
     setSource(nextSource)
   }
+
+  const recentMeals = useMemo(() => {
+    const today = getTodayISO()
+    const cutoff = format(subDays(new Date(), 7), 'yyyy-MM-dd')
+
+    const entries: Array<{ date: string; meal: MealLogEntry }> = []
+    Object.entries(mealEntries || {}).forEach(([date, meals]) => {
+      if (date < cutoff || date >= today) return
+      ;(meals || []).forEach((meal) => entries.push({ date, meal }))
+    })
+
+    entries.sort((a, b) => b.date.localeCompare(a.date))
+
+    const q = recentMealSearch.trim().toLowerCase()
+    const seen = new Set<string>()
+    const result: Array<{ key: string; date: string; meal: MealLogEntry }> = []
+
+    for (const item of entries) {
+      const m = item.meal
+      const signature = JSON.stringify({
+        name: m.name,
+        macros: m.macros,
+        recipeId: m.recipe?.id ?? null,
+        mealItems: (m.meal_items || []).map((x) => x.name),
+        entry_source: m.entry_source ?? null,
+        saved_meal_template_id: m.saved_meal_template_id ?? null,
+      })
+      if (seen.has(signature)) continue
+
+      const haystack = `${m.name} ${(m.entry_source || '')} ${(m.recipe?.name || '')} ${(m.meal_items || []).map((x) => x.name).join(' ')}`.toLowerCase()
+      if (q && !haystack.includes(q)) continue
+
+      seen.add(signature)
+      result.push({ key: signature, date: item.date, meal: m })
+      if (result.length >= 20) break
+    }
+
+    return result
+  }, [mealEntries, recentMealSearch])
+
+  const getRecentMultiplier = (key: string) => {
+    const raw = recentMealMultipliers[key]
+    if (raw == null || raw === '') return 1
+    const n = Number(raw)
+    if (!Number.isFinite(n) || n <= 0) return 1
+    return n
+  }
+
+  const selectedRecipe = useMemo(() => {
+    if (!recipeId) return null
+    return allRecipes.find((r) => r.id === recipeId) ?? null
+  }, [allRecipes, recipeId])
+
+  const recipeHasYield = useMemo(() => {
+    return !!selectedRecipe && Number(selectedRecipe.yield_quantity) > 0 && !!selectedRecipe.yield_unit
+  }, [selectedRecipe])
+
+  const recipeAmountValue = recipeAmountMode === 'servings' ? recipeServings : recipeUnits
+  const recipeScaled = useMemo(() => {
+    if (!selectedRecipe) return null
+    return scaleRecipeMacros(selectedRecipe, recipeAmountMode, recipeAmountValue)
+  }, [selectedRecipe, recipeAmountMode, recipeAmountValue])
+
+  useEffect(() => {
+    if (source !== 'recipe') return
+    if (!selectedRecipe) return
+    const defaults = getRecipeAmountDefaults(selectedRecipe)
+    setRecipeAmountMode(defaults.mode)
+    setRecipeServings(defaults.servings)
+    setRecipeUnits(defaults.units)
+  }, [source, selectedRecipe])
 
   const handleSelectSuggestion = (item: (SavedMealTemplate & { _isSavedMeal: true }) | (FoodCatalogItem & { _isSavedMeal: false })) => {
     setFoodQuery(item.name)
@@ -1308,6 +1507,34 @@ function MealEditorModal({
       return
     }
 
+    if (source === 'recipe') {
+      const linkedRecipe = selectedRecipe
+      if (!linkedRecipe || !recipeScaled) {
+        toast.error('Select a recipe first.')
+        return
+      }
+      if (recipeScaled.multiplier <= 0) {
+        toast.error(`Enter a ${recipeAmountMode === 'servings' ? 'serving amount' : 'unit amount'} greater than 0.`)
+        return
+      }
+
+      onSave({
+        meal_type: mealType,
+        name: recipeMealName.trim() || linkedRecipe.name,
+        macros: recipeScaled.macros,
+        time: time.trim() || format(new Date(), 'h:mm a'),
+        recipe: linkedRecipe,
+        meal_items: [],
+        entry_source: 'recipe',
+        recipe_amount: recipeAmountMode === 'servings'
+          ? { kind: 'servings', servings: Number(recipeServings) }
+          : { kind: 'units', units: Number(recipeUnits) },
+      })
+
+      onOpenChange(false)
+      return
+    }
+
     const caloriesNum = Number(calories)
     const proteinNum = Number(protein || 0)
     const carbsNum = Number(carbs || 0)
@@ -1325,16 +1552,14 @@ function MealEditorModal({
       fat_g: Math.round(fatNum),
     }
 
-    const linkedRecipe = source === 'recipe' ? allRecipes.find((r) => r.id === recipeId) || null : null
-
     onSave({
       meal_type: mealType,
-      name: recipeMealName.trim() || linkedRecipe?.name || 'Recipe meal',
+      name: recipeMealName.trim() || selectedRecipe?.name || 'Meal',
       macros: finalMacros,
       time: time.trim() || format(new Date(), 'h:mm a'),
-      recipe: linkedRecipe,
+      recipe: selectedRecipe,
       meal_items: [],
-      entry_source: 'recipe',
+      entry_source: source,
     })
 
     onOpenChange(false)
@@ -1377,9 +1602,10 @@ function MealEditorModal({
           )}
 
           <Tabs value={source} onValueChange={(value) => handleSourceChange(value as MealSource)} className="space-y-4">
-            <TabsList className="grid grid-cols-4 gap-2 h-auto bg-transparent p-0">
+            <TabsList className="grid grid-cols-5 gap-2 h-auto bg-transparent p-0">
               <TabsTrigger value="search" className="text-xs rounded-lg border border-border/60 bg-muted/30 px-2 py-2 transition-colors hover:bg-accent/70 hover:text-foreground data-[state=active]:border-border data-[state=active]:bg-background data-[state=active]:text-foreground focus-visible:ring-1 focus-visible:ring-primary/30">Search</TabsTrigger>
               <TabsTrigger value="saved" className="text-xs rounded-lg border border-border/60 bg-muted/30 px-2 py-2 transition-colors hover:bg-accent/70 hover:text-foreground data-[state=active]:border-border data-[state=active]:bg-background data-[state=active]:text-foreground focus-visible:ring-1 focus-visible:ring-primary/30">Saved</TabsTrigger>
+              <TabsTrigger value="recent" className="text-xs rounded-lg border border-border/60 bg-muted/30 px-2 py-2 transition-colors hover:bg-accent/70 hover:text-foreground data-[state=active]:border-border data-[state=active]:bg-background data-[state=active]:text-foreground focus-visible:ring-1 focus-visible:ring-primary/30">Recent</TabsTrigger>
               <TabsTrigger value="recipe" className="text-xs rounded-lg border border-border/60 bg-muted/30 px-2 py-2 transition-colors hover:bg-accent/70 hover:text-foreground data-[state=active]:border-border data-[state=active]:bg-background data-[state=active]:text-foreground focus-visible:ring-1 focus-visible:ring-primary/30">Recipes</TabsTrigger>
               <TabsTrigger value="manual" className="text-xs rounded-lg border border-border/60 bg-muted/30 px-2 py-2 transition-colors hover:bg-accent/70 hover:text-foreground data-[state=active]:border-border data-[state=active]:bg-background data-[state=active]:text-foreground focus-visible:ring-1 focus-visible:ring-primary/30">Manual</TabsTrigger>
             </TabsList>
@@ -1587,6 +1813,148 @@ function MealEditorModal({
                   />
                 </div>
               )}
+            </TabsContent>
+
+            <TabsContent value="recent" className="mt-0 space-y-3">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+                <Input
+                  value={recentMealSearch}
+                  onChange={(e) => setRecentMealSearch(e.target.value)}
+                  placeholder="Search your last 7 days…"
+                  className="pl-9 pr-8 h-9"
+                />
+                {recentMealSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setRecentMealSearch('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              <p className="text-[11px] text-muted-foreground">
+                Tap a meal to add it to <span className="font-medium text-foreground">{mealTypeLabel(mealType)}</span> today.
+              </p>
+
+              <div className="max-h-60 overflow-y-auto overscroll-contain space-y-1.5 pr-0.5">
+                {recentMeals.length === 0 ? (
+                  <p className="text-xs text-muted-foreground text-center py-8">No recent meals yet.</p>
+                ) : recentMeals.map(({ key, date, meal }) => (
+                  <div
+                    key={key}
+                    className="w-full rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5 hover:bg-muted/40 hover:border-border transition-all"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium truncate">{meal.name}</p>
+                        <p className="mt-0.5 text-[11px] text-muted-foreground">
+                          {date} · {(meal.entry_source ?? 'meal')}
+                        </p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="font-data text-sm font-semibold tabular-nums">{Math.round(meal.macros.calories)}</p>
+                        <p className="text-[10px] text-muted-foreground">kcal</p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2 mt-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] text-muted-foreground">Amount</span>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            type="button"
+                            size="icon-sm"
+                            variant="outline"
+                            className="h-7 w-7"
+                            onClick={() => {
+                              const next = Math.max(0.25, Math.round((getRecentMultiplier(key) - 0.25) * 100) / 100)
+                              setRecentMealMultipliers((curr) => ({ ...curr, [key]: String(next) }))
+                            }}
+                          >
+                            −
+                          </Button>
+                          <Input
+                            className="h-7 w-[72px] text-xs text-center"
+                            type="number"
+                            min={0.25}
+                            step={0.25}
+                            value={recentMealMultipliers[key] ?? '1'}
+                            onChange={(e) => setRecentMealMultipliers((curr) => ({ ...curr, [key]: e.target.value }))}
+                          />
+                          <Button
+                            type="button"
+                            size="icon-sm"
+                            variant="outline"
+                            className="h-7 w-7"
+                            onClick={() => {
+                              const next = Math.round((getRecentMultiplier(key) + 0.25) * 100) / 100
+                              setRecentMealMultipliers((curr) => ({ ...curr, [key]: String(next) }))
+                            }}
+                          >
+                            +
+                          </Button>
+                        </div>
+                        <span className="text-[11px] text-muted-foreground">×</span>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 px-3 text-xs"
+                          onClick={() => {
+                            const mult = getRecentMultiplier(key)
+                            const scaled = scaleMealLogEntry(meal, mult)
+                            onSave({
+                              meal_type: mealType,
+                              name: scaled.name,
+                              macros: scaled.macros,
+                              time: format(new Date(), 'h:mm a'),
+                              recipe: scaled.recipe,
+                              meal_items: scaled.meal_items ?? [],
+                              entry_source: scaled.entry_source,
+                              saved_meal_template_id: scaled.saved_meal_template_id,
+                              recipe_amount: (scaled as any).recipe_amount,
+                            })
+                            toast.success(`Added ${scaled.name} to ${mealType}.`)
+                          }}
+                        >
+                          Quick add
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="brand"
+                          className="h-7 px-3 text-xs"
+                          onClick={() => {
+                            const mult = getRecentMultiplier(key)
+                            const scaled = scaleMealLogEntry(meal, mult)
+                            onSave({
+                              meal_type: mealType,
+                              name: scaled.name,
+                              macros: scaled.macros,
+                              time: format(new Date(), 'h:mm a'),
+                              recipe: scaled.recipe,
+                              meal_items: scaled.meal_items ?? [],
+                              entry_source: scaled.entry_source,
+                              saved_meal_template_id: scaled.saved_meal_template_id,
+                              recipe_amount: (scaled as any).recipe_amount,
+                            })
+                            onOpenChange(false)
+                            toast.success(`Added ${scaled.name} to ${mealType}.`)
+                          }}
+                        >
+                          Add &amp; close
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </TabsContent>
 
             <TabsContent value="saved" className="mt-0 space-y-3">
@@ -2039,22 +2407,57 @@ function MealEditorModal({
                     <Label>Meal name</Label>
                     <Input value={recipeMealName} onChange={(e) => setRecipeMealName(e.target.value)} placeholder="e.g. Chicken wrap" />
                   </div>
+                  {selectedRecipe && (
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">Amount type</Label>
+                        <Select value={recipeAmountMode} onValueChange={(v) => setRecipeAmountMode(v as RecipeAmountMode)}>
+                          <SelectTrigger className="h-9 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="servings">Servings</SelectItem>
+                            <SelectItem value="units" disabled={!recipeHasYield}>
+                              {recipeHasYield ? (selectedRecipe.yield_unit || 'Units') : 'Units'}
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">{recipeAmountMode === 'servings' ? 'Servings' : (selectedRecipe.yield_unit || 'Units')}</Label>
+                        <Input
+                          type="number"
+                          min={0.1}
+                          step={0.1}
+                          value={recipeAmountMode === 'servings' ? recipeServings : recipeUnits}
+                          onChange={(e) => recipeAmountMode === 'servings' ? setRecipeServings(e.target.value) : setRecipeUnits(e.target.value)}
+                          className="h-9"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">Yield</Label>
+                        <div className="h-9 rounded-md border border-border/60 bg-muted/20 px-3 flex items-center text-xs text-muted-foreground">
+                          {recipeHasYield ? `${selectedRecipe.yield_quantity} ${selectedRecipe.yield_unit}` : '—'}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   <div className="grid grid-cols-4 gap-2">
                     <div className="space-y-1.5">
                       <Label className="text-xs">Calories</Label>
-                      <Input type="number" value={calories} onChange={(e) => setCalories(e.target.value)} />
+                      <Input type="number" value={recipeScaled ? recipeScaled.macros.calories : calories} onChange={(e) => setCalories(e.target.value)} disabled={source === 'recipe'} />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs">Protein</Label>
-                      <Input type="number" value={protein} onChange={(e) => setProtein(e.target.value)} />
+                      <Input type="number" value={recipeScaled ? recipeScaled.macros.protein_g : protein} onChange={(e) => setProtein(e.target.value)} disabled={source === 'recipe'} />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs">Carbs</Label>
-                      <Input type="number" value={carbs} onChange={(e) => setCarbs(e.target.value)} />
+                      <Input type="number" value={recipeScaled ? recipeScaled.macros.carbs_g : carbs} onChange={(e) => setCarbs(e.target.value)} disabled={source === 'recipe'} />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs">Fat</Label>
-                      <Input type="number" value={fat} onChange={(e) => setFat(e.target.value)} />
+                      <Input type="number" value={recipeScaled ? recipeScaled.macros.fat_g : fat} onChange={(e) => setFat(e.target.value)} disabled={source === 'recipe'} />
                     </div>
                   </div>
                 </>
@@ -2981,7 +3384,7 @@ export default function MealsPage() {
   }
 
   const filteredRecipes = useMemo(() => {
-    let list = RECIPES
+    let list = [...customRecipes, ...RECIPES]
     if (recipeFilterType !== 'all') list = list.filter(r => r.meal_type === recipeFilterType)
     if (recipeFilterTag === 'high-protein') list = list.filter(r => r.macros.protein_g >= 25)
     else if (recipeFilterTag === 'low-calorie') list = list.filter(r => r.macros.calories <= 400)
@@ -2995,7 +3398,7 @@ export default function MealsPage() {
       list = list.filter(r => r.name.toLowerCase().includes(q) || r.description.toLowerCase().includes(q))
     }
     return list
-  }, [recipeFilterType, recipeFilterTag, recipeSearchText])
+  }, [customRecipes, recipeFilterType, recipeFilterTag, recipeSearchText])
 
   const grocerySuggestions = useMemo(() => {
     const q = grocerySearchQuery.toLowerCase().trim()

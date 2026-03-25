@@ -2279,6 +2279,366 @@ const CUSTOM_FOOD_CATALOG: FoodCatalogItem[] = [
   default_serving_label: '1 slice (25g)',
   grams_per_serving: 25,
   macros_per_serving: { calories: 60, protein_g: 4, carbs_g: 11, fat_g: 1 }
+},
+{
+  id: 'pp-iso100-fruity-pebbles',
+  name: 'ISO100 Fruity Pebbles',
+  aliases: ['iso100 fruity pebbles', 'iso100 pebbles'],
+  default_serving_amount: 32,
+  default_serving_unit: 'g',
+  default_serving_label: '1 scoop (32g)',
+  grams_per_serving: 32,
+  macros_per_serving: {
+    calories: 120,
+    protein_g: 25,
+    carbs_g: 2,
+    fat_g: 0.5
+  }
+},
+{
+  id: 'pp-iso100-gourmet-vanilla',
+  name: 'ISO100 Gourmet Vanilla',
+  aliases: ['iso100 vanilla'],
+  default_serving_amount: 32,
+  default_serving_unit: 'g',
+  default_serving_label: '1 scoop (32g)',
+  grams_per_serving: 32,
+  macros_per_serving: {
+    calories: 110,
+    protein_g: 25,
+    carbs_g: 2,
+    fat_g: 1
+  }
+},
+{
+  id: 'pp-iso100-cocoa-pebbles',
+  name: 'ISO100 Cocoa Pebbles',
+  aliases: ['iso100 cocoa pebbles', 'iso100 pebbles chocolate'],
+  default_serving_amount: 32,
+  default_serving_unit: 'g',
+  default_serving_label: '1 scoop (32g)',
+  grams_per_serving: 32,
+  macros_per_serving: {
+    calories: 120,
+    protein_g: 25,
+    carbs_g: 2,
+    fat_g: 0.5
+  }
+},
+{
+  id: 'pp-iso100-gourmet-chocolate',
+  name: 'ISO100 Gourmet Chocolate',
+  aliases: ['iso100 chocolate'],
+  default_serving_amount: 31,
+  default_serving_unit: 'g',
+  default_serving_label: '1 scoop (31g)',
+  grams_per_serving: 31,
+  macros_per_serving: {
+    calories: 120,
+    protein_g: 25,
+    carbs_g: 2,
+    fat_g: 1
+  }
+},
+{
+  id: 'pp-iso100-cinnamon-cereal',
+  name: 'ISO100 Cinnamon Cereal',
+  aliases: ['iso100 cinnamon'],
+  default_serving_amount: 32,
+  default_serving_unit: 'g',
+  default_serving_label: '1 scoop (32g)',
+  grams_per_serving: 32,
+  macros_per_serving: {
+    calories: 120,
+    protein_g: 25,
+    carbs_g: 2,
+    fat_g: 0.5
+  }
+},
+{
+  id: 'pp-iso100-cookies-cream',
+  name: 'ISO100 Cookies & Cream',
+  aliases: ['iso100 cookies and cream'],
+  default_serving_amount: 32,
+  default_serving_unit: 'g',
+  default_serving_label: '1 scoop (32g)',
+  grams_per_serving: 32,
+  macros_per_serving: {
+    calories: 120,
+    protein_g: 25,
+    carbs_g: 2,
+    fat_g: 1
+  }
+},
+{
+  id: 'pp-iso100-dunkin-glazed-donut',
+  name: 'ISO100 Dunkin’ Glazed Donut',
+  aliases: ['iso100 donut', 'iso100 glazed'],
+  default_serving_amount: 32,
+  default_serving_unit: 'g',
+  default_serving_label: '1 scoop (32g)',
+  grams_per_serving: 32,
+  macros_per_serving: {
+    calories: 120,
+    protein_g: 25,
+    carbs_g: 2,
+    fat_g: 0.5
+  }
+},
+{
+  id: 'pp-iso100-salted-caramel',
+  name: 'ISO100 Salted Caramel',
+  aliases: ['iso100 caramel'],
+  default_serving_amount: 31,
+  default_serving_unit: 'g',
+  default_serving_label: '1 scoop (31g)',
+  grams_per_serving: 31,
+  macros_per_serving: {
+    calories: 120,
+    protein_g: 25,
+    carbs_g: 2,
+    fat_g: 1
+  }
+},
+{
+  id: 'pp-iso100-strawberry',
+  name: 'ISO100 Strawberry',
+  aliases: ['iso100 strawberry'],
+  default_serving_amount: 32,
+  default_serving_unit: 'g',
+  default_serving_label: '1 scoop (32g)',
+  grams_per_serving: 32,
+  macros_per_serving: {
+    calories: 120,
+    protein_g: 25,
+    carbs_g: 2,
+    fat_g: 0.5
+  }
+},
+{
+  id: 'pp-iso100-birthday-cake',
+  name: 'ISO100 Pebbles Birthday Cake',
+  aliases: ['iso100 birthday cake', 'iso100 cake'],
+  default_serving_amount: 32,
+  default_serving_unit: 'g',
+  default_serving_label: '1 scoop (32g)',
+  grams_per_serving: 32,
+  macros_per_serving: {
+    calories: 120,
+    protein_g: 25,
+    carbs_g: 2,
+    fat_g: 1
+  }
+},
+{
+  id: 'pp-iso100-dunkin-mocha-latte',
+  name: 'ISO100 Dunkin’ Mocha Latte',
+  aliases: ['iso100 mocha', 'iso100 latte'],
+  default_serving_amount: 32,
+  default_serving_unit: 'g',
+  default_serving_label: '1 scoop (32g)',
+  grams_per_serving: 32,
+  macros_per_serving: {
+    calories: 120,
+    protein_g: 25,
+    carbs_g: 3,
+    fat_g: 1
+  }
+},
+{
+  id: 'pp-iso100-dunkin-cappuccino',
+  name: 'ISO100 Dunkin’ Cappuccino',
+  aliases: ['iso100 cappuccino'],
+  default_serving_amount: 32,
+  default_serving_unit: 'g',
+  default_serving_label: '1 scoop (32g)',
+  grams_per_serving: 32,
+  macros_per_serving: {
+    calories: 120,
+    protein_g: 25,
+    carbs_g: 2,
+    fat_g: 1
+  }
+},
+{
+  id: 'pp-iso100-fudge-brownie',
+  name: 'ISO100 Fudge Brownie',
+  aliases: ['iso100 brownie'],
+  default_serving_amount: 32,
+  default_serving_unit: 'g',
+  default_serving_label: '1 scoop (32g)',
+  grams_per_serving: 32,
+  macros_per_serving: {
+    calories: 120,
+    protein_g: 25,
+    carbs_g: 3,
+    fat_g: 1
+  }
+},
+{
+  id: 'pp-iso100-chocolate-peanut-butter',
+  name: 'ISO100 Chocolate Peanut Butter',
+  aliases: ['iso100 cpb'],
+  default_serving_amount: 32,
+  default_serving_unit: 'g',
+  default_serving_label: '1 scoop (32g)',
+  grams_per_serving: 32,
+  macros_per_serving: {
+    calories: 120,
+    protein_g: 25,
+    carbs_g: 2,
+    fat_g: 0.5
+  }
+},
+{
+  id: 'pp-mp-clear-peach-mango',
+  name: 'MyProtein Clear Whey – Peach Mango',
+  aliases: ['mp clear whey peach mango', 'myprotein peach mango'],
+  default_serving_amount: 26,
+  default_serving_unit: 'g',
+  default_serving_label: '1 scoop (26g)',
+  grams_per_serving: 26,
+  macros_per_serving: { calories: 80, protein_g: 20, carbs_g: 1, fat_g: 0 }
+},
+{
+  id: 'pp-mp-clear-lemonade',
+  name: 'MyProtein Clear Whey – Lemonade',
+  aliases: ['mp clear whey lemonade'],
+  default_serving_amount: 26,
+  default_serving_unit: 'g',
+  default_serving_label: '1 scoop (26g)',
+  grams_per_serving: 26,
+  macros_per_serving: { calories: 80, protein_g: 20, carbs_g: 0, fat_g: 0 }
+},
+{
+  id: 'pp-mp-clear-tropical-dragonfruit',
+  name: 'MyProtein Clear Whey – Tropical Dragonfruit',
+  aliases: ['mp clear whey dragonfruit'],
+  default_serving_amount: 24,
+  default_serving_unit: 'g',
+  default_serving_label: '1 scoop (24g)',
+  grams_per_serving: 24,
+  macros_per_serving: { calories: 80, protein_g: 20, carbs_g: 0, fat_g: 0 }
+},
+{
+  id: 'pp-mp-clear-cranberry-raspberry',
+  name: 'MyProtein Clear Whey – Cranberry & Raspberry',
+  aliases: ['mp clear whey cranberry raspberry'],
+  default_serving_amount: 26,
+  default_serving_unit: 'g',
+  default_serving_label: '1 scoop (26g)',
+  grams_per_serving: 26,
+  macros_per_serving: { calories: 86, protein_g: 20, carbs_g: 1, fat_g: 0 }
+},
+{
+  id: 'pp-mp-clear-orange-mango',
+  name: 'MyProtein Clear Whey – Orange & Mango',
+  aliases: ['mp clear whey orange mango'],
+  default_serving_amount: 26,
+  default_serving_unit: 'g',
+  default_serving_label: '1 scoop (26g)',
+  grams_per_serving: 26,
+  macros_per_serving: { calories: 86, protein_g: 20, carbs_g: 1, fat_g: 0 }
+},
+{
+  id: 'pp-mp-clear-watermelon',
+  name: 'MyProtein Clear Whey – Watermelon',
+  aliases: ['mp clear whey watermelon'],
+  default_serving_amount: 26,
+  default_serving_unit: 'g',
+  default_serving_label: '1 scoop (26g)',
+  grams_per_serving: 26,
+  macros_per_serving: { calories: 86, protein_g: 20, carbs_g: 1, fat_g: 0 }
+},
+{
+  id: 'pp-mp-clear-blue-raspberry',
+  name: 'MyProtein Clear Whey – Blue Raspberry',
+  aliases: ['mp clear whey blue raspberry'],
+  default_serving_amount: 26,
+  default_serving_unit: 'g',
+  default_serving_label: '1 scoop (26g)',
+  grams_per_serving: 26,
+  macros_per_serving: { calories: 86, protein_g: 20, carbs_g: 1, fat_g: 0 }
+},
+{
+  id: 'pp-mp-clear-vimto',
+  name: 'MyProtein Clear Whey – Vimto®',
+  aliases: ['mp clear whey vimto'],
+  default_serving_amount: 26,
+  default_serving_unit: 'g',
+  default_serving_label: '1 scoop (26g)',
+  grams_per_serving: 26,
+  macros_per_serving: { calories: 86, protein_g: 20, carbs_g: 1, fat_g: 0 }
+},
+{
+  id: 'pp-mp-clear-mojito',
+  name: 'MyProtein Clear Whey – Mojito',
+  aliases: ['mp clear whey mojito'],
+  default_serving_amount: 26,
+  default_serving_unit: 'g',
+  default_serving_label: '1 scoop (26g)',
+  grams_per_serving: 26,
+  macros_per_serving: { calories: 86, protein_g: 20, carbs_g: 1, fat_g: 0 }
+},
+{
+  id: 'pp-mp-clear-grape',
+  name: 'MyProtein Clear Whey – Grape',
+  aliases: ['mp clear whey grape'],
+  default_serving_amount: 26,
+  default_serving_unit: 'g',
+  default_serving_label: '1 scoop (26g)',
+  grams_per_serving: 26,
+  macros_per_serving: { calories: 86, protein_g: 20, carbs_g: 1, fat_g: 0 }
+},
+{
+  id: 'pp-mp-clear-strawberry',
+  name: 'MyProtein Clear Whey – Strawberry',
+  aliases: ['mp clear whey strawberry'],
+  default_serving_amount: 24,
+  default_serving_unit: 'g',
+  default_serving_label: '1 scoop (24g)',
+  grams_per_serving: 24,
+  macros_per_serving: { calories: 80, protein_g: 20, carbs_g: 0, fat_g: 0 }
+},
+{
+  id: 'pp-mp-clear-raspberry-lemonade',
+  name: 'MyProtein Clear Whey – Raspberry Lemonade',
+  aliases: ['mp clear whey raspberry lemonade'],
+  default_serving_amount: 26,
+  default_serving_unit: 'g',
+  default_serving_label: '1 scoop (26g)',
+  grams_per_serving: 26,
+  macros_per_serving: { calories: 86, protein_g: 20, carbs_g: 1, fat_g: 0 }
+},
+{
+  id: 'pp-mp-clear-peach-tea',
+  name: 'MyProtein Clear Whey – Peach Tea',
+  aliases: ['mp clear whey peach tea'],
+  default_serving_amount: 26,
+  default_serving_unit: 'g',
+  default_serving_label: '1 scoop (26g)',
+  grams_per_serving: 26,
+  macros_per_serving: { calories: 86, protein_g: 20, carbs_g: 1, fat_g: 0 }
+},
+{
+  id: 'pp-mp-clear-jelly-belly-berry-blue',
+  name: 'MyProtein Clear Whey – Jelly Belly Berry Blue',
+  aliases: ['mp clear whey jelly belly blue'],
+  default_serving_amount: 26,
+  default_serving_unit: 'g',
+  default_serving_label: '1 scoop (26g)',
+  grams_per_serving: 26,
+  macros_per_serving: { calories: 86, protein_g: 20, carbs_g: 1, fat_g: 0 }
+},
+{
+  id: 'pp-mp-clear-jelly-belly-green-apple',
+  name: 'MyProtein Clear Whey – Jelly Belly Green Apple',
+  aliases: ['mp clear whey green apple'],
+  default_serving_amount: 26,
+  default_serving_unit: 'g',
+  default_serving_label: '1 scoop (26g)',
+  grams_per_serving: 26,
+  macros_per_serving: { calories: 86, protein_g: 20, carbs_g: 1, fat_g: 0 }
 }
   // 👆 PASTE YOUR FOODS HERE 👆
 ]

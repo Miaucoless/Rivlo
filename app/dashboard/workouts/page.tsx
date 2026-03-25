@@ -65,7 +65,7 @@ interface MetProfile {
   gender: Gender
 }
 
-type ExerciseInputMode = 'strength' | 'treadmill' | 'run_walk' | 'bike' | 'rower' | 'level_cardio' | 'basic_cardio' | 'interval'
+type ExerciseInputMode = 'strength' | 'treadmill' | 'run_walk' | 'bike' | 'rower' | 'level_cardio' | 'basic_cardio' | 'interval' | 'time_only'
 
 function isCardioExercise(exercise: WorkoutExercise['exercise']) {
   const name = exercise.name.toLowerCase()
@@ -126,6 +126,7 @@ function getExerciseInputMode(exercise: WorkoutExercise['exercise']): ExerciseIn
       case 'distance': return 'run_walk'
       case 'time':
       case 'time_distance':
+        if (exercise.id.startsWith('lib-yoga-') || exercise.id.startsWith('lib-pilates-')) return 'time_only'
         if (eq.includes('treadmill')) return 'treadmill'
         if (eq.includes('bike') || eq.includes('cycling') || eq.includes('spin')) return 'bike'
         if (eq.includes('rowing') || eq.includes('ski erg') || eq.includes('ski')) return 'rower'
@@ -188,6 +189,11 @@ function getDefaultSetMetrics(exercise: WorkoutExercise['exercise']) {
         interval_duration_sec: 20,
         rest_seconds: 40,
         ...(isRunningIntervalExercise(exercise) ? { speed_mph: 10 } : {}),
+      }
+    case 'time_only':
+      return {
+        reps: 30,
+        rest_seconds: 0,
       }
     default:
       return {}
@@ -1035,6 +1041,13 @@ function WorkoutBuilderModal({
                       <span>Rest Sec</span>
                       <span />
                     </div>
+                  ) : inputMode === 'time_only' ? (
+                    <div className="grid grid-cols-[80px_1fr_1fr_auto] gap-2 px-1 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                      <span>Set</span>
+                      <span>Minutes</span>
+                      <span>Rest Sec</span>
+                      <span />
+                    </div>
                   ) : inputMode === 'level_cardio' || inputMode === 'basic_cardio' ? (
                     <div className="grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2 px-1 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
                       <span>Set</span>
@@ -1135,6 +1148,25 @@ function WorkoutBuilderModal({
                         <Input type="number" value={formatNumericInput(set.reps)} onChange={(e) => updateSetField(exercise.instanceId, setIndex, 'reps', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Minutes" />
                         <Input type="number" value={formatNumericInput(set.watts)} onChange={(e) => updateSetField(exercise.instanceId, setIndex, 'watts', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Watts" />
                         <Input type="number" value={formatNumericInput(set.rest_seconds)} onChange={(e) => updateSetField(exercise.instanceId, setIndex, 'rest_seconds', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Rest sec" />
+                        <Button variant="ghost" size="icon-sm" onClick={() => setExercises((current) => current.map((item) => item.instanceId === exercise.instanceId ? { ...item, sets: item.sets.filter((_, index) => index !== setIndex).map((nextSet, index) => ({ ...nextSet, set_number: index + 1 })) || item.sets } : item))} disabled={exercise.sets.length <= 1}><X className="h-3.5 w-3.5" /></Button>
+                      </div>
+                    ) : inputMode === 'time_only' ? (
+                      <div key={`${exercise.instanceId}-${setIndex}`} className="grid grid-cols-[80px_1fr_1fr_auto] gap-2">
+                        <div className="flex items-center px-3 text-sm font-medium text-muted-foreground">Set {set.set_number}</div>
+                        <Input
+                          type="number"
+                          min={0}
+                          value={formatNumericInput(set.reps)}
+                          onChange={(e) => updateSetField(exercise.instanceId, setIndex, 'reps', e.target.value === '' ? 0 : Number(e.target.value))}
+                          placeholder="Minutes"
+                        />
+                        <Input
+                          type="number"
+                          min={0}
+                          value={formatNumericInput(set.rest_seconds)}
+                          onChange={(e) => updateSetField(exercise.instanceId, setIndex, 'rest_seconds', e.target.value === '' ? 0 : Number(e.target.value))}
+                          placeholder="Rest sec"
+                        />
                         <Button variant="ghost" size="icon-sm" onClick={() => setExercises((current) => current.map((item) => item.instanceId === exercise.instanceId ? { ...item, sets: item.sets.filter((_, index) => index !== setIndex).map((nextSet, index) => ({ ...nextSet, set_number: index + 1 })) || item.sets } : item))} disabled={exercise.sets.length <= 1}><X className="h-3.5 w-3.5" /></Button>
                       </div>
                     ) : inputMode === 'level_cardio' || inputMode === 'basic_cardio' ? (
@@ -2603,7 +2635,7 @@ export default function WorkoutsPage() {
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <div className="rounded-2xl border border-border/60 bg-card px-4 py-4">
             <p className="font-data text-xl sm:text-2xl font-semibold">{todayLoggedWorkouts.reduce((sum, log) => sum + (log.calories_burned_kcal || 0), 0)}</p>
-            <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Today's kcal burned</p>
+            <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Today&apos;s kcal burned</p>
           </div>
           <div className="rounded-2xl border border-border/60 bg-card px-4 py-4">
             <p className="font-data text-xl sm:text-2xl font-semibold">{todayLoggedWorkouts.length}</p>

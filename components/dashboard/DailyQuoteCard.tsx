@@ -69,7 +69,7 @@ export function DailyQuoteCard() {
             className="space-y-2"
           >
             <p className="text-sm font-medium leading-relaxed">
-              "{quote.quote}"
+              {`"${quote.quote}"`}
             </p>
             <p className="text-xs text-muted-foreground">
               — {quote.author}

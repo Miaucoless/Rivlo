@@ -546,12 +546,23 @@ export const useAppStore = create<AppStore>()(
       },
 
       hydrateFromCloud: async (userId) => {
-        if (!userId || get().isDemoMode) return
+        console.log('🌥 Starting cloud hydration for user:', userId)
+        if (!userId || get().isDemoMode) {
+          console.log('❌ Skipping hydration - no userId or demo mode')
+          return
+        }
 
         const cloud = await fetchCloudState(userId)
+        console.log('☁️ Cloud data received:', cloud ? 'SUCCESS' : 'NULL')
         if (!cloud) return
 
         const localState = get()
+        console.log('📱 Local state before hydration:', {
+          meals: Object.keys(localState.mealEntries).length,
+          workouts: localState.workoutLogs.length,
+          weights: localState.weightHistory.length,
+          journals: localState.journalEntries.length,
+        })
 
         // Collect IDs already in cloud for each data type so we can find
         // local-only items (e.g. writes that failed silently last session).
@@ -588,23 +599,32 @@ export const useAppStore = create<AppStore>()(
         const cloudWorkoutTemplateIds = new Set(cloud.customWorkouts.map((w) => w.id))
         const localOnlyWorkoutTemplates = localState.customWorkouts.filter((w) => !cloudWorkoutTemplateIds.has(w.id))
 
-        // Seed payload: push any local data that cloud doesn't have yet.
-        // For metadata types (savedMeals, supplements, calendarReminders) stored
-        // in user metadata (not rows), keep the old all-or-nothing logic.
+        // Seed payload: always upload local data that doesn't exist in cloud yet
         const seedPayload = {
-          mealEntries: Object.keys(cloud.mealEntries).length === 0 ? localState.mealEntries : localOnlyMealEntries,
-          workoutLogs: cloud.workoutLogs.length === 0 ? localState.workoutLogs : localOnlyWorkouts,
-          weightHistory: cloud.weightHistory.length === 0 ? localState.weightHistory : localOnlyWeights,
-          journalEntries: cloud.journalEntries.length === 0 ? localState.journalEntries : localOnlyJournals,
-          savedMeals: cloud.savedMeals.length === 0 ? localState.savedMeals : [],
-          supplements: cloud.supplements.length === 0 ? localState.supplements : [],
-          calendarReminders: cloud.calendarReminders.length === 0 ? localState.calendarReminders : [],
+          mealEntries: Object.keys(localOnlyMealEntries).length > 0 ? localOnlyMealEntries : {},
+          workoutLogs: localOnlyWorkouts,
+          weightHistory: localOnlyWeights,
+          journalEntries: localOnlyJournals,
+          // Defensive fallback: if cloud metadata is empty, preserve local data
+          // This handles cases where user_app_state table doesn't exist yet
+          savedMeals: cloud.savedMeals.length === 0 ? localState.savedMeals : cloud.savedMeals,
+          supplements: cloud.supplements.length === 0 ? localState.supplements : cloud.supplements,
+          calendarReminders: cloud.calendarReminders.length === 0 ? localState.calendarReminders : cloud.calendarReminders,
           weeklyMealPlan: cloud.weeklyMealPlan ? null : localState.weeklyMealPlan,
           groceryList: cloud.groceryList ? null : localState.groceryList,
-          customRecipes: cloud.customRecipes.length === 0 ? localState.customRecipes : localOnlyRecipes,
-          customWorkouts: cloud.customWorkouts.length === 0 ? localState.customWorkouts : localOnlyWorkoutTemplates,
-          waterLogs: Object.keys(cloud.waterLogs).length === 0 ? localState.waterLogs : localOnlyWaterLogs,
+          customRecipes: localOnlyRecipes,
+          customWorkouts: localOnlyWorkoutTemplates,
+          waterLogs: Object.keys(localOnlyWaterLogs).length > 0 ? localOnlyWaterLogs : {},
         }
+
+        console.log('🌱 Seed payload prepared:', {
+          meals: Object.keys(seedPayload.mealEntries).length,
+          workouts: seedPayload.workoutLogs.length,
+          weights: seedPayload.weightHistory.length,
+          journals: seedPayload.journalEntries.length,
+          localOnlyMeals: Object.keys(localOnlyMealEntries).length,
+          localOnlyWorkouts: localOnlyWorkouts.length,
+        })
 
         const shouldSeedAnyBucket =
           Object.keys(seedPayload.mealEntries).length > 0 ||
@@ -1479,3 +1499,9 @@ export const useAppStore = create<AppStore>()(
     }
   )
 )
+
+// Expose store globally for debugging
+if (typeof window !== 'undefined' && process.env.NODE_ENV !== 'production') {
+  (window as any).useAppStore = useAppStore;
+  console.log('🔧 Store exposed to window.useAppStore');
+}
