@@ -36,6 +36,7 @@ export const DEMO_USER: UserProfile = {
   carb_target_g: 218,
   fat_target_g: 81,
   onboarded: true,
+  water_goal_ml: 2450,
   created_at: subDays(new Date(), 45).toISOString(),
   updated_at: new Date().toISOString(),
 }
@@ -2109,6 +2110,64 @@ export const RECIPES: Recipe[] = [
     macros: { calories: 295, protein_g: 5, carbs_g: 20, fat_g: 24, fiber_g: 3 },
     tags: ['quick', 'no-cook', 'snack', 'vegetarian', 'gluten-free'],
   },
+  {
+    id: 'r-sweet-potato-pizza',
+    name: 'Sweet Potato Pizza (Gluten-Free)',
+    description: 'A crispy gluten-free pizza crust made from sweet potato and almond flour, topped with lentil pesto, olives, pine nuts, and mozzarella.',
+    meal_type: 'dinner',
+    prep_time_min: 15,
+    cook_time_min: 35,
+    servings: 1,
+    ingredients: [
+      { id: 'rspp-i1', name: 'Sweet potato', amount: 250, unit: 'g', calories_per_unit: 0.86, macros: { protein_g: 0.016, carbs_g: 0.2, fat_g: 0.001 } },
+      { id: 'rspp-i2', name: 'Almond flour', amount: 90, unit: 'g', calories_per_unit: 6.0, macros: { protein_g: 0.2, carbs_g: 0.2, fat_g: 0.5 } },
+      { id: 'rspp-i3', name: 'Egg', amount: 1, unit: 'piece', calories_per_unit: 70, macros: { protein_g: 6, carbs_g: 0.5, fat_g: 5 } },
+      { id: 'rspp-i4', name: 'Red lentil & tomato pesto', amount: 3, unit: 'tbsp', calories_per_unit: 30, macros: { protein_g: 1.5, carbs_g: 4, fat_g: 1.5 } },
+      { id: 'rspp-i5', name: 'Olives', amount: 30, unit: 'g', calories_per_unit: 1.2, macros: { protein_g: 0.008, carbs_g: 0.03, fat_g: 0.11 } },
+      { id: 'rspp-i6', name: 'Pine nuts', amount: 15, unit: 'g', calories_per_unit: 6.73, macros: { protein_g: 0.14, carbs_g: 0.13, fat_g: 0.68 } },
+      { id: 'rspp-i7', name: 'Mozzarella cheese', amount: 50, unit: 'g', calories_per_unit: 3.0, macros: { protein_g: 0.22, carbs_g: 0.02, fat_g: 0.22 } },
+      { id: 'rspp-i8', name: 'Fresh basil', amount: 5, unit: 'g', calories_per_unit: 0.22, macros: { protein_g: 0.03, carbs_g: 0.02, fat_g: 0.001 } },
+    ],
+    instructions: [
+      'Cook sweet potatoes until soft (boil, roast, or microwave).',
+      'In a bowl, mash the sweet potato until completely smooth.',
+      'Add the egg and almond flour, mixing until a soft but slightly sticky dough forms.',
+      'Transfer the dough onto a prepared baking tray and spread it into a pizza shape.',
+      'Bake in a preheated oven at 180°C (356°F) for 20–25 minutes.',
+      'Spread the lentil pesto over the crust and add olives, pine nuts, and mozzarella.',
+      'Bake again for an additional 8–10 minutes until cheese is melted.',
+      'Top with fresh basil and serve.',
+    ],
+    macros: { calories: 920, protein_g: 38, carbs_g: 68, fat_g: 56, fiber_g: 12 },
+    tags: ['gluten-free', 'vegetarian', 'high-protein', 'high-fiber'],
+    image_url: 'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=400&q=80',
+  },
+  {
+    id: 'r-egg-bites',
+    name: 'Egg Bites',
+    description: 'Fluffy, protein-packed baked egg bites made with cottage cheese and shredded cheese. Perfect for meal prep.',
+    meal_type: 'breakfast',
+    prep_time_min: 5,
+    cook_time_min: 25,
+    servings: 4,
+    ingredients: [
+      { id: 'reb-i1', name: 'Cottage cheese', amount: 1, unit: 'cup', calories_per_unit: 200, macros: { protein_g: 28, carbs_g: 8, fat_g: 9 } },
+      { id: 'reb-i2', name: 'Eggs', amount: 8, unit: 'piece', calories_per_unit: 70, macros: { protein_g: 6, carbs_g: 0.4, fat_g: 5 } },
+      { id: 'reb-i3', name: 'Shredded cheese', amount: 1, unit: 'cup', calories_per_unit: 440, macros: { protein_g: 28, carbs_g: 4, fat_g: 36 } },
+      { id: 'reb-i4', name: 'Salt', amount: 0.25, unit: 'tsp', calories_per_unit: 0, macros: { protein_g: 0, carbs_g: 0, fat_g: 0 } },
+      { id: 'reb-i5', name: 'Black pepper', amount: 0.25, unit: 'tsp', calories_per_unit: 6, macros: { protein_g: 0.2, carbs_g: 1.5, fat_g: 0.1 } },
+    ],
+    instructions: [
+      'Preheat oven to 175°C (350°F). Grease a muffin tin with cooking spray.',
+      'Blend cottage cheese, eggs, shredded cheese, salt, and pepper until smooth.',
+      'Pour mixture evenly into 12 muffin cups.',
+      'Bake for 25 minutes until set and lightly golden.',
+      'Let cool for 5 minutes before removing. Store in fridge up to 5 days.',
+    ],
+    macros: { calories: 290, protein_g: 26, carbs_g: 4, fat_g: 19, fiber_g: 0 },
+    tags: ['high-protein', 'meal-prep', 'quick', 'breakfast', 'low-carb'],
+    image_url: 'https://images.unsplash.com/photo-1482049016688-2d3e1b311543?w=400&q=80',
+  },
 ]
 
 // ─── Workouts ─────────────────────────────────────────────────────────────────────
@@ -2887,6 +2946,7 @@ export const EXERCISE_LIBRARY: ExerciseLibraryItem[] = [
     default_rest_seconds: 150,
     met_base: 5.8,
     met_type: 'resistance',
+    primary_type: 'strength',
   },
   {
     id: 'lib-bench-dumbbell-flat',
@@ -2902,6 +2962,7 @@ export const EXERCISE_LIBRARY: ExerciseLibraryItem[] = [
     default_rest_seconds: 120,
     met_base: 5.5,
     met_type: 'resistance',
+    primary_type: 'strength',
   },
   {
     id: 'lib-bench-barbell-incline',
@@ -2917,6 +2978,7 @@ export const EXERCISE_LIBRARY: ExerciseLibraryItem[] = [
     default_rest_seconds: 120,
     met_base: 5.9,
     met_type: 'resistance',
+    primary_type: 'strength',
   },
   {
     id: 'lib-bench-dumbbell-incline',
@@ -2933,6 +2995,7 @@ export const EXERCISE_LIBRARY: ExerciseLibraryItem[] = [
     default_rest_seconds: 105,
     met_base: 5.6,
     met_type: 'resistance',
+    primary_type: 'strength',
   },
   {
     id: 'lib-bench-machine-incline',
@@ -2948,6 +3011,7 @@ export const EXERCISE_LIBRARY: ExerciseLibraryItem[] = [
     default_rest_seconds: 90,
     met_base: 5.0,
     met_type: 'resistance',
+    primary_type: 'strength',
   },
   {
     id: 'lib-pushup',
@@ -2963,6 +3027,7 @@ export const EXERCISE_LIBRARY: ExerciseLibraryItem[] = [
     default_rest_seconds: 60,
     met_base: 3.8,
     met_type: 'bodyweight_light',
+    primary_type: 'bodyweight',
   },
   {
     id: 'lib-overhead-barbell',
@@ -2978,6 +3043,7 @@ export const EXERCISE_LIBRARY: ExerciseLibraryItem[] = [
     default_rest_seconds: 120,
     met_base: 6.0,
     met_type: 'resistance',
+    primary_type: 'strength',
   },
   {
     id: 'lib-overhead-dumbbell',
@@ -2993,6 +3059,7 @@ export const EXERCISE_LIBRARY: ExerciseLibraryItem[] = [
     default_rest_seconds: 90,
     met_base: 5.4,
     met_type: 'resistance',
+    primary_type: 'strength',
   },
   {
     id: 'lib-lateral-raise',
@@ -3008,6 +3075,7 @@ export const EXERCISE_LIBRARY: ExerciseLibraryItem[] = [
     default_rest_seconds: 60,
     met_base: 3.5,
     met_type: 'resistance',
+    primary_type: 'strength',
   },
   {
     id: 'lib-row-barbell',
@@ -3024,6 +3092,7 @@ export const EXERCISE_LIBRARY: ExerciseLibraryItem[] = [
     default_rest_seconds: 120,
     met_base: 6.0,
     met_type: 'resistance',
+    primary_type: 'strength',
   },
   {
     id: 'lib-row-cable',
@@ -3039,6 +3108,7 @@ export const EXERCISE_LIBRARY: ExerciseLibraryItem[] = [
     default_rest_seconds: 90,
     met_base: 5.0,
     met_type: 'resistance',
+    primary_type: 'strength',
   },
   {
     id: 'lib-row-dumbbell-single',
@@ -3054,6 +3124,8 @@ export const EXERCISE_LIBRARY: ExerciseLibraryItem[] = [
     default_rest_seconds: 75,
     met_base: 4.8,
     met_type: 'resistance',
+    primary_type: 'strength',
+    modifiers: ['unilateral'],
   },
   {
     id: 'lib-lat-pulldown',
@@ -3069,6 +3141,7 @@ export const EXERCISE_LIBRARY: ExerciseLibraryItem[] = [
     default_rest_seconds: 75,
     met_base: 5.0,
     met_type: 'resistance',
+    primary_type: 'strength',
   },
   {
     id: 'lib-pullup',
@@ -3084,6 +3157,7 @@ export const EXERCISE_LIBRARY: ExerciseLibraryItem[] = [
     default_rest_seconds: 120,
     met_base: 7.4,
     met_type: 'bodyweight_vigorous',
+    primary_type: 'bodyweight',
   },
   {
     id: 'lib-deadlift',
@@ -3100,6 +3174,7 @@ export const EXERCISE_LIBRARY: ExerciseLibraryItem[] = [
     default_rest_seconds: 180,
     met_base: 6.8,
     met_type: 'squat_hinge',
+    primary_type: 'strength',
   },
   {
     id: 'lib-squat-back',
@@ -3116,6 +3191,7 @@ export const EXERCISE_LIBRARY: ExerciseLibraryItem[] = [
     default_rest_seconds: 150,
     met_base: 6.6,
     met_type: 'squat_hinge',
+    primary_type: 'strength',
   },
   {
     id: 'lib-squat-front',
@@ -3131,6 +3207,7 @@ export const EXERCISE_LIBRARY: ExerciseLibraryItem[] = [
     default_rest_seconds: 150,
     met_base: 6.5,
     met_type: 'squat_hinge',
+    primary_type: 'strength',
   },
   {
     id: 'lib-leg-press',
@@ -3147,6 +3224,7 @@ export const EXERCISE_LIBRARY: ExerciseLibraryItem[] = [
     default_rest_seconds: 90,
     met_base: 5.4,
     met_type: 'resistance',
+    primary_type: 'strength',
   },
   {
     id: 'lib-rdl',
@@ -3163,6 +3241,7 @@ export const EXERCISE_LIBRARY: ExerciseLibraryItem[] = [
     default_rest_seconds: 120,
     met_base: 6.2,
     met_type: 'squat_hinge',
+    primary_type: 'strength',
   },
   {
     id: 'lib-lunge-walking',
@@ -3178,6 +3257,8 @@ export const EXERCISE_LIBRARY: ExerciseLibraryItem[] = [
     default_rest_seconds: 75,
     met_base: 5.2,
     met_type: 'bodyweight_light',
+    primary_type: 'strength',
+    modifiers: ['unilateral', 'alternating'],
   },
   {
     id: 'lib-leg-curl',
@@ -3193,6 +3274,7 @@ export const EXERCISE_LIBRARY: ExerciseLibraryItem[] = [
     default_rest_seconds: 60,
     met_base: 3.5,
     met_type: 'resistance',
+    primary_type: 'strength',
   },
   {
     id: 'lib-calf-raise',
@@ -3208,6 +3290,7 @@ export const EXERCISE_LIBRARY: ExerciseLibraryItem[] = [
     default_rest_seconds: 45,
     met_base: 3.2,
     met_type: 'resistance',
+    primary_type: 'strength',
   },
   {
     id: 'lib-curl-barbell',
@@ -3223,6 +3306,7 @@ export const EXERCISE_LIBRARY: ExerciseLibraryItem[] = [
     default_rest_seconds: 60,
     met_base: 3.5,
     met_type: 'resistance',
+    primary_type: 'strength',
   },
   {
     id: 'lib-curl-hammer',
@@ -3238,6 +3322,7 @@ export const EXERCISE_LIBRARY: ExerciseLibraryItem[] = [
     default_rest_seconds: 60,
     met_base: 3.4,
     met_type: 'resistance',
+    primary_type: 'strength',
   },
   {
     id: 'lib-triceps-pushdown',
@@ -3253,6 +3338,7 @@ export const EXERCISE_LIBRARY: ExerciseLibraryItem[] = [
     default_rest_seconds: 60,
     met_base: 3.6,
     met_type: 'resistance',
+    primary_type: 'strength',
   },
   {
     id: 'lib-skullcrusher',
@@ -3268,6 +3354,7 @@ export const EXERCISE_LIBRARY: ExerciseLibraryItem[] = [
     default_rest_seconds: 75,
     met_base: 3.8,
     met_type: 'resistance',
+    primary_type: 'strength',
   },
   {
     id: 'lib-crunch-cable',
@@ -3283,6 +3370,7 @@ export const EXERCISE_LIBRARY: ExerciseLibraryItem[] = [
     default_rest_seconds: 45,
     met_base: 3.2,
     met_type: 'resistance',
+    primary_type: 'strength',
   },
   {
     id: 'lib-plank',
@@ -3298,6 +3386,8 @@ export const EXERCISE_LIBRARY: ExerciseLibraryItem[] = [
     default_rest_seconds: 45,
     met_base: 3.3,
     met_type: 'bodyweight_light',
+    primary_type: 'bodyweight',
+    modifiers: ['time_cap', 'weighted'],
   },
   {
     id: 'lib-bike',
@@ -3313,6 +3403,24 @@ export const EXERCISE_LIBRARY: ExerciseLibraryItem[] = [
     default_rest_seconds: 60,
     met_base: 8.5,
     met_type: 'cardio',
+    primary_type: 'intervals',
+    modifiers: ['interval_structure'],
+  },
+  {
+    id: 'lib-sprint',
+    name: 'Sprint',
+    aliases: ['sprinting', 'sprints', 'sprint intervals', '100m', '200m', 'track sprint'],
+    muscle_groups: ['cardio', 'quads', 'glutes', 'hamstrings'],
+    equipment: 'Outdoor',
+    difficulty: 'intermediate',
+    description: 'All-out running at maximum effort for a short distance or duration.',
+    instructions: ['Drive arms powerfully', 'Stay on the balls of your feet', 'Lean forward slightly', 'Rest fully between efforts'],
+    default_sets: 8,
+    default_reps: 1,
+    default_rest_seconds: 90,
+    met_base: 19.0,
+    met_type: 'cardio',
+    primary_type: 'intervals',
   },
   {
     id: 'lib-run-treadmill',
@@ -3328,6 +3436,7 @@ export const EXERCISE_LIBRARY: ExerciseLibraryItem[] = [
     default_rest_seconds: 0,
     met_base: 8.3,
     met_type: 'cardio',
+    primary_type: 'time_distance',
   },
   {
     id: 'lib-run-outdoor',
@@ -3343,6 +3452,7 @@ export const EXERCISE_LIBRARY: ExerciseLibraryItem[] = [
     default_rest_seconds: 0,
     met_base: 9.0,
     met_type: 'cardio',
+    primary_type: 'distance',
   },
   {
     id: 'lib-walk-treadmill',
@@ -3358,6 +3468,7 @@ export const EXERCISE_LIBRARY: ExerciseLibraryItem[] = [
     default_rest_seconds: 0,
     met_base: 6.0,
     met_type: 'cardio',
+    primary_type: 'time_distance',
   },
   {
     id: 'lib-walk-outdoor',
@@ -3373,6 +3484,7 @@ export const EXERCISE_LIBRARY: ExerciseLibraryItem[] = [
     default_rest_seconds: 0,
     met_base: 4.3,
     met_type: 'cardio',
+    primary_type: 'distance',
   },
   {
     id: 'lib-stairmaster',
@@ -3388,6 +3500,7 @@ export const EXERCISE_LIBRARY: ExerciseLibraryItem[] = [
     default_rest_seconds: 0,
     met_base: 8.8,
     met_type: 'cardio',
+    primary_type: 'time',
   },
   {
     id: 'lib-elliptical',
