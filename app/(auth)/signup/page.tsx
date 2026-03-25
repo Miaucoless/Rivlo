@@ -108,15 +108,6 @@ export default function SignupPage() {
             ))}
           </div>
 
-          <div className="bg-zinc-900/60 border border-white/10 rounded-2xl p-5">
-            <div className="flex gap-1 mb-3">
-              {[...Array(5)].map((_, i) => (
-                <div key={i} className="w-4 h-4 text-amber-400">⭐</div>
-              ))}
-            </div>
-            <p className="text-zinc-300 text-sm italic">&quot;Lost 12kg in 4 months. The meal planning system is incredibly convenient.&quot;</p>
-            <p className="text-zinc-500 text-xs mt-2">— Sarah C., Software Engineer</p>
-          </div>
         </div>
       </div>
 
