@@ -2,7 +2,7 @@
 
 import React from 'react'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import {
@@ -18,6 +18,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useAppStore } from '@/store/useAppStore'
 import { deleteAccount as deleteSupabaseAccount, updateProfile as persistProfile } from '@/lib/auth'
+import { getPushNotificationStatus, sendTestPushNotification, subscribeToPushNotifications, unsubscribeFromPushNotifications } from '@/lib/push-notifications'
 import { buildUserProfile, formatGoalWeightChangeForInput, formatHeightForInput, formatWeightForInput, getHeightUnitLabel, getWeightUnitLabel, parseHeightInput, parseWeightInput } from '@/lib/utils'
 import type { ActivityLevel, FitnessGoal, NotificationPreferenceKey, PreferredWorkoutTime, UnitSystem, WorkoutSplit } from '@/types'
 import { useTheme } from 'next-themes'
@@ -61,6 +62,28 @@ export default function SettingsPage() {
     carb_target_g: user?.carb_target_g || 220,
     fat_target_g: user?.fat_target_g || 80,
   })
+  const [pushSupported, setPushSupported] = useState(false)
+  const [pushPermission, setPushPermission] = useState<'default' | 'denied' | 'granted' | 'unsupported'>('default')
+  const [pushEnabled, setPushEnabled] = useState(false)
+  const [pushLoading, setPushLoading] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+
+    void (async () => {
+      const status = await getPushNotificationStatus()
+
+      if (cancelled) return
+
+      setPushSupported(status.supported)
+      setPushPermission(status.permission)
+      setPushEnabled(status.subscribed)
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const handleUnitSystemChange = (unitSystem: UnitSystem) => {
     const currentHeightCm = parseHeightInput(profile.height_input, profile.unit_system) ?? user?.height_cm ?? 175
@@ -259,6 +282,59 @@ export default function SettingsPage() {
 
     updateLocalProfile(response.user)
     toast.success(nextValue ? 'Notification enabled.' : 'Notification disabled.')
+  }
+
+  const refreshPushStatus = async () => {
+    const status = await getPushNotificationStatus()
+    setPushSupported(status.supported)
+    setPushPermission(status.permission)
+    setPushEnabled(status.subscribed)
+  }
+
+  const handleEnablePush = async () => {
+    if (isDemoMode) {
+      toast.info('Push notifications require a real signed-in account.')
+      return
+    }
+
+    setPushLoading(true)
+
+    try {
+      await subscribeToPushNotifications()
+      await refreshPushStatus()
+      toast.success('Device notifications are enabled.')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to enable push notifications.')
+    } finally {
+      setPushLoading(false)
+    }
+  }
+
+  const handleDisablePush = async () => {
+    setPushLoading(true)
+
+    try {
+      await unsubscribeFromPushNotifications()
+      await refreshPushStatus()
+      toast.success('Device notifications are disabled.')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to disable push notifications.')
+    } finally {
+      setPushLoading(false)
+    }
+  }
+
+  const handleSendTestPush = async () => {
+    setPushLoading(true)
+
+    try {
+      await sendTestPushNotification()
+      toast.success('Test notification sent.')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to send a test notification.')
+    } finally {
+      setPushLoading(false)
+    }
   }
 
   if (!user) return null
@@ -566,9 +642,46 @@ export default function SettingsPage() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Notifications</CardTitle>
-              <CardDescription>Configure your reminder preferences</CardDescription>
+              <CardDescription>Configure your reminder preferences and browser push delivery</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
+              <div className="rounded-xl border border-border/60 bg-muted/30 p-4 space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium">Device notifications</p>
+                    <p className="text-xs text-muted-foreground">
+                      {pushSupported
+                        ? pushEnabled
+                          ? 'This browser is subscribed for push notifications.'
+                          : pushPermission === 'denied'
+                            ? 'Notifications are blocked in this browser. Re-enable them in browser settings to subscribe.'
+                            : 'Enable push notifications so reminders can reach the device outside the app.'
+                        : 'Push notifications are not supported in this browser.'}
+                    </p>
+                  </div>
+                  <Badge variant={pushEnabled ? 'success' : 'outline'}>
+                    {pushSupported ? (pushEnabled ? 'Enabled' : pushPermission === 'denied' ? 'Blocked' : 'Off') : 'Unsupported'}
+                  </Badge>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  {pushEnabled ? (
+                    <>
+                      <Button variant="outline" size="sm" onClick={handleDisablePush} disabled={pushLoading}>
+                        Turn Off
+                      </Button>
+                      <Button variant="brand" size="sm" onClick={handleSendTestPush} disabled={pushLoading}>
+                        Send Test
+                      </Button>
+                    </>
+                  ) : (
+                    <Button variant="brand" size="sm" onClick={handleEnablePush} disabled={pushLoading || !pushSupported}>
+                      Enable Push
+                    </Button>
+                  )}
+                </div>
+              </div>
+
               {[
                 { key: 'daily_workout_reminder', label: 'Daily workout reminder', sub: 'Get reminded when today still has no workout logged' },
                 { key: 'meal_logging_reminder', label: 'Meal logging reminder', sub: 'Prompt you when today has no meals logged yet' },

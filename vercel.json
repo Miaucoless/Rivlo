@@ -4,6 +4,12 @@
   "installCommand": "npm install",
   "framework": "nextjs",
   "regions": ["iad1"],
+  "crons": [
+    {
+      "path": "/api/notifications/dispatch",
+      "schedule": "0 * * * *"
+    }
+  ],
   
   "rewrites": [
     {
