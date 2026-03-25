@@ -98,15 +98,29 @@ function parseJsonNotes<T>(raw: unknown): T | null {
   }
 }
 
-async function fetchMetadataAppState(): Promise<MetadataAppState> {
+async function fetchMetadataAppState(userId: string): Promise<MetadataAppState> {
   const supabase = createClient()
-  const { data, error } = await supabase.auth.getUser()
 
-  if (error || !data.user) {
-    return EMPTY_METADATA_APP_STATE
+  // Try the proper table first (new path)
+  const { data, error } = await supabase
+    .from('user_app_state')
+    .select('saved_meals, supplements, calendar_reminders')
+    .eq('user_id', userId)
+    .maybeSingle()
+
+  if (!error && data) {
+    return {
+      savedMeals: Array.isArray(data.saved_meals) ? data.saved_meals : [],
+      supplements: Array.isArray(data.supplements) ? data.supplements : [],
+      calendarReminders: Array.isArray(data.calendar_reminders) ? data.calendar_reminders : [],
+    }
   }
 
-  const appState = (data.user.user_metadata as { app_state?: MetadataAppState } | undefined)?.app_state
+  // Fall back to user metadata for users who haven't migrated yet
+  const { data: authData, error: authError } = await supabase.auth.getUser()
+  if (authError || !authData.user) return EMPTY_METADATA_APP_STATE
+
+  const appState = (authData.user.user_metadata as { app_state?: MetadataAppState } | undefined)?.app_state
   if (!appState) return EMPTY_METADATA_APP_STATE
 
   return {
@@ -116,13 +130,15 @@ async function fetchMetadataAppState(): Promise<MetadataAppState> {
   }
 }
 
-async function upsertMetadataAppState(state: MetadataAppState) {
+export async function saveMetadataCloudState(userId: string, state: MetadataAppState) {
   const supabase = createClient()
-  await supabase.auth.updateUser({ data: { app_state: state } })
-}
-
-export async function saveMetadataCloudState(state: MetadataAppState) {
-  await upsertMetadataAppState(state)
+  await supabase.from('user_app_state').upsert({
+    user_id: userId,
+    saved_meals: state.savedMeals,
+    supplements: state.supplements,
+    calendar_reminders: state.calendarReminders,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: 'user_id' })
 }
 
 function mealToRow(userId: string, date: string, meal: MealLogEntry) {
@@ -296,11 +312,11 @@ export async function fetchCloudState(userId: string): Promise<CloudHydrationDat
     supabase.from('recipes').select('*').eq('user_id', userId).order('created_at', { ascending: false }),
     supabase.from('workout_templates').select('*').eq('user_id', userId).order('updated_at', { ascending: false }),
     supabase.from('water_logs').select('*').eq('user_id', userId).order('logged_at', { ascending: false }),
-    fetchMetadataAppState(),
+    fetchMetadataAppState(userId),
   ])
 
   if (mealsResp.error || workoutsResp.error || weightsResp.error || journalsResp.error || recipesResp.error || customWorkoutsResp.error || waterLogsResp.error) {
-    console.error('Cloud hydration failed', {
+    console.error('Cloud fetch failed', {
       meals: mealsResp.error,
       workouts: workoutsResp.error,
       weights: weightsResp.error,
@@ -461,6 +477,11 @@ export async function upsertWeightEntry(userId: string, entry: WeightEntry) {
   }, { onConflict: 'user_id,date' })
 }
 
+export async function deleteWeightEntryCloud(userId: string, entryId: string) {
+  const supabase = createClient()
+  await supabase.from('weight_entries').delete().eq('user_id', userId).eq('id', entryId)
+}
+
 export async function upsertJournalEntry(userId: string, entry: JournalEntry) {
   const supabase = createClient()
   await supabase.from('journal_entries').upsert({
@@ -518,7 +539,7 @@ export async function upsertCustomRecipe(userId: string, recipe: Recipe) {
 export async function upsertCustomWorkout(userId: string, workout: Workout) {
   const supabase = createClient()
   await supabase.from('workout_templates').upsert({
-    id: workout.id,
+    id: ensureUuid(workout.id),
     user_id: userId,
     name: workout.name,
     description: workout.description,
@@ -570,8 +591,8 @@ export async function seedCloudFromLocal(userId: string, payload: CloudSeedPaylo
     tasks.push(upsertGroceryList(userId, payload.groceryList))
   }
 
-  const existingMetadata = await fetchMetadataAppState()
-  tasks.push(saveMetadataCloudState({
+  const existingMetadata = await fetchMetadataAppState(userId)
+  tasks.push(saveMetadataCloudState(userId, {
     savedMeals: payload.savedMeals.length > 0 ? payload.savedMeals : existingMetadata.savedMeals,
     supplements: payload.supplements.length > 0 ? payload.supplements : existingMetadata.supplements,
     calendarReminders: payload.calendarReminders.length > 0 ? payload.calendarReminders : existingMetadata.calendarReminders,

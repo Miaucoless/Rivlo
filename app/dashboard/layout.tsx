@@ -32,34 +32,41 @@ export default function DashboardLayout({
     if (loading || !isAuthenticated) return
 
     let syncing = false
+    let syncTimeoutId: ReturnType<typeof setTimeout> | null = null
 
     const triggerSync = async () => {
       if (syncing) return
       syncing = true
+      // Safety net: if the request hangs, unblock future syncs after 30s
+      syncTimeoutId = setTimeout(() => { syncing = false }, 30_000)
       try {
         await syncNow()
       } finally {
+        if (syncTimeoutId) clearTimeout(syncTimeoutId)
         syncing = false
       }
     }
 
-    const handleFocus = () => {
-      void triggerSync()
-    }
-
+    const handleFocus = () => void triggerSync()
     const handleVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        void triggerSync()
-      }
+      if (document.visibilityState === 'visible') void triggerSync()
+    }
+    // pageshow fires when page is restored from bfcache (iOS PWA, back-forward nav)
+    // visibilitychange alone doesn't fire in this case on iOS
+    const handlePageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) void triggerSync()
     }
 
     void triggerSync()
     window.addEventListener('focus', handleFocus)
     document.addEventListener('visibilitychange', handleVisibility)
+    window.addEventListener('pageshow', handlePageShow)
 
     return () => {
       window.removeEventListener('focus', handleFocus)
       document.removeEventListener('visibilitychange', handleVisibility)
+      window.removeEventListener('pageshow', handlePageShow)
+      if (syncTimeoutId) clearTimeout(syncTimeoutId)
     }
   }, [isAuthenticated, loading, syncNow])
 

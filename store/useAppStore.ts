@@ -42,6 +42,7 @@ import {
   deleteJournalEntryCloud,
   deleteMealEntryCloud,
   deleteWorkoutLogCloud,
+  deleteWeightEntryCloud,
   ensureUuid,
   fetchCloudState,
   saveMetadataCloudState,
@@ -547,23 +548,62 @@ export const useAppStore = create<AppStore>()(
       hydrateFromCloud: async (userId) => {
         if (!userId || get().isDemoMode) return
 
-        let cloud = await fetchCloudState(userId)
+        const cloud = await fetchCloudState(userId)
         if (!cloud) return
 
         const localState = get()
+
+        // Collect IDs already in cloud for each data type so we can find
+        // local-only items (e.g. writes that failed silently last session).
+        const cloudMealIds = new Set(
+          Object.values(cloud.mealEntries).flatMap((meals) => meals.map((m) => m.id))
+        )
+        const localOnlyMealEntries: Record<string, MealLogEntry[]> = {}
+        Object.entries(localState.mealEntries).forEach(([date, meals]) => {
+          const missing = meals.filter((m) => !cloudMealIds.has(m.id))
+          if (missing.length > 0) localOnlyMealEntries[date] = missing
+        })
+
+        const cloudWorkoutIds = new Set(cloud.workoutLogs.map((l) => l.id))
+        const localOnlyWorkouts = localState.workoutLogs.filter((l) => !cloudWorkoutIds.has(l.id))
+
+        const cloudWeightIds = new Set(cloud.weightHistory.map((e) => e.id))
+        const localOnlyWeights = localState.weightHistory.filter((e) => !cloudWeightIds.has(e.id))
+
+        const cloudJournalIds = new Set(cloud.journalEntries.map((e) => e.id))
+        const localOnlyJournals = localState.journalEntries.filter((e) => !cloudJournalIds.has(e.id))
+
+        const cloudWaterIds = new Set(
+          Object.values(cloud.waterLogs).flatMap((entries) => entries.map((e) => e.id))
+        )
+        const localOnlyWaterLogs: Record<string, WaterEntry[]> = {}
+        Object.entries(localState.waterLogs).forEach(([date, entries]) => {
+          const missing = entries.filter((e) => !cloudWaterIds.has(e.id))
+          if (missing.length > 0) localOnlyWaterLogs[date] = missing
+        })
+
+        const cloudRecipeIds = new Set(cloud.customRecipes.map((r) => r.id))
+        const localOnlyRecipes = localState.customRecipes.filter((r) => !cloudRecipeIds.has(r.id))
+
+        const cloudWorkoutTemplateIds = new Set(cloud.customWorkouts.map((w) => w.id))
+        const localOnlyWorkoutTemplates = localState.customWorkouts.filter((w) => !cloudWorkoutTemplateIds.has(w.id))
+
+        // Seed payload: push any local data that cloud doesn't have yet.
+        // For metadata types (savedMeals, supplements, calendarReminders) stored
+        // in user metadata (not rows), keep the old all-or-nothing logic.
         const seedPayload = {
-          mealEntries: Object.keys(cloud.mealEntries).length === 0 ? localState.mealEntries : cloud.mealEntries,
-          workoutLogs: cloud.workoutLogs.length === 0 ? localState.workoutLogs : [],
-          weightHistory: cloud.weightHistory.length === 0 ? localState.weightHistory : [],
-          journalEntries: cloud.journalEntries.length === 0 ? localState.journalEntries : [],
+          mealEntries: Object.keys(cloud.mealEntries).length === 0 ? localState.mealEntries : localOnlyMealEntries,
+          workoutLogs: cloud.workoutLogs.length === 0 ? localState.workoutLogs : localOnlyWorkouts,
+          weightHistory: cloud.weightHistory.length === 0 ? localState.weightHistory : localOnlyWeights,
+          journalEntries: cloud.journalEntries.length === 0 ? localState.journalEntries : localOnlyJournals,
           savedMeals: cloud.savedMeals.length === 0 ? localState.savedMeals : [],
           supplements: cloud.supplements.length === 0 ? localState.supplements : [],
           calendarReminders: cloud.calendarReminders.length === 0 ? localState.calendarReminders : [],
           weeklyMealPlan: cloud.weeklyMealPlan ? null : localState.weeklyMealPlan,
           groceryList: cloud.groceryList ? null : localState.groceryList,
-          customRecipes: cloud.customRecipes.length === 0 ? localState.customRecipes : [],
-          customWorkouts: cloud.customWorkouts.length === 0 ? localState.customWorkouts : [],
-          waterLogs: Object.keys(cloud.waterLogs).length === 0 ? localState.waterLogs : {},
+          customRecipes: cloud.customRecipes.length === 0 ? localState.customRecipes : localOnlyRecipes,
+          customWorkouts: cloud.customWorkouts.length === 0 ? localState.customWorkouts : localOnlyWorkoutTemplates,
+          waterLogs: Object.keys(cloud.waterLogs).length === 0 ? localState.waterLogs : localOnlyWaterLogs,
         }
 
         const shouldSeedAnyBucket =
@@ -574,34 +614,33 @@ export const useAppStore = create<AppStore>()(
           seedPayload.savedMeals.length > 0 ||
           seedPayload.supplements.length > 0 ||
           seedPayload.calendarReminders.length > 0 ||
+          !!seedPayload.weeklyMealPlan ||
+          !!seedPayload.groceryList ||
           seedPayload.customRecipes.length > 0 ||
           seedPayload.customWorkouts.length > 0 ||
-          Object.keys(seedPayload.waterLogs).length > 0 ||
-          !!seedPayload.weeklyMealPlan ||
-          !!seedPayload.groceryList
+          Object.keys(seedPayload.waterLogs).length > 0
+
+        let finalCloud = cloud
 
         if (shouldSeedAnyBucket) {
           await seedCloudFromLocal(userId, seedPayload)
-
           const refreshedCloud = await fetchCloudState(userId)
-          if (refreshedCloud) {
-            cloud = refreshedCloud
-          }
+          if (refreshedCloud) finalCloud = refreshedCloud
         }
 
         set((state) => withRefreshedNotifications(state, {
-          mealEntries: cloud.mealEntries,
-          workoutLogs: cloud.workoutLogs,
-          weightHistory: cloud.weightHistory,
-          journalEntries: cloud.journalEntries,
-          savedMeals: cloud.savedMeals,
-          supplements: cloud.supplements,
-          calendarReminders: cloud.calendarReminders,
-          weeklyMealPlan: cloud.weeklyMealPlan,
-          groceryList: cloud.groceryList,
-          customRecipes: cloud.customRecipes,
-          customWorkouts: cloud.customWorkouts,
-          waterLogs: cloud.waterLogs,
+          mealEntries: finalCloud.mealEntries,
+          workoutLogs: finalCloud.workoutLogs,
+          weightHistory: finalCloud.weightHistory,
+          journalEntries: finalCloud.journalEntries,
+          savedMeals: finalCloud.savedMeals,
+          supplements: finalCloud.supplements,
+          calendarReminders: finalCloud.calendarReminders,
+          weeklyMealPlan: finalCloud.weeklyMealPlan,
+          groceryList: finalCloud.groceryList,
+          customRecipes: finalCloud.customRecipes,
+          customWorkouts: finalCloud.customWorkouts,
+          waterLogs: finalCloud.waterLogs,
           cloudHydratedUserId: userId,
         }))
       },
@@ -729,9 +768,7 @@ export const useAppStore = create<AppStore>()(
 
         const state = get()
         if (state.user && !state.isDemoMode) {
-          // Note: You would need to implement deleteWeightEntryCloud in cloud-sync
-          // For now, this will only update local state
-          console.log('Weight entry deletion not yet synced to cloud')
+          void deleteWeightEntryCloud(state.user.id, id)
         }
       },
 
@@ -856,7 +893,7 @@ export const useAppStore = create<AppStore>()(
 
         const state = get()
         if (state.user && !state.isDemoMode) {
-          void saveMetadataCloudState({
+          void saveMetadataCloudState(state.user.id, {
             savedMeals: state.savedMeals,
             supplements: state.supplements,
             calendarReminders: state.calendarReminders,
@@ -875,7 +912,7 @@ export const useAppStore = create<AppStore>()(
 
         const state = get()
         if (state.user && !state.isDemoMode) {
-          void saveMetadataCloudState({
+          void saveMetadataCloudState(state.user.id, {
             savedMeals: state.savedMeals,
             supplements: state.supplements,
             calendarReminders: state.calendarReminders,
@@ -908,7 +945,7 @@ export const useAppStore = create<AppStore>()(
 
         const state = get()
         if (state.user && !state.isDemoMode) {
-          void saveMetadataCloudState({
+          void saveMetadataCloudState(state.user.id, {
             savedMeals: state.savedMeals,
             supplements: state.supplements,
             calendarReminders: state.calendarReminders,
@@ -1160,7 +1197,7 @@ export const useAppStore = create<AppStore>()(
 
         const state = get()
         if (state.user && !state.isDemoMode) {
-          void saveMetadataCloudState({
+          void saveMetadataCloudState(state.user.id, {
             savedMeals: state.savedMeals,
             supplements: state.supplements,
             calendarReminders: state.calendarReminders,
@@ -1179,7 +1216,7 @@ export const useAppStore = create<AppStore>()(
 
         const state = get()
         if (state.user && !state.isDemoMode) {
-          void saveMetadataCloudState({
+          void saveMetadataCloudState(state.user.id, {
             savedMeals: state.savedMeals,
             supplements: state.supplements,
             calendarReminders: state.calendarReminders,
@@ -1194,7 +1231,7 @@ export const useAppStore = create<AppStore>()(
 
         const state = get()
         if (state.user && !state.isDemoMode) {
-          void saveMetadataCloudState({
+          void saveMetadataCloudState(state.user.id, {
             savedMeals: state.savedMeals,
             supplements: state.supplements,
             calendarReminders: state.calendarReminders,
@@ -1221,7 +1258,7 @@ export const useAppStore = create<AppStore>()(
 
         const state = get()
         if (state.user && !state.isDemoMode) {
-          void saveMetadataCloudState({
+          void saveMetadataCloudState(state.user.id, {
             savedMeals: state.savedMeals,
             supplements: state.supplements,
             calendarReminders: state.calendarReminders,
@@ -1235,7 +1272,7 @@ export const useAppStore = create<AppStore>()(
 
         const state = get()
         if (state.user && !state.isDemoMode) {
-          void saveMetadataCloudState({
+          void saveMetadataCloudState(state.user.id, {
             savedMeals: state.savedMeals,
             supplements: state.supplements,
             calendarReminders: state.calendarReminders,
@@ -1250,7 +1287,7 @@ export const useAppStore = create<AppStore>()(
 
         const state = get()
         if (state.user && !state.isDemoMode) {
-          void saveMetadataCloudState({
+          void saveMetadataCloudState(state.user.id, {
             savedMeals: state.savedMeals,
             supplements: state.supplements,
             calendarReminders: state.calendarReminders,
@@ -1263,7 +1300,7 @@ export const useAppStore = create<AppStore>()(
 
         const state = get()
         if (state.user && !state.isDemoMode) {
-          void saveMetadataCloudState({
+          void saveMetadataCloudState(state.user.id, {
             savedMeals: state.savedMeals,
             supplements: state.supplements,
             calendarReminders: state.calendarReminders,
