@@ -145,6 +145,8 @@ export default function DashboardPage() {
   const todayTotals = getDailyTotals(today)
   const todayMeals = getDailyMeals(today)
 
+  const sortedWeightHistory = [...weightHistory].sort((a, b) => a.date.localeCompare(b.date))
+
   // Calorie progress
   const caloriePct = percentage(todayTotals.calories, user.calorie_target)
   const proteinPct = percentage(todayTotals.protein_g, user.protein_target_g)
@@ -156,7 +158,7 @@ export default function DashboardPage() {
   const proteinLeft = Math.max(0, user.protein_target_g - todayTotals.protein_g)
 
   // Weight data for chart
-  const weightChartData = weightHistory
+  const weightChartData = sortedWeightHistory
     .slice(-14)
     .map((entry) => ({
       date: format(new Date(entry.date), 'MM/dd'),
@@ -224,9 +226,9 @@ export default function DashboardPage() {
   const netCaloriePct = percentage(netCaloriesToday, user.calorie_target)
 
   // Stats
-  const hasWeightHistory = weightHistory.length > 0
-  const startWeight = weightHistory[0]?.weight_kg || user.weight_kg
-  const currentWeight = weightHistory[weightHistory.length - 1]?.weight_kg || user.weight_kg
+  const hasWeightHistory = sortedWeightHistory.length > 0
+  const startWeight = sortedWeightHistory[0]?.weight_kg || user.weight_kg
+  const currentWeight = sortedWeightHistory[sortedWeightHistory.length - 1]?.weight_kg || user.weight_kg
   const weightChange = currentWeight - startWeight
 
   return (
@@ -826,7 +828,7 @@ export default function DashboardPage() {
           <DailyQuoteCard />
 
           {/* Weight trend card */}
-          {weightHistory.length > 0 && (
+          {sortedWeightHistory.length > 0 && (
             <Card>
               <CardContent className="p-4">
                 <div className="flex items-center justify-between mb-3">
@@ -847,7 +849,7 @@ export default function DashboardPage() {
                   </AreaChart>
                 </ResponsiveContainer>
                 <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                  <span>{formatWeightValue(weightHistory[0]?.weight_kg || startWeight, unitSystem)} start</span>
+                  <span>{formatWeightValue(sortedWeightHistory[0]?.weight_kg || startWeight, unitSystem)} start</span>
                   <span>{formatWeightValue(currentWeight, unitSystem)} now</span>
                 </div>
               </CardContent>
