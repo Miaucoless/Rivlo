@@ -595,6 +595,7 @@ export const useAppStore = create<AppStore>()(
           groceryList: cloud.groceryList,
           customRecipes: cloud.customRecipes,
           customWorkouts: cloud.customWorkouts,
+          waterLogs: cloud.waterLogs,
           cloudHydratedUserId: userId,
         }))
       },

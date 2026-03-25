@@ -149,6 +149,7 @@ export function buildUserProfile(formData: {
     protein_target_g,
     carb_target_g: macros.carbs_g,
     fat_target_g: macros.fat_g,
+    water_goal_ml: Math.round(((formData.weight_kg ?? 70) * 35) / 50) * 50,
     onboarded: true,
     avatar_url: undefined,
   }

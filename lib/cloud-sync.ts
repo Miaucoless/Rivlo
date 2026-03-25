@@ -18,6 +18,7 @@ type CloudHydrationData = {
   groceryList: GroceryList | null
   customRecipes: Recipe[]
   customWorkouts: Workout[]
+  waterLogs: Record<string, WaterEntry[]>
 }
 
 export type CloudSeedPayload = {
@@ -282,6 +283,7 @@ export async function fetchCloudState(userId: string): Promise<CloudHydrationDat
     groceryResp,
     recipesResp,
     customWorkoutsResp,
+    waterLogsResp,
     metadataState,
   ] = await Promise.all([
     supabase.from('meal_entries').select('*').eq('user_id', userId).order('logged_at', { ascending: false }),
@@ -292,10 +294,11 @@ export async function fetchCloudState(userId: string): Promise<CloudHydrationDat
     supabase.from('grocery_lists').select('*').eq('user_id', userId).order('week_start', { ascending: false }).limit(1).maybeSingle(),
     supabase.from('recipes').select('*').eq('user_id', userId).order('created_at', { ascending: false }),
     supabase.from('workout_templates').select('*').eq('user_id', userId).order('updated_at', { ascending: false }),
+    supabase.from('water_logs').select('*').eq('user_id', userId).order('logged_at', { ascending: false }),
     fetchMetadataAppState(),
   ])
 
-  if (mealsResp.error || workoutsResp.error || weightsResp.error || journalsResp.error || recipesResp.error || customWorkoutsResp.error) {
+  if (mealsResp.error || workoutsResp.error || weightsResp.error || journalsResp.error || recipesResp.error || customWorkoutsResp.error || waterLogsResp.error) {
     console.error('Cloud hydration failed', {
       meals: mealsResp.error,
       workouts: workoutsResp.error,
@@ -303,6 +306,7 @@ export async function fetchCloudState(userId: string): Promise<CloudHydrationDat
       journals: journalsResp.error,
       recipes: recipesResp.error,
       templates: customWorkoutsResp.error,
+      waterLogs: waterLogsResp.error,
     })
     return null
   }
@@ -362,6 +366,18 @@ export async function fetchCloudState(userId: string): Promise<CloudHydrationDat
 
   const customRecipes = (recipesResp.data ?? []).map(recipeFromRow)
 
+  const waterLogs: Record<string, WaterEntry[]> = {}
+  ;(waterLogsResp.data ?? []).forEach((row: any) => {
+    const entry: WaterEntry = {
+      id: row.id,
+      user_id: row.user_id,
+      date: row.date,
+      amount_ml: Number(row.amount_ml),
+      logged_at: row.logged_at,
+    }
+    waterLogs[entry.date] = waterLogs[entry.date] ? [...waterLogs[entry.date], entry] : [entry]
+  })
+
   const customWorkouts: Workout[] = (customWorkoutsResp.data ?? []).map((row) => ({
     id: row.id,
     name: row.name,
@@ -388,6 +404,7 @@ export async function fetchCloudState(userId: string): Promise<CloudHydrationDat
     groceryList,
     customRecipes,
     customWorkouts,
+    waterLogs,
   }
 }
 
