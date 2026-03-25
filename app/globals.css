@@ -69,6 +69,14 @@
   html {
     scroll-behavior: smooth;
     overflow-x: clip; /* prevent horizontal page scroll without breaking sticky/fixed positioning */
+    overscroll-behavior: none;
+    background-color: hsl(var(--background));
+    height: 100%;
+  }
+
+  body {
+    overscroll-behavior: none;
+    min-height: 100%;
   }
 
   /* Allow inputs in grid cells to shrink below browser default min-width */

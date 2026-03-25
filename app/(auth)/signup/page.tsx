@@ -20,9 +20,24 @@ export default function SignupPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [confirmationEmail, setConfirmationEmail] = useState('')
+  const [passwordError, setPasswordError] = useState('')
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }))
+    const { name, value } = e.target
+
+    setForm((prev) => ({ ...prev, [name]: value }))
+
+    if (name === 'password') {
+      if (!value || value.length >= 8) {
+        setPasswordError('')
+      }
+    }
+  }
+
+  const handlePasswordBlur = () => {
+    if (form.password && form.password.length < 8) {
+      setPasswordError('Password must be at least 8 characters')
+    }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -32,9 +47,11 @@ export default function SignupPage() {
       return
     }
     if (form.password.length < 8) {
+      setPasswordError('Password must be at least 8 characters')
       toast.error('Password must be at least 8 characters')
       return
     }
+    setPasswordError('')
     setLoading(true)
     
     const response = await signUpWithEmail(form.email, form.password, form.name, form.unit_system)
@@ -215,9 +232,10 @@ export default function SignupPage() {
                   id="password"
                   name="password"
                   type={showPassword ? 'text' : 'password'}
-                  placeholder="Min. 8 characters"
+                  placeholder="Create a password"
                   value={form.password}
                   onChange={handleChange}
+                  onBlur={handlePasswordBlur}
                   className="bg-zinc-900 border-white/10 text-white placeholder:text-zinc-600 pr-10 focus:border-emerald-500/50"
                   autoComplete="new-password"
                 />
@@ -229,6 +247,10 @@ export default function SignupPage() {
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
+
+              {passwordError && (
+                <p className="text-xs text-red-400">{passwordError}</p>
+              )}
 
               {/* Password strength */}
               {form.password && (

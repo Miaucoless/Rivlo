@@ -285,15 +285,12 @@ export default function LoginPage() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <Label
-                      htmlFor="password"
-                      className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-400"
-                    >
-                      Password
-                    </Label>
-                    <p className="text-xs text-zinc-500">Minimum 8 characters when creating an account</p>
-                  </div>
+                  <Label
+                    htmlFor="password"
+                    className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-400"
+                  >
+                    Password
+                  </Label>
 
                   <div className="relative">
                     <Input
