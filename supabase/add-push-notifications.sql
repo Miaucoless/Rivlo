@@ -1,3 +1,4 @@
+-- Push notification subscription + delivery dedupe tables
 CREATE TABLE IF NOT EXISTS push_subscriptions (
   id            UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
   user_id       UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
