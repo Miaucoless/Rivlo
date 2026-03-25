@@ -16,6 +16,13 @@ interface WaterLogModalProps {
   onAdd: (entry: WaterEntry) => void
 }
 
+const GALLON_PRESETS = [
+  { label: '¼ Gal', ml: 946 },
+  { label: '½ Gal', ml: 1893 },
+  { label: '¾ Gal', ml: 2839 },
+  { label: '1 Gal', ml: 3785 },
+]
+
 export function WaterLogModal({ open, onOpenChange, onAdd }: WaterLogModalProps) {
   const [amount, setAmount] = useState('')
   const { user, waterLogs, removeWaterEntry } = useAppStore()
@@ -37,6 +44,18 @@ export function WaterLogModal({ open, onOpenChange, onAdd }: WaterLogModalProps)
     setAmount('')
   }
 
+  const handlePreset = (ml: number) => {
+    if (!user) return
+    const entry: WaterEntry = {
+      id: `water-${Date.now()}`,
+      user_id: user.id,
+      date: today,
+      amount_ml: ml,
+      logged_at: new Date().toISOString(),
+    }
+    onAdd(entry)
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-sm">
@@ -44,6 +63,20 @@ export function WaterLogModal({ open, onOpenChange, onAdd }: WaterLogModalProps)
           <DialogTitle>Log Water</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 pt-2">
+          {/* Gallon presets */}
+          <div className="grid grid-cols-4 gap-1.5">
+            {GALLON_PRESETS.map(({ label, ml }) => (
+              <button
+                key={label}
+                onClick={() => handlePreset(ml)}
+                className="flex flex-col items-center py-2 px-1 rounded-lg border border-border bg-card text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              >
+                <span className="text-xs font-medium">{label}</span>
+                <span className="text-[10px] text-muted-foreground">{ml.toLocaleString()}</span>
+              </button>
+            ))}
+          </div>
+
           <div className="flex gap-2">
             <Input
               type="number"
