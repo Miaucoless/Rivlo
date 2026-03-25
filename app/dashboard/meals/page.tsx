@@ -36,7 +36,7 @@ import { toast } from 'sonner'
 
 const MEAL_TYPES = ['breakfast', 'lunch', 'dinner', 'snack', 'drink'] as const
 type MealType = (typeof MEAL_TYPES)[number]
-type MealSource = 'search' | 'saved' | 'recent' | 'recipe' | 'manual'
+type MealSource = 'search' | 'saved' | 'recipe' | 'manual'
 type SearchMeasureUnit = 'serving' | 'g' | 'oz' | 'ml' | 'fl_oz'
 
 type ManualItemRow = {
@@ -49,46 +49,6 @@ type ManualItemRow = {
     protein_g: number
     carbs_g: number
     fat_g: number
-  }
-}
-
-function scaleMealLogEntry(meal: MealLogEntry, multiplier: number): MealLogEntry {
-  const m = Number.isFinite(multiplier) ? multiplier : 1
-  const safe = Math.max(0, m)
-  const roundMacro = (n: number) => Math.round(n * 10) / 10
-
-  const scaledMealItems = meal.meal_items?.map((item) => ({
-    ...item,
-    macros: {
-      calories: Math.round((item.macros?.calories ?? 0) * safe),
-      protein_g: roundMacro((item.macros?.protein_g ?? 0) * safe),
-      carbs_g: roundMacro((item.macros?.carbs_g ?? 0) * safe),
-      fat_g: roundMacro((item.macros?.fat_g ?? 0) * safe),
-    },
-    amount: item.amount != null ? item.amount * safe : item.amount,
-  }))
-
-  const recipe_amount = (meal as any).recipe_amount as
-    | { kind: 'servings'; servings: number }
-    | { kind: 'units'; units: number }
-    | undefined
-
-  const scaledRecipeAmount = recipe_amount
-    ? recipe_amount.kind === 'servings'
-      ? { kind: 'servings' as const, servings: recipe_amount.servings * safe }
-      : { kind: 'units' as const, units: recipe_amount.units * safe }
-    : undefined
-
-  return {
-    ...meal,
-    macros: {
-      calories: Math.round((meal.macros?.calories ?? 0) * safe),
-      protein_g: roundMacro((meal.macros?.protein_g ?? 0) * safe),
-      carbs_g: roundMacro((meal.macros?.carbs_g ?? 0) * safe),
-      fat_g: roundMacro((meal.macros?.fat_g ?? 0) * safe),
-    },
-    meal_items: scaledMealItems,
-    ...(scaledRecipeAmount ? { recipe_amount: scaledRecipeAmount } : {}),
   }
 }
 
@@ -487,8 +447,6 @@ function MealEditorModal({
   const allRecipes = useMemo(() => [...customRecipes, ...RECIPES], [customRecipes])
 
   const [source, setSource] = useState<MealSource>('search')
-  const [recentMealSearch, setRecentMealSearch] = useState('')
-  const [recentMealMultipliers, setRecentMealMultipliers] = useState<Record<string, string>>({})
   const [selectedSavedMealId, setSelectedSavedMealId] = useState<string>('')
   const [expandedSavedMealIds, setExpandedSavedMealIds] = useState<Record<string, boolean>>({})
   const [savedMealModalSearch, setSavedMealModalSearch] = useState('')
@@ -692,53 +650,6 @@ function MealEditorModal({
       setSelectedSavedMealId('')
     }
     setSource(nextSource)
-  }
-
-  const recentMeals = useMemo(() => {
-    const today = getTodayISO()
-    const cutoff = format(subDays(new Date(), 7), 'yyyy-MM-dd')
-
-    const entries: Array<{ date: string; meal: MealLogEntry }> = []
-    Object.entries(mealEntries || {}).forEach(([date, meals]) => {
-      if (date < cutoff || date >= today) return
-      ;(meals || []).forEach((meal) => entries.push({ date, meal }))
-    })
-
-    entries.sort((a, b) => b.date.localeCompare(a.date))
-
-    const q = recentMealSearch.trim().toLowerCase()
-    const seen = new Set<string>()
-    const result: Array<{ key: string; date: string; meal: MealLogEntry }> = []
-
-    for (const item of entries) {
-      const m = item.meal
-      const signature = JSON.stringify({
-        name: m.name,
-        macros: m.macros,
-        recipeId: m.recipe?.id ?? null,
-        mealItems: (m.meal_items || []).map((x) => x.name),
-        entry_source: m.entry_source ?? null,
-        saved_meal_template_id: m.saved_meal_template_id ?? null,
-      })
-      if (seen.has(signature)) continue
-
-      const haystack = `${m.name} ${(m.entry_source || '')} ${(m.recipe?.name || '')} ${(m.meal_items || []).map((x) => x.name).join(' ')}`.toLowerCase()
-      if (q && !haystack.includes(q)) continue
-
-      seen.add(signature)
-      result.push({ key: signature, date: item.date, meal: m })
-      if (result.length >= 20) break
-    }
-
-    return result
-  }, [mealEntries, recentMealSearch])
-
-  const getRecentMultiplier = (key: string) => {
-    const raw = recentMealMultipliers[key]
-    if (raw == null || raw === '') return 1
-    const n = Number(raw)
-    if (!Number.isFinite(n) || n <= 0) return 1
-    return n
   }
 
   const selectedRecipe = useMemo(() => {
@@ -1602,10 +1513,9 @@ function MealEditorModal({
           )}
 
           <Tabs value={source} onValueChange={(value) => handleSourceChange(value as MealSource)} className="space-y-4">
-            <TabsList className="grid grid-cols-5 gap-2 h-auto bg-transparent p-0">
+            <TabsList className="grid grid-cols-4 gap-2 h-auto bg-transparent p-0">
               <TabsTrigger value="search" className="text-xs rounded-lg border border-border/60 bg-muted/30 px-2 py-2 transition-colors hover:bg-accent/70 hover:text-foreground data-[state=active]:border-border data-[state=active]:bg-background data-[state=active]:text-foreground focus-visible:ring-1 focus-visible:ring-primary/30">Search</TabsTrigger>
               <TabsTrigger value="saved" className="text-xs rounded-lg border border-border/60 bg-muted/30 px-2 py-2 transition-colors hover:bg-accent/70 hover:text-foreground data-[state=active]:border-border data-[state=active]:bg-background data-[state=active]:text-foreground focus-visible:ring-1 focus-visible:ring-primary/30">Saved</TabsTrigger>
-              <TabsTrigger value="recent" className="text-xs rounded-lg border border-border/60 bg-muted/30 px-2 py-2 transition-colors hover:bg-accent/70 hover:text-foreground data-[state=active]:border-border data-[state=active]:bg-background data-[state=active]:text-foreground focus-visible:ring-1 focus-visible:ring-primary/30">Recent</TabsTrigger>
               <TabsTrigger value="recipe" className="text-xs rounded-lg border border-border/60 bg-muted/30 px-2 py-2 transition-colors hover:bg-accent/70 hover:text-foreground data-[state=active]:border-border data-[state=active]:bg-background data-[state=active]:text-foreground focus-visible:ring-1 focus-visible:ring-primary/30">Recipes</TabsTrigger>
               <TabsTrigger value="manual" className="text-xs rounded-lg border border-border/60 bg-muted/30 px-2 py-2 transition-colors hover:bg-accent/70 hover:text-foreground data-[state=active]:border-border data-[state=active]:bg-background data-[state=active]:text-foreground focus-visible:ring-1 focus-visible:ring-primary/30">Manual</TabsTrigger>
             </TabsList>
@@ -1813,148 +1723,6 @@ function MealEditorModal({
                   />
                 </div>
               )}
-            </TabsContent>
-
-            <TabsContent value="recent" className="mt-0 space-y-3">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
-                <Input
-                  value={recentMealSearch}
-                  onChange={(e) => setRecentMealSearch(e.target.value)}
-                  placeholder="Search your last 7 days…"
-                  className="pl-9 pr-8 h-9"
-                />
-                {recentMealSearch && (
-                  <button
-                    type="button"
-                    onClick={() => setRecentMealSearch('')}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
-
-              <p className="text-[11px] text-muted-foreground">
-                Tap a meal to add it to <span className="font-medium text-foreground">{mealTypeLabel(mealType)}</span> today.
-              </p>
-
-              <div className="max-h-60 overflow-y-auto overscroll-contain space-y-1.5 pr-0.5">
-                {recentMeals.length === 0 ? (
-                  <p className="text-xs text-muted-foreground text-center py-8">No recent meals yet.</p>
-                ) : recentMeals.map(({ key, date, meal }) => (
-                  <div
-                    key={key}
-                    className="w-full rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5 hover:bg-muted/40 hover:border-border transition-all"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium truncate">{meal.name}</p>
-                        <p className="mt-0.5 text-[11px] text-muted-foreground">
-                          {date} · {(meal.entry_source ?? 'meal')}
-                        </p>
-                      </div>
-                      <div className="text-right shrink-0">
-                        <p className="font-data text-sm font-semibold tabular-nums">{Math.round(meal.macros.calories)}</p>
-                        <p className="text-[10px] text-muted-foreground">kcal</p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between gap-2 mt-2">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[11px] text-muted-foreground">Amount</span>
-                        <div className="flex items-center gap-1">
-                          <Button
-                            type="button"
-                            size="icon-sm"
-                            variant="outline"
-                            className="h-7 w-7"
-                            onClick={() => {
-                              const next = Math.max(0.25, Math.round((getRecentMultiplier(key) - 0.25) * 100) / 100)
-                              setRecentMealMultipliers((curr) => ({ ...curr, [key]: String(next) }))
-                            }}
-                          >
-                            −
-                          </Button>
-                          <Input
-                            className="h-7 w-[72px] text-xs text-center"
-                            type="number"
-                            min={0.25}
-                            step={0.25}
-                            value={recentMealMultipliers[key] ?? '1'}
-                            onChange={(e) => setRecentMealMultipliers((curr) => ({ ...curr, [key]: e.target.value }))}
-                          />
-                          <Button
-                            type="button"
-                            size="icon-sm"
-                            variant="outline"
-                            className="h-7 w-7"
-                            onClick={() => {
-                              const next = Math.round((getRecentMultiplier(key) + 0.25) * 100) / 100
-                              setRecentMealMultipliers((curr) => ({ ...curr, [key]: String(next) }))
-                            }}
-                          >
-                            +
-                          </Button>
-                        </div>
-                        <span className="text-[11px] text-muted-foreground">×</span>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          className="h-7 px-3 text-xs"
-                          onClick={() => {
-                            const mult = getRecentMultiplier(key)
-                            const scaled = scaleMealLogEntry(meal, mult)
-                            onSave({
-                              meal_type: mealType,
-                              name: scaled.name,
-                              macros: scaled.macros,
-                              time: format(new Date(), 'h:mm a'),
-                              recipe: scaled.recipe,
-                              meal_items: scaled.meal_items ?? [],
-                              entry_source: scaled.entry_source,
-                              saved_meal_template_id: scaled.saved_meal_template_id,
-                              recipe_amount: (scaled as any).recipe_amount,
-                            })
-                            toast.success(`Added ${scaled.name} to ${mealType}.`)
-                          }}
-                        >
-                          Quick add
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="brand"
-                          className="h-7 px-3 text-xs"
-                          onClick={() => {
-                            const mult = getRecentMultiplier(key)
-                            const scaled = scaleMealLogEntry(meal, mult)
-                            onSave({
-                              meal_type: mealType,
-                              name: scaled.name,
-                              macros: scaled.macros,
-                              time: format(new Date(), 'h:mm a'),
-                              recipe: scaled.recipe,
-                              meal_items: scaled.meal_items ?? [],
-                              entry_source: scaled.entry_source,
-                              saved_meal_template_id: scaled.saved_meal_template_id,
-                              recipe_amount: (scaled as any).recipe_amount,
-                            })
-                            onOpenChange(false)
-                            toast.success(`Added ${scaled.name} to ${mealType}.`)
-                          }}
-                        >
-                          Add &amp; close
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
             </TabsContent>
 
             <TabsContent value="saved" className="mt-0 space-y-3">
@@ -3384,7 +3152,7 @@ export default function MealsPage() {
   }
 
   const filteredRecipes = useMemo(() => {
-    let list = [...customRecipes, ...RECIPES]
+    let list = RECIPES
     if (recipeFilterType !== 'all') list = list.filter(r => r.meal_type === recipeFilterType)
     if (recipeFilterTag === 'high-protein') list = list.filter(r => r.macros.protein_g >= 25)
     else if (recipeFilterTag === 'low-calorie') list = list.filter(r => r.macros.calories <= 400)
@@ -3398,7 +3166,7 @@ export default function MealsPage() {
       list = list.filter(r => r.name.toLowerCase().includes(q) || r.description.toLowerCase().includes(q))
     }
     return list
-  }, [customRecipes, recipeFilterType, recipeFilterTag, recipeSearchText])
+  }, [recipeFilterType, recipeFilterTag, recipeSearchText])
 
   const grocerySuggestions = useMemo(() => {
     const q = grocerySearchQuery.toLowerCase().trim()

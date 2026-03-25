@@ -245,7 +245,7 @@ export default function TrackingPage() {
   const filteredWeight = weightHistory.filter((w) => {
     const d = new Date(w.date)
     return (now.getTime() - d.getTime()) / (1000 * 60 * 60 * 24) <= days
-  })
+  }).sort((a, b) => a.date.localeCompare(b.date))
 
   // Weight chart data
   const weightChartData = filteredWeight.map((entry) => ({
