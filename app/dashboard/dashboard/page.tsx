@@ -22,6 +22,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useAppStore } from '@/store/useAppStore'
+import { WaterIntakeCard } from '@/components/dashboard/WaterIntakeCard'
 import { percentage, generateRecommendation, getTodayISO, formatCalories, formatWeightDelta, formatWeightValue, getWeightUnitLabel } from '@/lib/utils'
 import { toast } from 'sonner'
 
@@ -237,7 +238,7 @@ export default function DashboardPage() {
         className="flex flex-col sm:flex-row sm:items-center justify-between gap-4"
       >
         <div>
-          <h2 className="text-2xl font-bold">Good {getGreeting()}, {user.name.split(' ')[0]} 👋</h2>
+          <h2 className="text-xl sm:text-2xl font-bold">Good {getGreeting()}, {user.name.split(' ')[0]} 👋</h2>
           <div className="mt-0.5 flex flex-wrap items-center gap-2">
             <p className="text-muted-foreground text-sm">
               {streak > 0 ? `${streak}-day streak — you're on fire! 🔥` : 'Start your streak today!'}
@@ -282,7 +283,7 @@ export default function DashboardPage() {
         variants={stagger.container}
         initial="initial"
         animate="animate"
-        className="grid grid-cols-2 lg:grid-cols-4 gap-4"
+        className="grid grid-cols-2 lg:grid-cols-3 gap-4"
       >
         {[
           {
@@ -303,42 +304,20 @@ export default function DashboardPage() {
             iconClass: 'text-emerald-500 bg-emerald-500/10',
             barColor: 'bg-emerald-500',
           },
-          {
-            label: 'Weight',
-            value: formatWeightValue(currentWeight, unitSystem),
-            sub: hasWeightHistory ? `${formatWeightDelta(weightChange, unitSystem)} from start` : 'No weigh-ins logged yet',
-            icon: TrendingUp,
-            iconClass: 'text-emerald-500 bg-emerald-500/10',
-            isWeight: true,
-            weightDown: hasWeightHistory ? weightChange < 0 : undefined,
-          },
-          {
-            label: 'Workouts',
-            value: workoutsThisWeek.toString(),
-            sub: 'this week',
-            icon: Dumbbell,
-            iconClass: 'text-emerald-500 bg-emerald-500/10',
-            isCount: true,
-          },
         ].map((stat) => {
           const Icon = stat.icon
           return (
             <motion.div key={stat.label} variants={stagger.item}>
               <Card className="hover-lift">
-                <CardContent className="p-5">
-                  <div className="flex items-start justify-between mb-3">
+                <CardContent className="p-3 sm:p-5">
+                  <div className="flex items-start justify-between mb-2 sm:mb-3">
                     <p className="text-xs text-muted-foreground font-medium">{stat.label}</p>
-                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${stat.iconClass}`}>
-                      <Icon className="w-4 h-4" />
+                    <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center ${stat.iconClass}`}>
+                      <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                     </div>
                   </div>
-                  <p className="text-2xl font-bold tabular-nums">{stat.value}</p>
+                  <p className="text-xl sm:text-2xl font-bold tabular-nums">{stat.value}</p>
                   <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
-                    {stat.isWeight && stat.weightDown !== undefined && (
-                      stat.weightDown
-                        ? <ArrowDown className="w-3 h-3 text-emerald-500" />
-                        : <ArrowUp className="w-3 h-3 text-rose-400" />
-                    )}
                     {stat.sub}
                   </p>
                   {stat.pct !== undefined && (
@@ -361,16 +340,17 @@ export default function DashboardPage() {
             </motion.div>
           )
         })}
+        <WaterIntakeCard />
       </motion.div>
 
       {/* Charts row */}
-      <div className="grid lg:grid-cols-3 gap-4">
+      <div className="grid md:grid-cols-3 gap-4">
         {/* Calorie history chart */}
         <motion.div
           variants={stagger.item}
           initial="initial"
           animate="animate"
-          className="lg:col-span-2"
+          className="md:col-span-2"
         >
           <Card>
             <CardHeader className="pb-2">
@@ -382,11 +362,6 @@ export default function DashboardPage() {
             <CardContent>
               {calorieChartData.length > 0 ? (
                 <>
-                  <div
-                    className="overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden -mx-2 px-2"
-                    style={{ touchAction: 'pan-x' } as React.CSSProperties}
-                  >
-                  <div style={{ minWidth: 500 }}>
                   <ResponsiveContainer width="100%" height={180}>
                     <AreaChart data={calorieChartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
                       <defs>
@@ -420,8 +395,6 @@ export default function DashboardPage() {
                       />
                     </AreaChart>
                   </ResponsiveContainer>
-                  </div>
-                  </div>
                   <div className="flex gap-4 mt-2 text-xs text-muted-foreground">
                     <span className="flex items-center gap-1.5">
                       <span className="w-3 h-0.5 bg-emerald-500 inline-block" /> Actual
@@ -502,7 +475,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Second row */}
-      <div className="grid lg:grid-cols-3 gap-4">
+      <div className="grid md:grid-cols-3 gap-4">
         {/* Today's workouts */}
         <motion.div variants={stagger.item} initial="initial" animate="animate">
           <Card className="hover-lift h-full">
@@ -701,35 +674,10 @@ export default function DashboardPage() {
                               className="overflow-hidden"
                             >
                               <div className="border-t border-border/40 divide-y divide-border/30">
-                                {mealsOfType.flatMap((meal) => {
-                                  const isExpandable = meal.entry_source === 'saved' || !!meal.recipe
-                                  // Flat items: non-saved/non-recipe entries with sub-items render as separate rows
-                                  if (!isExpandable && meal.meal_items && meal.meal_items.length > 0) {
-                                    return meal.meal_items.map((item, itemIndex) => (
-                                      <div key={`${meal.id}-flat-${itemIndex}`} className="px-3 py-2.5 bg-muted/10">
-                                        <div className="flex items-center justify-between gap-2 mb-1.5">
-                                          <span className="text-xs font-medium truncate">{item.name}</span>
-                                          <span className="text-[10px] text-muted-foreground shrink-0">{meal.time}</span>
-                                        </div>
-                                        <div className="grid grid-cols-4 gap-1">
-                                          {[
-                                            { label: 'Cal', value: item.macros.calories, unit: '' },
-                                            { label: 'Pro', value: item.macros.protein_g, unit: 'g' },
-                                            { label: 'Carb', value: item.macros.carbs_g, unit: 'g' },
-                                            { label: 'Fat', value: item.macros.fat_g, unit: 'g' },
-                                          ].map(({ label, value, unit }) => (
-                                            <div key={label} className="rounded-lg bg-muted/40 px-2 py-1 text-center">
-                                              <p className="font-data text-[11px] font-semibold tabular-nums">{value}{unit}</p>
-                                              <p className="text-[9px] text-muted-foreground uppercase tracking-wide">{label}</p>
-                                            </div>
-                                          ))}
-                                        </div>
-                                      </div>
-                                    ))
-                                  }
-
+                                {mealsOfType.map((meal) => {
+                                  const isExpandable = !!meal.recipe || meal.entry_source === 'saved'
                                   const expanded = expandedMeals[meal.id] || false
-                                  return [(
+                                  return (
                                     <div key={meal.id} className="px-3 py-2.5 bg-muted/10">
                                       <div className="flex items-center justify-between gap-2 mb-1.5">
                                         {isExpandable ? (
@@ -762,33 +710,57 @@ export default function DashboardPage() {
                                           </div>
                                         ))}
                                       </div>
-                                      {isExpandable && expanded && meal.meal_items && meal.meal_items.length > 0 && (
+                                      {isExpandable && expanded && (
                                         <div className="mt-2 space-y-1 pl-2 border-l border-border/40">
-                                          {meal.meal_items.map((item, itemIndex) => (
-                                            <div key={`${meal.id}-item-${itemIndex}`}>
-                                              <div className="flex items-center gap-1.5">
-                                                <span className="text-[11px] font-medium text-foreground/70 truncate">{item.name}</span>
-                                                {item.amount != null && (
-                                                  <span className="text-[10px] font-data text-muted-foreground/40">{item.amount}{item.unit}</span>
+                                          {meal.recipe && meal.recipe.ingredients && meal.recipe.ingredients.length > 0 ? (
+                                            // Show recipe ingredients
+                                            meal.recipe.ingredients.map((ingredient, ingredientIndex) => (
+                                              <div key={`${meal.id}-recipe-ingredient-${ingredientIndex}`}>
+                                                <div className="flex items-center gap-1.5">
+                                                  <span className="text-[11px] font-medium text-foreground/70 truncate">{ingredient.name}</span>
+                                                  <span className="text-[10px] font-data text-muted-foreground/40">{ingredient.amount} {ingredient.unit}</span>
+                                                </div>
+                                                {ingredient.calories_per_unit && (
+                                                  <div className="flex items-center gap-1.5 mt-0.5">
+                                                    <span className="text-[10px] font-data text-muted-foreground/50">{Math.round(ingredient.calories_per_unit * ingredient.amount)} kcal</span>
+                                                    <span className="text-[10px] text-border/30">·</span>
+                                                    <span className="text-[10px] font-data text-muted-foreground/50">{Math.round(ingredient.macros.protein_g * ingredient.amount)}g P</span>
+                                                    <span className="text-[10px] text-border/30">·</span>
+                                                    <span className="text-[10px] font-data text-muted-foreground/50">{Math.round(ingredient.macros.carbs_g * ingredient.amount)}g C</span>
+                                                    <span className="text-[10px] text-border/30">·</span>
+                                                    <span className="text-[10px] font-data text-muted-foreground/50">{Math.round(ingredient.macros.fat_g * ingredient.amount)}g F</span>
+                                                  </div>
                                                 )}
                                               </div>
-                                              {item.macros.calories > 0 && (
-                                                <div className="flex items-center gap-1.5 mt-0.5">
-                                                  <span className="text-[10px] font-data text-muted-foreground/50">{item.macros.calories} kcal</span>
-                                                  <span className="text-[10px] text-border/30">·</span>
-                                                  <span className="text-[10px] font-data text-muted-foreground/50">{item.macros.protein_g}g P</span>
-                                                  <span className="text-[10px] text-border/30">·</span>
-                                                  <span className="text-[10px] font-data text-muted-foreground/50">{item.macros.carbs_g}g C</span>
-                                                  <span className="text-[10px] text-border/30">·</span>
-                                                  <span className="text-[10px] font-data text-muted-foreground/50">{item.macros.fat_g}g F</span>
+                                            ))
+                                          ) : meal.meal_items && meal.meal_items.length > 0 ? (
+                                            // Show meal items (for saved meals)
+                                            meal.meal_items.map((item, itemIndex) => (
+                                              <div key={`${meal.id}-item-${itemIndex}`}>
+                                                <div className="flex items-center gap-1.5">
+                                                  <span className="text-[11px] font-medium text-foreground/70 truncate">{item.name}</span>
+                                                  {item.amount != null && (
+                                                    <span className="text-[10px] font-data text-muted-foreground/40">{item.amount}{item.unit}</span>
+                                                  )}
                                                 </div>
-                                              )}
-                                            </div>
-                                          ))}
+                                                {item.macros.calories > 0 && (
+                                                  <div className="flex items-center gap-1.5 mt-0.5">
+                                                    <span className="text-[10px] font-data text-muted-foreground/50">{item.macros.calories} kcal</span>
+                                                    <span className="text-[10px] text-border/30">·</span>
+                                                    <span className="text-[10px] font-data text-muted-foreground/50">{item.macros.protein_g}g P</span>
+                                                    <span className="text-[10px] text-border/30">·</span>
+                                                    <span className="text-[10px] font-data text-muted-foreground/50">{item.macros.carbs_g}g C</span>
+                                                    <span className="text-[10px] text-border/30">·</span>
+                                                    <span className="text-[10px] font-data text-muted-foreground/50">{item.macros.fat_g}g F</span>
+                                                  </div>
+                                                )}
+                                              </div>
+                                            ))
+                                          ) : null}
                                         </div>
                                       )}
                                     </div>
-                                  )]
+                                  )
                                 })}
                                 {/* Type totals row */}
                                 <div className="px-3 py-2 bg-muted/20">
