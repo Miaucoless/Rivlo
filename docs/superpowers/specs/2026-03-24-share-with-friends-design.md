@@ -2,11 +2,11 @@
 
 ## Goal
 
-Allow users to share their saved workouts, saved meal templates, and custom recipes with friends — either via a shareable link or directly to specific friends within the app.
+Allow users to share their saved workouts (custom workout templates), saved meal templates, and custom recipes with friends — either via a shareable link or directly to specific friends within the app.
 
 ## Architecture
 
-Supabase-native. Three new database tables handle all sharing state. All mutations go through Next.js API routes (server-side) to keep the Supabase service role key off the client. Reads of public share pages also go through an API route so no credentials are needed in the browser.
+Supabase-native. Three new database tables handle all sharing state. All mutations go through Next.js API routes (server-side) using the Supabase **service role key** — the client never writes directly to sharing tables. All `GET /api/share/[token]` reads also use the **service role key** (bypassing RLS) so the public page never requires a client credential.
 
 Item data is **snapshotted** at share time into a `jsonb` column — the recipient always sees what was shared, not a live reference. Importing gives the recipient their own independent copy.
 
@@ -23,47 +23,70 @@ Item data is **snapshotted** at share time into a `jsonb` column — the recipie
 
 ### `shared_items`
 
-Stores one row per shareable item. The share token is used for link sharing.
-
 ```sql
 id            uuid primary key default gen_random_uuid()
 owner_id      uuid not null references auth.users(id) on delete cascade
-item_type     text not null  -- 'workout' | 'saved_meal' | 'recipe'
-item_name     text not null  -- denormalised for display without parsing jsonb
-item_data     jsonb not null -- full snapshot of the item at share time
-share_token   text not null unique default substr(gen_random_uuid()::text, 1, 8)
-message       text           -- optional note from the sharer
+item_type     text not null
+              -- 'workout' = workout_templates (reusable custom workouts only)
+              -- 'saved_meal' = saved_meals
+              -- 'recipe' = custom recipes
+              -- workout_logs (completed sessions) are NOT shareable in v1
+item_name     text not null
+item_data     jsonb not null  -- full snapshot at share time
+share_token   text not null unique default substr(gen_random_uuid()::text, 1, 12)
+              -- 12 hex chars; API retries up to 3× on unique constraint violation
+message       text
 created_at    timestamptz not null default now()
+
+create index on shared_items (owner_id);
 ```
 
-RLS:
-- Owner can insert, update, delete their own rows.
-- Anyone (including unauthenticated) can select by `share_token`.
-- Authenticated users can select rows where they appear in `friend_shares`.
+RLS: All reads and writes go through server-side API routes using the service role key. No client-facing RLS policies are required for this table.
 
 ### `friendships`
-
-Tracks friend relationships. One row per directed pair (requester → addressee).
 
 ```sql
 id             uuid primary key default gen_random_uuid()
 requester_id   uuid not null references auth.users(id) on delete cascade
-addressee_id   uuid not null references auth.users(id) on delete cascade
-status         text not null default 'pending'  -- 'pending' | 'accepted' | 'declined'
+addressee_id   uuid references auth.users(id) on delete cascade
+               -- null when addressee hasn't signed up yet
+invited_email  text
+               -- set when addressee_id is null; cleared on invite promotion
+status         text not null default 'pending'
+               -- 'pending' | 'accepted' | 'declined' | 'invited'
+               -- 'invited' = non-user invite sent; promoted to 'pending' on sign-up
 created_at     timestamptz not null default now()
 updated_at     timestamptz not null default now()
-unique (requester_id, addressee_id)
+
+-- For existing users: prevent duplicate requests
+create unique index on friendships (requester_id, addressee_id)
+  where addressee_id is not null;
+
+-- For non-user invites: prevent duplicate invites to same email
+create unique index on friendships (requester_id, invited_email)
+  where invited_email is not null;
+
+create index on friendships (requester_id);
+create index on friendships (addressee_id);
+create index on friendships (invited_email);
 ```
 
-RLS:
-- A user can see all rows where they are requester or addressee.
-- A user can insert rows where they are requester.
-- A user can update `status` on rows where they are addressee.
-- A user can delete rows where they are requester or addressee.
+`updated_at` must be kept current via a `BEFORE UPDATE` trigger:
+```sql
+create or replace function set_updated_at()
+returns trigger language plpgsql as $$
+begin new.updated_at = now(); return new; end; $$;
+
+create trigger friendships_updated_at
+before update on friendships
+for each row execute function set_updated_at();
+```
+
+**Invite promotion:** When a non-user signs up, the sign-up completion handler (see Sign-up Flow below) queries `friendships WHERE invited_email = new_user.email`, then updates each row: `addressee_id = new_user.id`, `invited_email = NULL`, `status = 'pending'`. The new user then sees pending friend requests in their notifications.
+
+RLS: All reads and writes go through server-side API routes using the service role key.
 
 ### `friend_shares`
-
-The recipient inbox. Created when a share is sent to specific friends.
 
 ```sql
 id            uuid primary key default gen_random_uuid()
@@ -73,44 +96,92 @@ viewed_at     timestamptz
 imported_at   timestamptz
 created_at    timestamptz not null default now()
 unique (share_id, recipient_id)
+
+create index on friend_shares (recipient_id);
+create index on friend_shares (share_id);  -- for owner delivery-status queries
 ```
 
-RLS:
-- Recipient can select and update their own rows.
-- Owner of the parent `shared_items` row can select (to see delivery status).
+RLS (used only for direct client reads — not the primary path):
+- Recipient select: `recipient_id = auth.uid()`
+- Owner select for delivery status: `EXISTS (SELECT 1 FROM shared_items si WHERE si.id = friend_shares.share_id AND si.owner_id = auth.uid())`
+- All inserts use the service role key via `/api/share/send`.
 
 ### `user_profiles` — username addition
 
-Add a `username` column (unique, nullable initially, set during onboarding or Settings):
-
 ```sql
-alter table user_profiles add column username text unique;
+alter table user_profiles
+  add column username text unique
+  check (username ~ '^[a-z0-9_]{3,20}$');
 ```
+
+- Always stored lowercase. Search queries must call `lower(q)` before exact-match lookup.
+- Nullable — existing users without a username can still be found by email.
+- Set/updated via `PATCH /api/profile` (see API routes below).
+
+### `types/index.ts` changes
+
+```ts
+// Notification.type — add share_received
+type: 'info' | 'success' | 'warning' | 'error' | 'share_received'
+
+// UserProfile — add username
+username?: string
+```
+
+`share_received` notifications use the existing `action_url` field (points to `/share/[token]`) and the existing `message` field (item name + sender name). No new fields needed.
 
 ---
 
 ## API Routes
 
-All routes live under `app/api/`.
+All routes use the Supabase **service role key** server-side. Endpoints that mutate data require authentication; the public share read does not.
 
 ### Sharing
 
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/api/share/create` | Snapshot item + generate token. Body: `{ item_type, item_data, item_name, message? }`. Returns `{ token, url }`. |
-| POST | `/api/share/send` | Send an existing share to friends. Body: `{ share_id, recipient_ids[] }`. Creates `friend_shares` rows and in-app notifications. |
-| GET | `/api/share/[token]` | Fetch shared item by token. Public — no auth required. Returns `{ item_type, item_name, item_data, owner_name, message, created_at }`. |
-| POST | `/api/share/[token]/import` | Clone item into the authenticated user's account. Writes to the appropriate table (`recipes`, `workout_templates`, or `saved_meals`). Updates `friend_shares.imported_at` if applicable. |
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/api/share/create` | Required | Snapshot item + generate 12-char token. Body: `{ item_type, item_data, item_name, message? }`. Retries up to 3× on token collision (returns 500 if all fail). Returns `{ share_id, token, url }`. |
+| POST | `/api/share/send` | Required | Send share to friends. Body: `{ share_id, recipient_ids[] }`. Validates that each `recipient_id` appears in an `accepted` friendship with the current user — checks both directions: `(requester_id = current_user AND addressee_id = recipient) OR (addressee_id = current_user AND requester_id = recipient)`. Returns 422 for any invalid recipient. Creates `friend_shares` rows + `share_received` notifications. |
+| GET | `/api/share/[token]` | None | Fetch shared item by token using service role key. Returns `{ item_type, item_name, item_data, owner_name, message, created_at }`. Returns 404 with `{ error: "This link is invalid or has expired." }` for missing token. |
+| POST | `/api/share/[token]/import` | Required | Clone item into user's account. Writes to `recipes`, `workout_templates`, or `saved_meals`. Body: `{ friend_share_id? }`. **Idempotency:** looks up `imported_items` (see below) by `(user_id, share_id)` — returns existing item ID if found without re-inserting. Updates `friend_shares.imported_at` if `friend_share_id` is provided. |
+| GET | `/api/share/inbox` | Required | List all `friend_shares` rows for current user, joined with `shared_items`. Supports `?type=workout\|saved_meal\|recipe`. Returns newest-first. |
+
+**Import idempotency — `imported_items` table:**
+
+```sql
+create table imported_items (
+  id          uuid primary key default gen_random_uuid(),
+  user_id     uuid not null references auth.users(id) on delete cascade,
+  share_id    uuid not null references shared_items(id) on delete cascade,
+  result_id   text not null,  -- ID of the cloned item in its destination table
+  created_at  timestamptz not null default now(),
+  unique (user_id, share_id)
+);
+create index on imported_items (user_id);
+```
+
+The import route inserts into `imported_items` after creating the clone. On duplicate `(user_id, share_id)`, it returns the existing `result_id`.
 
 ### Friends
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/friends` | List accepted friends + pending incoming/outgoing requests. |
-| GET | `/api/friends/search?q=` | Search existing users by email or username. Returns `{ id, name, username, avatar_url }[]`. Excludes current user and existing friends. |
-| POST | `/api/friends/request` | Send a friend request. Body: `{ addressee_id? }` for existing users, or `{ email }` to invite a non-user (sends invite email via Supabase auth). |
-| POST | `/api/friends/respond` | Accept or decline a request. Body: `{ friendship_id, action: 'accept' | 'decline' }`. |
-| DELETE | `/api/friends/[friendId]` | Remove a friend or cancel a pending request. |
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/api/friends` | Required | List accepted friends + pending incoming/outgoing + `invited` rows for current user. |
+| GET | `/api/friends/search?q=` | Required | Search users by email (exact) or username (exact, after `lower(q)`). Returns `{ id, name, username, avatar_url }[]`. Excludes current user and users already in a friendship or pending request. |
+| POST | `/api/friends/request` | Required | Body: `{ addressee_id }` OR `{ email }`. **If `email` provided:** first checks whether that email belongs to an existing user — if yes, treats as `{ addressee_id }` flow. If no existing user, sends Supabase auth invite email + inserts `friendships` row with `status = 'invited'`. Returns 409 if a relationship already exists. |
+| POST | `/api/friends/respond` | Required | Body: `{ friendship_id, action: 'accept' \| 'decline' }`. Updates `friendships.status`. |
+| DELETE | `/api/friends/[friendId]` | Required | Removes accepted friendship or cancels pending/invited request. **Authorization:** for `invited`/`pending` rows, only `requester_id = current_user` may delete (prevents addressee from cancelling someone else's outgoing request). For `accepted` rows, either party may delete: `requester_id = current_user OR addressee_id = current_user`. Returns 403 if neither condition is met. |
+| PATCH | `/api/profile` | Required | Update display name, avatar, or username. Body: `{ name?, username?, avatar_url? }`. Returns 409 `{ error: "Username already taken." }` when username conflicts with existing row. |
+
+---
+
+## Sign-up Flow (post-sign-up actions)
+
+After a new user completes sign-up, the existing auth handler must perform two additional steps:
+
+1. **Invite promotion:** Query `friendships WHERE invited_email = new_user.email`. For each row: set `addressee_id = new_user.id`, `invited_email = NULL`, `status = 'pending'`. Insert one `'info'` notification for the new user (type = `'info'`, message = "You have N pending friend request(s)", `action_url = '/dashboard/settings?tab=friends'`). No new notification type is needed — the existing `'info'` type is sufficient.
+
+2. **Auto-import from share link:** If the sign-up URL contained `?redirect=/share/[token]`, after sign-up completion redirect to that URL. The `/share/[token]` page detects the authenticated session and immediately calls `POST /api/share/[token]/import` (no `friend_share_id`). The import result page shows a success message before the user reaches the main dashboard.
 
 ---
 
@@ -118,116 +189,51 @@ All routes live under `app/api/`.
 
 ### Share Button
 
-Added to the action menu (3-dot or explicit icon) on:
-- Custom workout cards — Workouts page
-- Saved meal template cards — Meals page
-- Custom recipe cards — Meals page
+Added to the action menu on:
+- Custom workout template cards (Workouts page)
+- Saved meal template cards (Meals page)
+- Custom recipe cards (Meals page)
 
 ### `ShareModal` (`components/sharing/ShareModal.tsx`)
 
-A Dialog with two tabs:
+Dialog with two tabs:
 
-**Link tab**
-- "Copy link" button — calls `POST /api/share/create` on first click, then copies the returned URL to clipboard.
-- Shows the generated URL in a read-only input after creation.
+**Link tab:** "Copy link" → calls `POST /api/share/create` on first click → copies URL to clipboard → shows URL in read-only input.
 
-**Friends tab**
-- Search input — queries `GET /api/friends/search` debounced, or filters the existing friends list locally.
-- Selectable friend chips (checkboxes).
-- Optional message textarea.
-- "Send" button — calls `POST /api/share/send` with selected friend IDs.
-- Sent confirmation with per-friend status (sent / already shared).
+**Friends tab:** Debounced search of friends list (local filter) or `GET /api/friends/search`. Multi-select friend chips. Optional message. "Send" → `POST /api/share/create` (if not yet created) then `POST /api/share/send`. Confirmation with per-friend sent status. 422 errors shown inline ("Could not send to [name]").
 
 ### `/share/[token]` page (`app/share/[token]/page.tsx`)
 
-Public page — no auth required to view.
+Public. Renders item preview. Authenticated: "Import to my account" → `POST /api/share/[token]/import`. Unauthenticated: shows **two buttons** — "Sign up to import" (→ `/signup?redirect=/share/[token]`) and "Log in to import" (→ `/login?redirect=/share/[token]`) — so both new and existing logged-out users have a clear path. Invalid token: 404 message page.
 
-- Renders item details (exercise list for workouts, ingredients/macros for meals).
-- "Import to my account" button — if unauthenticated, redirects to `/signup?redirect=/share/[token]`; if authenticated, calls `POST /api/share/[token]/import`.
-- Shows sharer's display name and optional message.
-- Graceful 404 if token is invalid.
+### Notification bell
 
-### Notification bell — share alerts
-
-Existing notification system extended:
-- New notification type `'share_received'`.
-- Bell badge increments for unread share notifications.
-- Dropdown item shows sharer name + item name with inline "View" and "Import" buttons.
+New `share_received` notifications increment the badge. Dropdown item shows sender + item name with "View" (→ `/share/[token]`) and "Import" (→ `POST /api/share/[token]/import { friend_share_id }`) buttons.
 
 ### "Shared with me" inbox (`components/sharing/SharedInbox.tsx`)
 
-A panel/tab accessible from the notifications dropdown or a dedicated route:
-- Lists all `friend_shares` rows for the current user, newest first.
-- Filter by type: All / Workouts / Meals.
-- Each card: sharer avatar + name, item name, timestamp, optional message, "View" and "Import" buttons.
-- "Import" button calls `POST /api/share/[token]/import` and marks the card as imported.
+Accessible from notifications dropdown. Lists `GET /api/share/inbox` results. Filter by type. Each card: sender, item, timestamp, message, View + Import buttons. Imported items show a checkmark.
 
-### Friends tab in Settings (`app/dashboard/settings/page.tsx`)
+### Friends tab in Settings
 
-New "Friends" tab added to existing settings tabs:
-- **Add friend** — search input (`GET /api/friends/search`), shows user result with "Add" button; or enter any email to invite.
-- **Friends list** — accepted friends with avatar, name, username, "Remove" button.
-- **Pending sent** — outgoing requests with "Cancel" option.
-- **Pending received** — incoming requests with "Accept" / "Decline" buttons.
+New tab in `app/dashboard/settings/page.tsx`:
+- Add friend search + email invite input.
+- Accepted friends list with Remove button.
+- Pending sent (including `invited`) with Cancel button.
+- Pending received with Accept / Decline buttons.
 
 ---
 
-## Data Flow
+## Error Handling Summary
 
-### Sharing via link
-
-```
-User clicks Share → ShareModal (Link tab)
-  → POST /api/share/create → shared_items row inserted → token returned
-  → URL copied to clipboard
-Recipient visits /share/[token]
-  → GET /api/share/[token] → item preview rendered
-  → clicks Import → POST /api/share/[token]/import
-    → item cloned into user's account table
-```
-
-### Sharing to friends
-
-```
-User clicks Share → ShareModal (Friends tab) → selects friends → Send
-  → POST /api/share/create (if not yet created)
-  → POST /api/share/send → friend_shares rows inserted
-    → notification rows inserted for each recipient
-Recipient sees badge on bell → opens dropdown → View / Import
-  → same import flow as link sharing
-```
-
-### Adding a friend
-
-```
-User searches email/username → result shown → clicks Add
-  → POST /api/friends/request
-    → existing user: friendships row (pending) inserted
-    → non-user: Supabase auth invite email sent + pending_invite tracked
-Addressee sees incoming request in notifications + Settings → Accept
-  → POST /api/friends/respond { action: 'accept' }
-    → friendships.status updated to 'accepted'
-```
-
----
-
-## Error Handling
-
-- Invalid / expired share token → `/share/[token]` returns 404 with a clear message.
-- Import while not logged in → redirect to `/signup?redirect=/share/[token]`, auto-import after sign-up.
-- Duplicate friend request → API returns 409, UI shows "Request already sent."
-- Sharing to a non-friend (email not found) → invite email sent, UI shows "Invite sent to [email]."
-- Import of already-imported item → API is idempotent; returns the existing item ID.
-
----
-
-## Username Addition
-
-`UserProfile` type gains:
-```ts
-username?: string
-```
-
-- Set on the Settings page (Profile tab) — unique, lowercase, alphanumeric + underscores, 3–20 chars.
-- Displayed on the `/share/[token]` page and friend search results.
-- Existing users without a username can still be found by email.
+| Scenario | Behaviour |
+|----------|-----------|
+| Invalid share token | 404 `{ error: "This link is invalid or has expired." }` |
+| Import while unauthenticated | Two buttons shown: "Sign up" (→ `/signup?redirect=/share/[token]`) and "Log in" (→ `/login?redirect=/share/[token]`); auto-import after auth |
+| Import already done | Idempotent — returns existing item ID via `imported_items` table |
+| Token collision (create) | Retry up to 3×; 500 if all fail |
+| Duplicate friend request | 409; UI shows "Request already sent." |
+| Non-user email invite | Invite email sent; UI shows "Invite sent to [email]." |
+| Email belongs to existing user | Promote to normal friend request silently |
+| Send share to non-friend | 422; UI shows "Could not send to [name]." |
+| Username taken (profile update) | 409 `{ error: "Username already taken." }`; inline error in Settings |
