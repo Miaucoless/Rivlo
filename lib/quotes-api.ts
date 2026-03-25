@@ -54,7 +54,7 @@ export async function getDailyQuote(): Promise<Quote> {
     return {
       quote: raw.quote,
       author: raw.author || 'Unknown',
-      category: raw.category || 'motivational',
+      category: Array.isArray(raw.categories) ? raw.categories[0] : (raw.category || 'motivational'),
     }
   } catch {
     return randomFallback()
