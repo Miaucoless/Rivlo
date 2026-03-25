@@ -3915,7 +3915,7 @@ export default function MealsPage() {
                 <div className="flex items-center justify-between px-4 py-3 border-b border-border/20">
                   <div className="flex items-center gap-3">
                     <div>
-                      <h3 className="font-display font-black text-2xl sm:text-3xl tracking-tight leading-none text-foreground [text-shadow:0_4px_18px_rgba(24,180,81,0.55)] underline decoration-primary decoration-[3px] underline-offset-[5px]">
+                      <h3 className="font-display font-black text-2xl sm:text-3xl tracking-tight leading-none text-foreground underline decoration-primary decoration-[3px] underline-offset-[5px]">
                         {mealTypeLabel(mealType)}
                       </h3>
                       {meals.length > 0 && (

@@ -1720,7 +1720,7 @@ function ActiveWorkoutModal({
                       Last:{' '}
                       {prevData.sets.map((s, si) => {
                         const w = s.weight_kg > 0
-                          ? ` @ ${unitSystem === 'imperial' ? Math.round(s.weight_kg * 2.205) : s.weight_kg}${unitSystem === 'imperial' ? 'lb' : 'kg'}`
+                          ? ` @ ${unitSystem === 'imperial' ? Math.round(s.weight_kg * 2.205) : s.weight_kg} ${unitSystem === 'imperial' ? 'lb' : 'kg'}`
                           : ''
                         return `${s.actual_reps}${w}${si < prevData.sets.length - 1 ? ' · ' : ''}`
                       })}
@@ -2881,8 +2881,8 @@ export default function WorkoutsPage() {
                                                     {exercise.sets.map((set) => {
                                                       const displayWeight = (set.weight_kg || 0) > 0
                                                         ? unitSystem === 'imperial'
-                                                          ? `${Math.round((set.weight_kg || 0) * 2.205)}lb`
-                                                          : `${set.weight_kg}kg`
+                                                          ? `${Math.round((set.weight_kg || 0) * 2.205)} lb`
+                                                          : `${set.weight_kg} kg`
                                                         : null
                                                       return (
                                                         <div
