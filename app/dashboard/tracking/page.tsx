@@ -2,12 +2,12 @@
 
 import React from 'react'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { format, subDays } from 'date-fns'
 import {
   TrendingDown, TrendingUp, Scale, BarChart3, Plus, Download,
-  Target, Calendar, Dumbbell, Flame, Zap, Trophy,
+  Target, Calendar, Dumbbell, Flame, Zap, Trophy, Edit, Trash2,
 } from 'lucide-react'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -21,7 +21,7 @@ import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { useAppStore } from '@/store/useAppStore'
-import { formatWeightValue, getTodayISO, getWeightUnitLabel, kgToLbs, lbsToKg, percentage } from '@/lib/utils'
+import { formatWeightForInput, formatWeightValue, getTodayISO, getWeightUnitLabel, kgToLbs, lbsToKg, percentage } from '@/lib/utils'
 import { toast } from 'sonner'
 
 function CustomTooltip({ active, payload, label, unitSystem }: any) {
@@ -45,18 +45,22 @@ function LogWeightDialog() {
   const [weight, setWeight] = useState('')
   const [bodyFat, setBodyFat] = useState('')
   const [notes, setNotes] = useState('')
-  const { addWeightEntry, user } = useAppStore()
+  const { addWeightEntry, removeWeightEntry, user } = useAppStore()
 
   const handleLog = () => {
     if (!weight || isNaN(Number(weight))) {
       toast.error('Please enter a valid weight')
       return
     }
+    
+    const weightNumber = Number(weight)
+    const weightKg = user?.unit_system === 'metric' ? weightNumber : lbsToKg(weightNumber)
+    
     addWeightEntry({
       id: `we-${Date.now()}`,
       user_id: user!.id,
       date: getTodayISO(),
-      weight_kg: user?.unit_system === 'metric' ? Number(weight) : lbsToKg(Number(weight)),
+      weight_kg: weightKg,
       body_fat_pct: bodyFat ? Number(bodyFat) : undefined,
       notes: notes || undefined,
     })
@@ -90,6 +94,12 @@ function LogWeightDialog() {
               step={user?.unit_system === 'metric' ? 0.1 : 1}
               className="text-lg font-bold"
             />
+            <p className="text-xs text-muted-foreground">
+              Using {user?.unit_system === 'metric' ? 'kilograms' : 'pounds'} based on your settings
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Please enter your weight to {user?.fitness_goal === 'muscle_gain' ? 'gain muscle' : user?.fitness_goal === 'fat_loss' ? 'lose fat' : 'maintain weight'}.
+            </p>
           </div>
           <div className="space-y-1.5">
             <Label>Body Fat % (optional)</Label>
@@ -116,9 +126,113 @@ function LogWeightDialog() {
   )
 }
 
+// Edit weight dialog
+function EditWeightDialog({ entry, open, setOpen }: { entry: any; open: boolean; setOpen: (open: boolean) => void }) {
+  const [weight, setWeight] = useState('')
+  const [bodyFat, setBodyFat] = useState('')
+  const [notes, setNotes] = useState('')
+  const { addWeightEntry, user } = useAppStore()
+
+  useEffect(() => {
+    if (entry) {
+      setWeight(formatWeightForInput(entry.weight_kg, user?.unit_system || 'imperial'))
+      setBodyFat(entry.body_fat_pct?.toString() || '')
+      setNotes(entry.notes || '')
+    }
+  }, [entry, user?.unit_system])
+
+  const handleUpdate = () => {
+    if (!weight || isNaN(Number(weight))) {
+      toast.error('Please enter a valid weight')
+      return
+    }
+    
+    const weightKg = user?.unit_system === 'metric' ? Number(weight) : lbsToKg(Number(weight))
+    addWeightEntry({
+      id: entry.id,
+      user_id: user!.id,
+      date: entry.date,
+      weight_kg: weightKg,
+      body_fat_pct: bodyFat ? Number(bodyFat) : undefined,
+      notes: notes || undefined,
+    })
+    
+    toast.success(`Weight updated: ${weight} ${getWeightUnitLabel(user?.unit_system || 'imperial')} 📊`)
+    setOpen(false)
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Edit Weight Entry</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 pt-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="weight">Weight ({getWeightUnitLabel(user?.unit_system || 'imperial')})</Label>
+            <Input
+              id="weight"
+              type="number"
+              step="0.1"
+              value={weight}
+              onChange={(e) => setWeight(e.target.value)}
+              placeholder={`Enter weight in ${getWeightUnitLabel(user?.unit_system || 'imperial')}`}
+            />
+            <p className="text-xs text-muted-foreground">
+              Using {user?.unit_system === 'metric' ? 'kilograms' : 'pounds'} based on your settings
+            </p>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="edit-bodyfat">Body Fat % (optional)</Label>
+            <Input
+              id="edit-bodyfat"
+              type="number"
+              step="0.1"
+              value={bodyFat}
+              onChange={(e) => setBodyFat(e.target.value)}
+              placeholder="Enter body fat percentage"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="edit-notes">Notes (optional)</Label>
+            <Input
+              id="edit-notes"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Add any notes..."
+            />
+          </div>
+          <div className="flex gap-2 pt-2">
+            <Button onClick={handleUpdate} className="flex-1">
+              Update Weight
+            </Button>
+            <Button variant="outline" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 export default function TrackingPage() {
-  const { user, weightHistory, workoutLogs, getDailyTotals } = useAppStore()
+  const { user, weightHistory, workoutLogs, getDailyTotals, removeWeightEntry } = useAppStore()
   const [timeRange, setTimeRange] = useState<'2w' | '1m' | '3m' | 'all'>('1m')
+  const [editingEntry, setEditingEntry] = useState<any>(null)
+  const [editDialogOpen, setEditDialogOpen] = useState(false)
+
+  const handleDeleteWeight = (id: string) => {
+    if (confirm('Are you sure you want to delete this weight entry?')) {
+      removeWeightEntry(id)
+      toast.success('Weight entry deleted')
+    }
+  }
+
+  const handleEditWeight = (entry: any) => {
+    setEditingEntry(entry)
+    setEditDialogOpen(true)
+  }
 
   if (!user) return null
 
@@ -416,6 +530,24 @@ export default function TrackingPage() {
                         <span className="text-xs text-amber-400">{entry.body_fat_pct.toFixed(1)}% BF</span>
                       )}
                       <span className="font-semibold">{formatWeightValue(entry.weight_kg, unitSystem)}</span>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleEditWeight(entry)}
+                          className="h-6 w-6 p-0"
+                        >
+                          <Edit className="w-3 h-3" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDeleteWeight(entry.id)}
+                          className="h-6 w-6 p-0 text-red-500 hover:text-red-600"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -561,6 +693,15 @@ export default function TrackingPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Edit Weight Dialog */}
+      {editingEntry && (
+        <EditWeightDialog
+          entry={editingEntry}
+          open={editDialogOpen}
+          setOpen={setEditDialogOpen}
+        />
+      )}
     </div>
   )
 }
