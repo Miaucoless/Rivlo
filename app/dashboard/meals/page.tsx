@@ -4,7 +4,7 @@ import React from 'react'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { format, startOfWeek } from 'date-fns'
+import { format, startOfWeek, subDays } from 'date-fns'
 import {
   ChefHat, ShoppingCart, Clock, Users, Flame,
   CheckCircle, Circle, Download, Plus, Zap, Pencil, Trash2, X, CalendarDays,
@@ -36,7 +36,7 @@ import { toast } from 'sonner'
 
 const MEAL_TYPES = ['breakfast', 'lunch', 'dinner', 'snack', 'drink'] as const
 type MealType = (typeof MEAL_TYPES)[number]
-type MealSource = 'search' | 'saved' | 'recipe' | 'manual'
+type MealSource = 'search' | 'saved' | 'recent' | 'recipe' | 'manual'
 type SearchMeasureUnit = 'serving' | 'g' | 'oz' | 'ml' | 'fl_oz'
 
 type ManualItemRow = {
@@ -65,6 +65,37 @@ function fmtMacro(n: number): string {
   if (!Number.isFinite(n) || n <= 0) return '0'
   if (n >= 1) return String(Math.round(n))
   return parseFloat(n.toFixed(2)).toString()
+}
+
+function scaleMealLogEntry(entry: MealLogEntry, multiplier: number): MealLogEntry {
+  const clamp = Number.isFinite(multiplier) ? Math.max(0, multiplier) : 0
+  const round1 = (n: number) => Math.round((Number(n) || 0) * 10) / 10
+
+  return {
+    ...entry,
+    macros: {
+      calories: Math.round((entry.macros?.calories || 0) * clamp),
+      protein_g: round1((entry.macros?.protein_g || 0) * clamp),
+      carbs_g: round1((entry.macros?.carbs_g || 0) * clamp),
+      fat_g: round1((entry.macros?.fat_g || 0) * clamp),
+    },
+    recipe_amount: entry.recipe_amount
+      ? entry.recipe_amount.kind === 'servings'
+        ? { kind: 'servings', servings: round1(entry.recipe_amount.servings * clamp) }
+        : { kind: 'units', units: round1(entry.recipe_amount.units * clamp) }
+      : undefined,
+    meal_items: (entry.meal_items || []).map((item) => ({
+      ...item,
+      macros: {
+        calories: Math.round((item.macros?.calories || 0) * clamp),
+        protein_g: round1((item.macros?.protein_g || 0) * clamp),
+        carbs_g: round1((item.macros?.carbs_g || 0) * clamp),
+        fat_g: round1((item.macros?.fat_g || 0) * clamp),
+      },
+      amount: item.amount != null ? round1(item.amount * clamp) : item.amount,
+      servings: item.servings != null ? round1(item.servings * clamp) : item.servings,
+    })),
+  }
 }
 
 function isDishCombination(itemName: string) {
@@ -446,7 +477,34 @@ function MealEditorModal({
   const isMealTypeLocked = initialMealType !== null && !editingMeal && !editingSavedMeal
   const allRecipes = useMemo(() => [...customRecipes, ...RECIPES], [customRecipes])
 
+  const recentMeals = useMemo(() => {
+    const cutoff = format(subDays(new Date(), 7), 'yyyy-MM-dd')
+    const rows: Array<{ key: string; date: string; entry: MealLogEntry }> = []
+
+    for (const [date, entries] of Object.entries(mealEntries || {})) {
+      if (date < cutoff) continue
+      for (const entry of entries || []) {
+        const recipeId = entry.recipe?.id || ''
+        const key = `${entry.entry_source || ''}|${recipeId}|${entry.name || ''}|${entry.meal_type || ''}|${entry.macros?.calories || 0}|${(entry.meal_items || []).length}`
+        rows.push({ key, date, entry })
+      }
+    }
+
+    rows.sort((a, b) => b.date.localeCompare(a.date))
+
+    const seen = new Set<string>()
+    const out: Array<{ key: string; date: string; entry: MealLogEntry }> = []
+    for (const row of rows) {
+      if (seen.has(row.key)) continue
+      seen.add(row.key)
+      out.push(row)
+      if (out.length >= 20) break
+    }
+    return out
+  }, [mealEntries])
+
   const [source, setSource] = useState<MealSource>('search')
+  const [recentMultipliers, setRecentMultipliers] = useState<Record<string, string>>({})
   const [selectedSavedMealId, setSelectedSavedMealId] = useState<string>('')
   const [expandedSavedMealIds, setExpandedSavedMealIds] = useState<Record<string, boolean>>({})
   const [savedMealModalSearch, setSavedMealModalSearch] = useState('')
@@ -1835,6 +1893,99 @@ function MealEditorModal({
                 })
               )}
               </div>
+            </TabsContent>
+
+            <TabsContent value="recent" className="mt-0 space-y-3">
+              {recentMeals.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 border border-dashed border-border/60 rounded-xl">
+                  <p className="font-medium text-muted-foreground text-sm">No recent meals yet</p>
+                  <p className="text-xs text-muted-foreground/60 mt-1">Log meals for a few days and they’ll show up here</p>
+                </div>
+              ) : (
+                <div className="max-h-56 overflow-y-auto overscroll-contain space-y-2 pr-0.5">
+                  {recentMeals.map(({ key, date, entry }) => {
+                    const multiplierText = recentMultipliers[key] ?? '1'
+                    const multiplier = Number(multiplierText)
+                    const scaled = scaleMealLogEntry(entry, Number.isFinite(multiplier) ? multiplier : 0)
+
+                    return (
+                      <div key={key} className="rounded-xl border border-border/50 bg-muted/20 p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium truncate">{entry.name}</p>
+                            <p className="font-data text-[11px] text-muted-foreground/60 mt-0.5 tabular-nums">
+                              {date} · {entry.meal_type} · {scaled.macros.calories} kcal · <span className="text-emerald-500/70">{fmtMacro(scaled.macros.protein_g)}g P</span> · {fmtMacro(scaled.macros.carbs_g)}g C · {fmtMacro(scaled.macros.fat_g)}g F
+                            </p>
+                          </div>
+
+                          <div className="w-20 shrink-0">
+                            <Label className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">x</Label>
+                            <Input
+                              value={multiplierText}
+                              onChange={(e) => setRecentMultipliers((prev) => ({ ...prev, [key]: e.target.value }))}
+                              inputMode="decimal"
+                              className="h-8 mt-1"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2 mt-3">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => {
+                              const m = Number(multiplierText)
+                              if (!Number.isFinite(m) || m <= 0) {
+                                toast.error('Enter a multiplier greater than 0.')
+                                return
+                              }
+                              const scaledEntry = scaleMealLogEntry(entry, m)
+                              onSave({
+                                meal_type: entry.meal_type,
+                                name: scaledEntry.name,
+                                macros: scaledEntry.macros,
+                                time: format(new Date(), 'h:mm a'),
+                                recipe: scaledEntry.recipe,
+                                recipe_amount: scaledEntry.recipe_amount,
+                                meal_items: scaledEntry.meal_items || [],
+                                entry_source: scaledEntry.entry_source,
+                                saved_meal_template_id: scaledEntry.saved_meal_template_id,
+                              })
+                            }}
+                          >
+                            Quick add
+                          </Button>
+                          <Button
+                            type="button"
+                            onClick={() => {
+                              const m = Number(multiplierText)
+                              if (!Number.isFinite(m) || m <= 0) {
+                                toast.error('Enter a multiplier greater than 0.')
+                                return
+                              }
+                              const scaledEntry = scaleMealLogEntry(entry, m)
+                              onSave({
+                                meal_type: entry.meal_type,
+                                name: scaledEntry.name,
+                                macros: scaledEntry.macros,
+                                time: format(new Date(), 'h:mm a'),
+                                recipe: scaledEntry.recipe,
+                                recipe_amount: scaledEntry.recipe_amount,
+                                meal_items: scaledEntry.meal_items || [],
+                                entry_source: scaledEntry.entry_source,
+                                saved_meal_template_id: scaledEntry.saved_meal_template_id,
+                              })
+                              onOpenChange(false)
+                            }}
+                          >
+                            Add &amp; close
+                          </Button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </TabsContent>
 
             <TabsContent value="manual" className="mt-0 space-y-4">
