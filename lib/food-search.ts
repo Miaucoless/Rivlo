@@ -2729,6 +2729,51 @@ const CUSTOM_FOOD_CATALOG: FoodCatalogItem[] = [
     carbs_g: 20,
     fat_g: 2
   }
+},
+{
+  id: 'np-ground-beef-90-10',
+  name: "Nature's Promise Ground Beef (90% Lean / 10% Fat)",
+  aliases: ['natures promise ground beef 90/10', 'np 90 lean beef'],
+  default_serving_amount: 113,
+  default_serving_unit: 'g',
+  default_serving_label: '4 oz (113g)',
+  grams_per_serving: 113,
+  macros_per_serving: {
+    calories: 200,
+    protein_g: 22,
+    carbs_g: 0,
+    fat_g: 11
+  }
+},
+{
+  id: 'np-ground-beef-grassfed',
+  name: "Nature's Promise Grass Fed Ground Beef",
+  aliases: ['natures promise grass fed ground beef', 'np grassfed ground beef'],
+  default_serving_amount: 113,
+  default_serving_unit: 'g',
+  default_serving_label: '4 oz (113g)',
+  grams_per_serving: 113,
+  macros_per_serving: {
+    calories: 280,
+    protein_g: 19,
+    carbs_g: 0,
+    fat_g: 22
+  }
+},
+{
+  id: 'np-ground-beef-organic-85-15',
+  name: "Nature's Promise Organic Grass-Fed Ground Beef (85% Lean / 15% Fat)",
+  aliases: ['natures promise organic ground beef', 'np organic 85/15'],
+  default_serving_amount: 113,
+  default_serving_unit: 'g',
+  default_serving_label: '4 oz (113g)',
+  grams_per_serving: 113,
+  macros_per_serving: {
+    calories: 240,
+    protein_g: 21,
+    carbs_g: 0,
+    fat_g: 17
+  }
 }
   // 👆 PASTE YOUR FOODS HERE 👆
 ]
@@ -2737,6 +2782,39 @@ const CUSTOM_FOOD_CATALOG: FoodCatalogItem[] = [
 // 🔄 DUPLICATE REMOVAL LOGIC - AUTOMATICALLY REMOVES IDENTICAL FOODS
 // ──────────────────────────────────────────────────────────────────────────────
 function removeDuplicateFoods(customFoods: FoodCatalogItem[], existingFoods: FoodCatalogItem[]): FoodCatalogItem[] {
+  const hasValidMacros = (food: FoodCatalogItem) => {
+    const macros = food.macros_per_serving
+    return !!macros &&
+      typeof macros.calories === 'number' && Number.isFinite(macros.calories) &&
+      typeof macros.protein_g === 'number' && Number.isFinite(macros.protein_g) &&
+      typeof macros.carbs_g === 'number' && Number.isFinite(macros.carbs_g) &&
+      typeof macros.fat_g === 'number' && Number.isFinite(macros.fat_g)
+  }
+
+  const dedupedCustomFoods = Array.from(
+    customFoods.reduce((map, food) => {
+      const key = normalize(food.name) || food.id
+      const existing = map.get(key)
+
+      if (!existing) {
+        map.set(key, food)
+        return map
+      }
+
+      const preferred =
+        hasValidMacros(existing) || !hasValidMacros(food)
+          ? existing
+          : food
+
+      map.set(key, {
+        ...preferred,
+        aliases: Array.from(new Set([...existing.aliases, ...food.aliases])),
+      })
+      return map
+    }, new Map<string, FoodCatalogItem>())
+    .values()
+  )
+
   const existingNames = new Set(existingFoods.map(food => food.name.toLowerCase()))
   const existingAliases = new Set(existingFoods.flatMap(food => food.aliases.map(alias => alias.toLowerCase())))
   
@@ -2744,19 +2822,13 @@ function removeDuplicateFoods(customFoods: FoodCatalogItem[], existingFoods: Foo
   const duplicates = new Set<string>()
   const customFoodNames = new Set<string>()
   
-  customFoods.forEach(customFood => {
+  dedupedCustomFoods.forEach(customFood => {
     customFoodNames.add(customFood.name.toLowerCase())
     
     // Check if this custom food is basically identical to an existing one
     // BUT only consider it a duplicate if it has actual macro data (not null)
     // If macros are null, it's a placeholder food and shouldn't be considered a duplicate
-    const hasValidMacros = customFood.macros_per_serving && 
-      customFood.macros_per_serving.calories !== null && 
-      customFood.macros_per_serving.protein_g !== null && 
-      customFood.macros_per_serving.carbs_g !== null && 
-      customFood.macros_per_serving.fat_g !== null
-    
-    const isDuplicate = hasValidMacros && (
+    const isDuplicate = hasValidMacros(customFood) && (
       existingNames.has(customFood.name.toLowerCase()) ||
       customFood.aliases.some(alias => existingAliases.has(alias.toLowerCase())) ||
       existingFoods.some(existingFood => {
@@ -2779,7 +2851,7 @@ function removeDuplicateFoods(customFoods: FoodCatalogItem[], existingFoods: Foo
     !food.aliases.some(alias => customFoodNames.has(alias.toLowerCase()))
   )
   
-  return [...filteredExisting, ...customFoods]
+  return [...filteredExisting, ...dedupedCustomFoods]
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

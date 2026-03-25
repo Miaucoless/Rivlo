@@ -104,6 +104,27 @@ function isDishCombination(itemName: string) {
   return combinationKeywords.some(keyword => lowerName.includes(keyword))
 }
 
+const EXPLICIT_BRAND_TERMS = [
+  'barebells',
+  'fairlife',
+  'premier',
+  'orgain',
+  'quest',
+  'clif',
+  'kind',
+  'powerbar',
+  'pure protein',
+  'muscle milk',
+  'optimum nutrition',
+  'ghost',
+  'legion',
+  'dymatize',
+  'myprotein',
+]
+
+const EXPLICIT_BRAND_REGEX = new RegExp(EXPLICIT_BRAND_TERMS.map((term) => term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), 'i')
+const PACKAGED_PRODUCT_REGEX = /\b(protein bar|soft bar|shake|protein shake|energy drink|meal replacement|pre workout)\b/i
+
 function scoreSuggestion(item: FoodCatalogItem, query: string) {
   const normalizedQuery = normalizeFoodText(query)
   const normalizedName = normalizeFoodText(item.name)
@@ -131,28 +152,29 @@ function scoreSuggestion(item: FoodCatalogItem, query: string) {
   const overlap = queryTokens.filter((token) => nameTokens.includes(token)).length
   score += overlap * 18
 
-  // Smart prioritization logic
-  const hasBrandKeywords = /kraft|heinz|general mills|kellogg|campbell|tyson|perdue|oreo|coca|pepsi|nike|adidas|sony|samsung|apple|google|microsoft|amazon|walmart|target|costco|whole foods|trader joe|fairlife|premier protein|orgain|quest|one bars|kind bars|clif bar|powerbar|pure protein|muscle milk|optimum nutrition|bsn|cellucor|musclepharm|myprotein|bulk|dymatize|universal|animal|ghost|legion|transparent|swole|kaged|jym|beast|mutant|hitech|hi-tech|pro sup|nutrex|mhp|mhp|blackstone|black stone|redcon1|hardcore|dark matter|force factor|six star|muscle tech|cell tech|hydroxycut|lipo|zantrex|xenadrine|thermogenic|fat burner|pre workout|bcaa|creatine|protein powder|whey|casein|isolate|concentrate|hydrolyzed|plant based|vegan|soy|pea|hemp|rice|egg|collagen|mass gainer|weight gainer|meal replacement|mrp|bar|shake|drink|mix|blend|complex|matrix|formula|system|tech|pro|advanced|ultimate|extreme|max|plus|ultra|super|mega|hyper|nitro|turbo|power|force|energy|fuel|charge|blast|rush|shock|impact|strike|boom|bang|furious|intense|vicious|brutal|hardcore|extreme|ultimate|pro|elite|gold|platinum|diamond|black|white|red|blue|green|purple|orange|yellow|pink|brown|grey|silver|bronze|copper|iron|steel|titanium|platinum|crystal|quantum|nuclear|atomic|molecular|cellular|genetic|bio|nano|micro|macro|mega|giga|tera|peta|exa|zetta|yotta/i.test(normalizedName)
-  
-  const isUserSearchingForBrand = hasBrandKeywords && queryTokens.some(token => 
-    /kraft|heinz|general|mill|kellogg|campbell|tyson|perdue|oreo|coca|pepsi|nike|adidas|sony|samsung|apple|google|microsoft|amazon|walmart|target|costco|whole|trader|joe|fairlife|premier|orgain|quest|kind|clif|powerbar|pure|muscle|optimum|bsn|cellucor|musclepharm|myprotein|bulk|dymatize|universal|animal|ghost|legion|transparent|swole|kaged|jym|beast|mutant|hi-tech|pro|sup|nutrex|mhp|blackstone|redcon|hardcore|dark|matter|force|factor|six|muscle|tech|cell|hydroxycut|lipo|zantrex|xenadrine|thermogenic|fat|burner|pre|workout|bcaa|creatine|protein|whey|casein|isolate|concentrate|hydrolyzed|plant|vegan|soy|pea|hemp|rice|egg|collagen|mass|gainer|weight|meal|replacement|mrp|bar|shake|drink|mix|blend|complex|matrix|formula|system|tech|pro|advanced|ultimate|extreme|max|plus|ultra|super|mega|hyper|nitro|turbo|power|force|energy|fuel|charge|blast|rush|shock|impact|strike|boom|bang|furious|intense|vicious|brutal|hardcore|elite|gold|platinum|diamond|black|white|red|blue|green|purple|orange|yellow|pink|brown|grey|silver|bronze|copper|iron|steel|titanium|crystal|quantum|nuclear|atomic|molecular|cellular|genetic|bio|nano|micro|macro|mega|giga|tera|peta|exa|zetta|yotta/i.test(token)
-  )
-  
-  // Penalize brand items unless user is specifically searching for brands
-  if (hasBrandKeywords && !isUserSearchingForBrand) {
-    score -= 150 // Heavy penalty for brand items in general searches
-  } else if (hasBrandKeywords && isUserSearchingForBrand) {
-    score += 50 // Boost brand items when user is searching for brands
+  const itemHasExplicitBrand = EXPLICIT_BRAND_REGEX.test(normalizedName)
+  const userSearchingForExplicitBrand = EXPLICIT_BRAND_TERMS.some((term) => normalizedQuery.includes(term))
+  const queryMentionsPackagedProduct = /\b(bar|bars|shake|drink|pre workout|meal replacement)\b/i.test(normalizedQuery)
+  const itemIsPackagedProduct = PACKAGED_PRODUCT_REGEX.test(normalizedName)
+
+  if (itemHasExplicitBrand && !userSearchingForExplicitBrand) {
+    score -= 120
+  } else if (itemHasExplicitBrand && userSearchingForExplicitBrand) {
+    score += 60
   }
-  
+
+  if (itemIsPackagedProduct && !queryMentionsPackagedProduct && !userSearchingForExplicitBrand) {
+    score -= 90
+  }
+
   // Boost generic/basic foods
-  const isGenericFood = !hasBrandKeywords && (
+  const isGenericFood = !itemHasExplicitBrand && !itemIsPackagedProduct && (
     item.id.startsWith('food-') || 
     item.id.startsWith('ext-') ||
-    (item.name && !/\b(kraft|heinz|general|mill|kellogg|campbell|tyson|perdue|oreo|coca|pepsi|nike|adidas|sony|samsung|apple|google|microsoft|amazon|walmart|target|costco|whole|trader|joe|fairlife|premier|orgain|quest|kind|clif|powerbar|pure|muscle|optimum|bsn|cellucor|musclepharm|myprotein|bulk|dymatize|universal|animal|ghost|legion|transparent|swole|kaged|jym|beast|mutant|hi-tech|pro|sup|nutrex|mhp|blackstone|redcon|hardcore|dark|matter|force|factor|six|muscle|tech|cell|hydroxycut|lipo|zantrex|xenadrine|thermogenic|fat|burner|pre|workout|bcaa|creatine|protein|whey|casein|isolate|concentrate|hydrolyzed|plant|vegan|soy|pea|hemp|rice|egg|collagen|mass|gainer|weight|meal|replacement|mrp|bar|shake|drink|mix|blend|complex|matrix|formula|system|tech|pro|advanced|ultimate|extreme|max|plus|ultra|super|mega|hyper|nitro|turbo|power|force|energy|fuel|charge|blast|rush|shock|impact|strike|boom|bang|furious|intense|vicious|brutal|hardcore|elite|gold|platinum|diamond|black|white|red|blue|green|purple|orange|yellow|pink|brown|grey|silver|bronze|copper|iron|steel|titanium|platinum|crystal|quantum|nuclear|atomic|molecular|cellular|genetic|bio|nano|micro|macro|mega|giga|tera|peta|exa|zetta|yotta)\b/i.test(item.name))
+    !EXPLICIT_BRAND_REGEX.test(item.name)
   )
   
-  if (isGenericFood && !isUserSearchingForBrand) {
+  if (isGenericFood && !userSearchingForExplicitBrand) {
     score += 25 // Boost generic foods in general searches
   }
 
