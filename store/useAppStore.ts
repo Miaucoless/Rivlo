@@ -133,6 +133,8 @@ interface AppStore {
   clearMealPlan: () => void
 
   // Water
+  waterUnit: 'ml' | 'oz' | 'l'
+  setWaterUnit: (unit: 'ml' | 'oz' | 'l') => void
   addWaterEntry: (entry: WaterEntry) => void
   removeWaterEntry: (date: string, entryId: string) => void
   getWaterTotal: (date: string) => number
@@ -523,6 +525,7 @@ export const useAppStore = create<AppStore>()(
       workoutLogs: [],
       mealEntries: {},
       waterLogs: {},
+      waterUnit: 'ml',
       weeklyMealPlan: null,
       groceryList: null,
       streak: 0,
@@ -672,6 +675,7 @@ export const useAppStore = create<AppStore>()(
         set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
 
       setTheme: (theme) => set({ theme }),
+      setWaterUnit: (unit) => set({ waterUnit: unit }),
 
       refreshNotifications: () =>
         set((state) => ({ notifications: buildNotifications(state) })),
@@ -1416,6 +1420,7 @@ export const useAppStore = create<AppStore>()(
         workoutLogs: state.workoutLogs,
         mealEntries: state.mealEntries,
         waterLogs: state.waterLogs,
+        waterUnit: state.waterUnit,
         weeklyMealPlan: state.weeklyMealPlan,
         groceryList: state.groceryList,
         streak: state.streak,

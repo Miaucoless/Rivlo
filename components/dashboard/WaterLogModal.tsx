@@ -10,22 +10,32 @@ import { useAppStore } from '@/store/useAppStore'
 import { getTodayISO } from '@/lib/utils'
 import type { WaterEntry } from '@/types'
 
+type WaterUnit = 'ml' | 'oz' | 'l'
+
+const UNIT_LABELS: Record<WaterUnit, string> = { ml: 'mL', oz: 'oz', l: 'L' }
+
+function unitToMl(val: number, unit: WaterUnit): number {
+  if (unit === 'oz') return Math.round(val * 29.5735)
+  if (unit === 'l') return Math.round(val * 1000)
+  return Math.round(val)
+}
+
+function mlToUnit(ml: number, unit: WaterUnit): string {
+  if (unit === 'oz') return `${Math.round(ml / 29.5735).toLocaleString()} oz`
+  if (unit === 'l') return `${(Math.round((ml / 1000) * 100) / 100).toLocaleString()} L`
+  return `${Math.round(ml).toLocaleString()} mL`
+}
+
 interface WaterLogModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onAdd: (entry: WaterEntry) => void
 }
 
-const GALLON_PRESETS = [
-  { label: '¼ Gal', ml: 946 },
-  { label: '½ Gal', ml: 1893 },
-  { label: '¾ Gal', ml: 2839 },
-  { label: '1 Gal', ml: 3785 },
-]
-
 export function WaterLogModal({ open, onOpenChange, onAdd }: WaterLogModalProps) {
   const [amount, setAmount] = useState('')
-  const { user, waterLogs, removeWaterEntry } = useAppStore()
+  const [inputUnit, setInputUnit] = useState<WaterUnit>('oz')
+  const { user, waterLogs, removeWaterEntry, waterUnit } = useAppStore()
   const today = getTodayISO()
   const todayEntries = waterLogs[today] || []
 
@@ -37,23 +47,11 @@ export function WaterLogModal({ open, onOpenChange, onAdd }: WaterLogModalProps)
       id: `water-${Date.now()}`,
       user_id: user.id,
       date: today,
-      amount_ml: Number(amount),
+      amount_ml: unitToMl(Number(amount), inputUnit),
       logged_at: new Date().toISOString(),
     }
     onAdd(entry)
     setAmount('')
-  }
-
-  const handlePreset = (ml: number) => {
-    if (!user) return
-    const entry: WaterEntry = {
-      id: `water-${Date.now()}`,
-      user_id: user.id,
-      date: today,
-      amount_ml: ml,
-      logged_at: new Date().toISOString(),
-    }
-    onAdd(entry)
   }
 
   return (
@@ -63,31 +61,34 @@ export function WaterLogModal({ open, onOpenChange, onAdd }: WaterLogModalProps)
           <DialogTitle>Log Water</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 pt-2">
-          {/* Gallon presets */}
-          <div className="grid grid-cols-4 gap-1.5">
-            {GALLON_PRESETS.map(({ label, ml }) => (
-              <button
-                key={label}
-                onClick={() => handlePreset(ml)}
-                className="flex flex-col items-center py-2 px-1 rounded-lg border border-border bg-card text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-              >
-                <span className="text-xs font-medium">{label}</span>
-                <span className="text-[10px] text-muted-foreground">{ml.toLocaleString()}</span>
-              </button>
-            ))}
-          </div>
-
+          {/* Amount input + unit toggle */}
           <div className="flex gap-2">
             <Input
               type="number"
-              placeholder="e.g. 330"
+              placeholder={inputUnit === 'oz' ? 'e.g. 16' : inputUnit === 'l' ? 'e.g. 0.5' : 'e.g. 330'}
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
               className="flex-1"
             />
-            <span className="flex items-center text-sm text-muted-foreground">mL</span>
+            {/* Unit selector */}
+            <div className="flex items-center rounded-md border border-border overflow-hidden">
+              {(['oz', 'l', 'ml'] as WaterUnit[]).map((u) => (
+                <button
+                  key={u}
+                  onClick={() => setInputUnit(u)}
+                  className={`px-2 py-1 text-xs font-medium transition-colors ${
+                    inputUnit === u
+                      ? 'bg-sky-600 text-white'
+                      : 'text-muted-foreground hover:text-foreground bg-card'
+                  }`}
+                >
+                  {UNIT_LABELS[u]}
+                </button>
+              ))}
+            </div>
           </div>
+
           <Button className="w-full" disabled={!isValid} onClick={handleAdd}>
             Add
           </Button>
@@ -106,7 +107,7 @@ export function WaterLogModal({ open, onOpenChange, onAdd }: WaterLogModalProps)
                     <span className="text-muted-foreground text-xs">
                       {format(new Date(entry.logged_at), 'h:mm a')}
                     </span>
-                    <span className="font-medium text-xs">+{entry.amount_ml} mL</span>
+                    <span className="font-medium text-xs">+{mlToUnit(entry.amount_ml, waterUnit)}</span>
                     <button
                       onClick={() => removeWaterEntry(today, entry.id)}
                       className="text-muted-foreground hover:text-destructive transition-colors"
