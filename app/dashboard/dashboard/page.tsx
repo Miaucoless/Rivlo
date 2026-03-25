@@ -23,6 +23,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useAppStore } from '@/store/useAppStore'
 import { WaterIntakeCard } from '@/components/dashboard/WaterIntakeCard'
+import { DailyQuoteCard } from '@/components/dashboard/DailyQuoteCard'
 import { percentage, generateRecommendation, getTodayISO, formatCalories, formatWeightDelta, formatWeightValue, getWeightUnitLabel } from '@/lib/utils'
 import { toast } from 'sonner'
 
@@ -821,20 +822,8 @@ export default function DashboardPage() {
 
         {/* AI Insight + recent journal */}
         <motion.div variants={stagger.item} initial="initial" animate="animate" className="space-y-4">
-          {/* AI insight */}
-          <Card className="bg-gradient-to-br from-emerald-500/5 to-teal-500/5 border-emerald-500/20">
-            <CardContent className="p-4">
-              <div className="flex items-start gap-3">
-                <div className="w-8 h-8 rounded-lg bg-emerald-500/20 flex items-center justify-center flex-shrink-0">
-                  <Target className="w-4 h-4 text-emerald-400" />
-                </div>
-                <div>
-                  <p className="text-xs font-semibold text-emerald-400 mb-1">AI Insight</p>
-                  <p className="text-xs text-muted-foreground leading-relaxed">{recommendation}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          {/* Daily quote */}
+          <DailyQuoteCard />
 
           {/* Weight trend card */}
           {weightHistory.length > 0 && (
