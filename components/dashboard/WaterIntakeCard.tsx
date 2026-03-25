@@ -178,7 +178,7 @@ export function WaterIntakeCard() {
                   {GOAL_PRESETS.map(({ label, ml }) => (
                     <button
                       key={label}
-                      onClick={() => handleGoalPreset(ml)}
+                      onMouseDown={(e) => { e.preventDefault(); handleGoalPreset(ml) }}
                       className={`flex flex-col items-center py-1.5 rounded-md border transition-colors ${
                         waterGoal === ml
                           ? 'border-sky-500 bg-sky-600/10 text-sky-400'
