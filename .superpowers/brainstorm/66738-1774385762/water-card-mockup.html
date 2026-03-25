@@ -1,0 +1,124 @@
+<h2>Water Intake Card — Full Preview</h2>
+<p class="subtitle">How it will look on your dashboard (dark theme)</p>
+
+<div style="display:flex;justify-content:center;padding:8px 0 24px;">
+  <!-- Dashboard card wrapper -->
+  <div style="background:#0f172a;border:1px solid #1e293b;border-radius:16px;padding:20px 24px;width:320px;font-family:-apple-system,BlinkMacSystemFont,'Inter',sans-serif;">
+
+    <!-- Card header -->
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:16px;">💧</span>
+        <span style="color:#f1f5f9;font-weight:600;font-size:14px;">Water Intake</span>
+      </div>
+      <!-- Goal with edit icon -->
+      <div style="display:flex;align-items:center;gap:4px;background:#1e293b;border-radius:8px;padding:4px 8px;">
+        <span style="color:#64748b;font-size:11px;">Goal:</span>
+        <span style="color:#94a3b8;font-size:11px;font-weight:600;">2,500 mL</span>
+        <span style="color:#475569;font-size:10px;cursor:pointer;">✏️</span>
+      </div>
+    </div>
+
+    <!-- Bottle + stats row -->
+    <div style="display:flex;align-items:center;gap:24px;margin-bottom:20px;">
+
+      <!-- Tall bottle -->
+      <div style="position:relative;flex-shrink:0;">
+        <!-- Cap -->
+        <div style="width:28px;height:12px;background:#334155;border-radius:4px 4px 0 0;margin:0 auto 0;"></div>
+        <!-- Neck -->
+        <div style="width:32px;height:14px;background:#1e293b;border:2px solid #334155;margin:0 auto;"></div>
+        <!-- Body -->
+        <div style="position:relative;width:70px;height:140px;border-radius:10px;border:2px solid #334155;overflow:hidden;background:#1e293b;">
+          <!-- Water fill at 60% -->
+          <div style="position:absolute;bottom:0;left:0;width:100%;height:60%;background:linear-gradient(180deg,#38bdf8 0%,#0284c7 100%);">
+            <!-- Wave top -->
+            <div style="position:absolute;top:-7px;left:-8px;width:calc(100% + 16px);height:14px;background:#38bdf8;border-radius:50%;"></div>
+          </div>
+          <!-- mL markers -->
+          <div style="position:absolute;right:0;top:0;bottom:0;width:20px;display:flex;flex-direction:column;justify-content:space-around;padding:8px 0;">
+            <div style="display:flex;align-items:center;gap:2px;">
+              <div style="width:6px;height:1px;background:#475569;"></div>
+              <span style="color:#475569;font-size:7px;">100</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:2px;">
+              <div style="width:6px;height:1px;background:#475569;"></div>
+              <span style="color:#475569;font-size:7px;">75</span>
+            </div>
+            <!-- 60% active marker -->
+            <div style="display:flex;align-items:center;gap:2px;position:absolute;bottom:60%;right:0;transform:translateY(50%);">
+              <div style="width:8px;height:1.5px;background:#38bdf8;"></div>
+              <span style="color:#38bdf8;font-size:7px;font-weight:700;">60%</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:2px;">
+              <div style="width:6px;height:1px;background:#475569;"></div>
+              <span style="color:#475569;font-size:7px;">50</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:2px;">
+              <div style="width:6px;height:1px;background:#475569;"></div>
+              <span style="color:#475569;font-size:7px;">25</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:2px;">
+              <div style="width:6px;height:1px;background:#475569;"></div>
+              <span style="color:#475569;font-size:7px;">0</span>
+            </div>
+          </div>
+          <!-- Bubbles -->
+          <div style="position:absolute;left:18px;bottom:20%;width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,0.25);"></div>
+          <div style="position:absolute;left:30px;bottom:35%;width:3px;height:3px;border-radius:50%;background:rgba(255,255,255,0.15);"></div>
+          <div style="position:absolute;left:10px;bottom:45%;width:4px;height:4px;border-radius:50%;background:rgba(255,255,255,0.2);"></div>
+        </div>
+      </div>
+
+      <!-- Right side stats -->
+      <div style="flex:1;display:flex;flex-direction:column;gap:10px;">
+        <!-- Big number -->
+        <div>
+          <div style="color:#38bdf8;font-size:28px;font-weight:700;line-height:1;">1,500</div>
+          <div style="color:#475569;font-size:12px;">of 2,500 mL</div>
+        </div>
+        <!-- Remaining -->
+        <div style="background:#1e293b;border-radius:8px;padding:8px 10px;">
+          <div style="color:#64748b;font-size:10px;margin-bottom:2px;">Remaining</div>
+          <div style="color:#94a3b8;font-size:16px;font-weight:600;">1,000 mL</div>
+        </div>
+        <!-- Glasses equivalent -->
+        <div style="color:#64748b;font-size:11px;">≈ 6 of 10 glasses</div>
+      </div>
+    </div>
+
+    <!-- Quick add buttons -->
+    <div style="display:flex;gap:8px;margin-bottom:16px;">
+      <button style="flex:1;background:#1e293b;border:1px solid #334155;color:#94a3b8;font-size:12px;padding:8px 0;border-radius:10px;cursor:pointer;font-weight:500;">+250 mL</button>
+      <button style="flex:1;background:#1e293b;border:1px solid #334155;color:#94a3b8;font-size:12px;padding:8px 0;border-radius:10px;cursor:pointer;font-weight:500;">+500 mL</button>
+      <button style="flex:1;background:#0284c7;border:none;color:#fff;font-size:12px;padding:8px 0;border-radius:10px;cursor:pointer;font-weight:600;">+ Custom</button>
+    </div>
+
+    <!-- Today's log (collapsed preview) -->
+    <div style="border-top:1px solid #1e293b;padding-top:12px;">
+      <div style="color:#475569;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">Today's Log</div>
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <span style="color:#64748b;font-size:11px;">9:30 AM</span>
+          <span style="color:#94a3b8;font-size:11px;font-weight:500;">+500 mL</span>
+          <span style="color:#334155;font-size:11px;cursor:pointer;">✕</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <span style="color:#64748b;font-size:11px;">11:15 AM</span>
+          <span style="color:#94a3b8;font-size:11px;font-weight:500;">+250 mL</span>
+          <span style="color:#334155;font-size:11px;cursor:pointer;">✕</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <span style="color:#64748b;font-size:11px;">1:00 PM</span>
+          <span style="color:#94a3b8;font-size:11px;font-weight:500;">+750 mL</span>
+          <span style="color:#334155;font-size:11px;cursor:pointer;">✕</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div style="text-align:center;margin-top:8px;">
+  <p class="subtitle" style="font-size:12px;">The bottle fill animates smoothly as you log water. At 100% a wave burst + 🎉 toast fires.</p>
+</div>

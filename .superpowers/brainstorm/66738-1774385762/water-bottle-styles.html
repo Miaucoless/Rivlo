@@ -1,0 +1,131 @@
+<h2>Water Bottle Widget — Visual Style</h2>
+<p class="subtitle">Which design direction feels right for the water intake card?</p>
+
+<div class="cards">
+
+  <!-- Option A: Tall Bottle Fill -->
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#0f172a;padding:24px;display:flex;justify-content:center;align-items:center;min-height:220px;">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:12px;">
+        <!-- Bottle SVG -->
+        <div style="position:relative;width:60px;height:140px;">
+          <!-- Bottle cap -->
+          <div style="position:absolute;top:0;left:50%;transform:translateX(-50%);width:24px;height:14px;background:#334155;border-radius:4px 4px 0 0;"></div>
+          <!-- Bottle neck -->
+          <div style="position:absolute;top:12px;left:50%;transform:translateX(-50%);width:28px;height:16px;background:#1e293b;border:2px solid #475569;"></div>
+          <!-- Bottle body -->
+          <div style="position:absolute;top:26px;left:0;width:60px;height:114px;border-radius:8px;border:2px solid #475569;overflow:hidden;background:#1e293b;">
+            <!-- Water fill (60%) -->
+            <div style="position:absolute;bottom:0;left:0;width:100%;height:60%;background:linear-gradient(180deg,#38bdf8 0%,#0ea5e9 100%);transition:height 0.5s ease;"></div>
+            <!-- Wave -->
+            <div style="position:absolute;bottom:60%;left:-10px;width:120%;height:12px;background:#38bdf8;border-radius:50%;opacity:0.6;"></div>
+            <!-- mL lines -->
+            <div style="position:absolute;right:6px;top:20%;width:8px;height:1px;background:#475569;opacity:0.5;"></div>
+            <div style="position:absolute;right:6px;top:40%;width:8px;height:1px;background:#475569;opacity:0.5;"></div>
+            <div style="position:absolute;right:6px;top:60%;width:8px;height:1px;background:#7dd3fc;opacity:0.8;"></div>
+            <div style="position:absolute;right:6px;top:80%;width:8px;height:1px;background:#475569;opacity:0.5;"></div>
+          </div>
+        </div>
+        <div style="text-align:center;">
+          <div style="color:#38bdf8;font-size:18px;font-weight:700;">1,500 / 2,500 mL</div>
+          <div style="color:#94a3b8;font-size:11px;margin-top:2px;">60% of daily goal</div>
+        </div>
+        <!-- Quick add buttons -->
+        <div style="display:flex;gap:6px;">
+          <div style="background:#1e293b;border:1px solid #334155;color:#94a3b8;font-size:10px;padding:4px 8px;border-radius:6px;">+250ml</div>
+          <div style="background:#1e293b;border:1px solid #334155;color:#94a3b8;font-size:10px;padding:4px 8px;border-radius:6px;">+500ml</div>
+          <div style="background:#0ea5e9;color:#fff;font-size:10px;padding:4px 8px;border-radius:6px;font-weight:600;">Custom</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A — Tall Filling Bottle</h3>
+      <p>Vertical bottle with animated water fill. mL markers on the side. Quick-add buttons below. Classic, satisfying to watch fill up.</p>
+    </div>
+  </div>
+
+  <!-- Option B: Wide Horizontal Card -->
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#0f172a;padding:20px;display:flex;justify-content:center;align-items:center;min-height:220px;">
+      <div style="width:100%;max-width:260px;">
+        <!-- Header row -->
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:18px;">💧</span>
+            <span style="color:#f1f5f9;font-weight:600;font-size:13px;">Water</span>
+          </div>
+          <span style="color:#38bdf8;font-size:12px;font-weight:700;">1,500 mL</span>
+        </div>
+        <!-- Wide bottle body -->
+        <div style="position:relative;width:100%;height:80px;border-radius:16px;border:2px solid #334155;overflow:hidden;background:#1e293b;margin-bottom:10px;">
+          <!-- Water fill 60% -->
+          <div style="position:absolute;left:0;top:0;height:100%;width:60%;background:linear-gradient(90deg,#0ea5e9,#38bdf8);border-radius:14px 0 0 14px;"></div>
+          <!-- Sparkle/bubble details -->
+          <div style="position:absolute;left:15%;top:30%;width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,0.3);"></div>
+          <div style="position:absolute;left:35%;top:55%;width:3px;height:3px;border-radius:50%;background:rgba(255,255,255,0.2);"></div>
+          <!-- mL label in center -->
+          <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;">
+            <span style="color:#fff;font-size:13px;font-weight:700;text-shadow:0 1px 3px rgba(0,0,0,0.5);">60% of 2,500 mL</span>
+          </div>
+        </div>
+        <!-- Goal line markers -->
+        <div style="display:flex;justify-content:space-between;margin-bottom:12px;padding:0 2px;">
+          <span style="color:#475569;font-size:9px;">0</span>
+          <span style="color:#475569;font-size:9px;">625</span>
+          <span style="color:#38bdf8;font-size:9px;font-weight:600;">1250</span>
+          <span style="color:#475569;font-size:9px;">1875</span>
+          <span style="color:#475569;font-size:9px;">2500</span>
+        </div>
+        <!-- Buttons -->
+        <div style="display:flex;gap:6px;">
+          <div style="flex:1;background:#1e293b;border:1px solid #334155;color:#94a3b8;font-size:10px;padding:6px;border-radius:8px;text-align:center;">+250</div>
+          <div style="flex:1;background:#1e293b;border:1px solid #334155;color:#94a3b8;font-size:10px;padding:6px;border-radius:8px;text-align:center;">+500</div>
+          <div style="flex:1;background:#0ea5e9;color:#fff;font-size:10px;padding:6px;border-radius:8px;text-align:center;font-weight:600;">+ Custom</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B — Horizontal Bar Bottle</h3>
+      <p>Wide horizontal fill bar styled like a bottle. Compact, fits neatly in the dashboard grid. mL markers along the bottom edge.</p>
+    </div>
+  </div>
+
+  <!-- Option C: Circular Ring + Bottle Icon -->
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#0f172a;padding:24px;display:flex;justify-content:center;align-items:center;min-height:220px;">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:14px;">
+        <!-- Circular progress ring with bottle inside -->
+        <div style="position:relative;width:110px;height:110px;">
+          <svg width="110" height="110" viewBox="0 0 110 110">
+            <!-- Background ring -->
+            <circle cx="55" cy="55" r="46" fill="none" stroke="#1e293b" stroke-width="8"/>
+            <!-- Progress ring (60% = 173 of 289 dasharray) -->
+            <circle cx="55" cy="55" r="46" fill="none" stroke="#0ea5e9" stroke-width="8"
+              stroke-dasharray="289" stroke-dashoffset="116"
+              stroke-linecap="round"
+              transform="rotate(-90 55 55)"/>
+          </svg>
+          <!-- Bottle icon in center -->
+          <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+            <span style="font-size:26px;">🍶</span>
+            <span style="color:#38bdf8;font-size:13px;font-weight:700;margin-top:2px;">60%</span>
+          </div>
+        </div>
+        <div style="text-align:center;">
+          <div style="color:#f1f5f9;font-size:15px;font-weight:600;">1,500 <span style="color:#64748b;font-size:12px;font-weight:400;">/ 2,500 mL</span></div>
+          <div style="color:#64748b;font-size:11px;">1,000 mL to go</div>
+        </div>
+        <div style="display:flex;gap:6px;">
+          <div style="background:#1e293b;border:1px solid #334155;color:#94a3b8;font-size:10px;padding:5px 10px;border-radius:6px;">+250</div>
+          <div style="background:#1e293b;border:1px solid #334155;color:#94a3b8;font-size:10px;padding:5px 10px;border-radius:6px;">+500</div>
+          <div style="background:#0ea5e9;color:#fff;font-size:10px;padding:5px 10px;border-radius:6px;font-weight:600;">Custom</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C — Ring + Bottle Icon</h3>
+      <p>Circular ring (like the calorie ring) with a bottle emoji inside. Consistent with the existing dashboard style.</p>
+    </div>
+  </div>
+
+</div>

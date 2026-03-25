@@ -27,10 +27,10 @@ Item data is **snapshotted** at share time into a `jsonb` column — the recipie
 id            uuid primary key default gen_random_uuid()
 owner_id      uuid not null references auth.users(id) on delete cascade
 item_type     text not null
-              -- 'workout' = workout_templates (reusable custom workouts only)
+              -- 'workout' = workout_templates (reusable custom workouts)
+              -- 'workout_log' = workout_logs (completed sessions)
               -- 'saved_meal' = saved_meals
               -- 'recipe' = custom recipes
-              -- workout_logs (completed sessions) are NOT shareable in v1
 item_name     text not null
 item_data     jsonb not null  -- full snapshot at share time
 share_token   text not null unique default substr(gen_random_uuid()::text, 1, 12)

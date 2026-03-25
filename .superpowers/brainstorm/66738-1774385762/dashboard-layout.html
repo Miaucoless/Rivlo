@@ -1,0 +1,130 @@
+<h2>Dashboard Top Section — Layout Options</h2>
+<p class="subtitle">After removing Weight & Workouts stats — which layout works better?</p>
+
+<div class="options">
+
+  <!-- Option A: Water card own row -->
+  <div class="option" data-choice="a" onclick="toggleSelect(this)" style="display:block;padding:0;overflow:hidden;">
+    <div style="background:#1a1a2e;padding:12px;border-bottom:1px solid #2d2d3d;">
+      <div class="letter" style="display:inline-block;margin-bottom:8px;">A</div>
+      <h3 style="margin:0 0 4px;color:#f1f5f9;">Two rows</h3>
+      <p style="margin:0;color:#64748b;font-size:12px;">Stats on top, water card below in its own row</p>
+    </div>
+    <div style="padding:14px;background:#0f172a;font-family:-apple-system,sans-serif;">
+      <!-- Welcome bar -->
+      <div style="background:#1e293b;border-radius:8px;padding:8px 12px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;">
+        <span style="color:#94a3b8;font-size:11px;">Good morning, Alex 👋  •  5-day streak 🔥</span>
+        <div style="display:flex;gap:6px;">
+          <div style="background:#1e293b;border:1px solid #334155;border-radius:6px;padding:4px 8px;font-size:10px;color:#64748b;">Log Meal</div>
+          <div style="background:#3b82f6;border-radius:6px;padding:4px 8px;font-size:10px;color:#fff;">Log Workout</div>
+        </div>
+      </div>
+      <!-- 2-stat row -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
+        <div style="background:#1e293b;border-radius:10px;padding:10px 12px;">
+          <div style="color:#64748b;font-size:10px;margin-bottom:4px;">Calories Today</div>
+          <div style="color:#f1f5f9;font-size:18px;font-weight:700;">1,840</div>
+          <div style="color:#64748b;font-size:9px;">of 2,200 kcal · 84%</div>
+          <div style="height:3px;background:#1e293b;border-radius:2px;margin-top:6px;"><div style="height:100%;width:84%;background:#10b981;border-radius:2px;"></div></div>
+        </div>
+        <div style="background:#1e293b;border-radius:10px;padding:10px 12px;">
+          <div style="color:#64748b;font-size:10px;margin-bottom:4px;">Protein</div>
+          <div style="color:#f1f5f9;font-size:18px;font-weight:700;">142g</div>
+          <div style="color:#64748b;font-size:9px;">of 165g · 86%</div>
+          <div style="height:3px;background:#1e293b;border-radius:2px;margin-top:6px;"><div style="height:100%;width:86%;background:#10b981;border-radius:2px;"></div></div>
+        </div>
+      </div>
+      <!-- Water card full width -->
+      <div style="background:#1e293b;border-radius:10px;padding:12px 14px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+          <span style="color:#f1f5f9;font-size:12px;font-weight:600;">💧 Water Intake</span>
+          <span style="color:#64748b;font-size:10px;">Goal: 2,500 mL ✏️</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:16px;">
+          <!-- Compact bottle -->
+          <div style="position:relative;flex-shrink:0;">
+            <div style="width:20px;height:8px;background:#334155;border-radius:3px 3px 0 0;margin:0 auto;"></div>
+            <div style="width:24px;height:10px;background:#1e293b;border:1.5px solid #334155;margin:0 auto;"></div>
+            <div style="position:relative;width:46px;height:90px;border-radius:7px;border:1.5px solid #334155;overflow:hidden;background:#0f172a;">
+              <div style="position:absolute;bottom:0;left:0;width:100%;height:60%;background:linear-gradient(180deg,#38bdf8,#0284c7);">
+                <div style="position:absolute;top:-5px;left:-5px;width:calc(100% + 10px);height:10px;background:#38bdf8;border-radius:50%;"></div>
+              </div>
+              <div style="position:absolute;left:10px;bottom:18%;width:3px;height:3px;border-radius:50%;background:rgba(255,255,255,0.25);"></div>
+              <div style="position:absolute;left:22px;bottom:35%;width:2px;height:2px;border-radius:50%;background:rgba(255,255,255,0.2);"></div>
+            </div>
+          </div>
+          <!-- Stats + buttons -->
+          <div style="flex:1;">
+            <div style="color:#38bdf8;font-size:20px;font-weight:700;line-height:1;">1,500 <span style="color:#475569;font-size:12px;font-weight:400;">/ 2,500 mL</span></div>
+            <div style="color:#64748b;font-size:10px;margin-bottom:8px;">1,000 mL remaining · ≈ 6 of 10 glasses</div>
+            <div style="display:flex;gap:5px;">
+              <div style="background:#0f172a;border:1px solid #334155;color:#94a3b8;font-size:10px;padding:5px 8px;border-radius:7px;">+250</div>
+              <div style="background:#0f172a;border:1px solid #334155;color:#94a3b8;font-size:10px;padding:5px 8px;border-radius:7px;">+500</div>
+              <div style="background:#0284c7;color:#fff;font-size:10px;padding:5px 8px;border-radius:7px;font-weight:600;">+ Custom</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Option B: Side by side -->
+  <div class="option" data-choice="b" onclick="toggleSelect(this)" style="display:block;padding:0;overflow:hidden;">
+    <div style="background:#1a1a2e;padding:12px;border-bottom:1px solid #2d2d3d;">
+      <div class="letter" style="display:inline-block;margin-bottom:8px;">B</div>
+      <h3 style="margin:0 0 4px;color:#f1f5f9;">Three columns</h3>
+      <p style="margin:0;color:#64748b;font-size:12px;">Calories, Protein, and Water side by side in one row</p>
+    </div>
+    <div style="padding:14px;background:#0f172a;font-family:-apple-system,sans-serif;">
+      <!-- Welcome bar -->
+      <div style="background:#1e293b;border-radius:8px;padding:8px 12px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;">
+        <span style="color:#94a3b8;font-size:11px;">Good morning, Alex 👋  •  5-day streak 🔥</span>
+        <div style="display:flex;gap:6px;">
+          <div style="background:#1e293b;border:1px solid #334155;border-radius:6px;padding:4px 8px;font-size:10px;color:#64748b;">Log Meal</div>
+          <div style="background:#3b82f6;border-radius:6px;padding:4px 8px;font-size:10px;color:#fff;">Log Workout</div>
+        </div>
+      </div>
+      <!-- 3-column row -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+        <!-- Calories -->
+        <div style="background:#1e293b;border-radius:10px;padding:10px 12px;">
+          <div style="color:#64748b;font-size:10px;margin-bottom:4px;">Calories</div>
+          <div style="color:#f1f5f9;font-size:16px;font-weight:700;">1,840</div>
+          <div style="color:#64748b;font-size:9px;margin-bottom:5px;">of 2,200 kcal</div>
+          <div style="height:3px;background:#0f172a;border-radius:2px;"><div style="height:100%;width:84%;background:#10b981;border-radius:2px;"></div></div>
+        </div>
+        <!-- Protein -->
+        <div style="background:#1e293b;border-radius:10px;padding:10px 12px;">
+          <div style="color:#64748b;font-size:10px;margin-bottom:4px;">Protein</div>
+          <div style="color:#f1f5f9;font-size:16px;font-weight:700;">142g</div>
+          <div style="color:#64748b;font-size:9px;margin-bottom:5px;">of 165g</div>
+          <div style="height:3px;background:#0f172a;border-radius:2px;"><div style="height:100%;width:86%;background:#10b981;border-radius:2px;"></div></div>
+        </div>
+        <!-- Water - compact tall bottle in card -->
+        <div style="background:#1e293b;border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;align-items:center;gap:6px;">
+          <div style="color:#64748b;font-size:10px;align-self:flex-start;">Water</div>
+          <!-- Mini bottle -->
+          <div style="position:relative;">
+            <div style="width:16px;height:6px;background:#334155;border-radius:3px 3px 0 0;margin:0 auto;"></div>
+            <div style="width:20px;height:7px;background:#0f172a;border:1.5px solid #334155;margin:0 auto;"></div>
+            <div style="position:relative;width:36px;height:70px;border-radius:6px;border:1.5px solid #334155;overflow:hidden;background:#0f172a;">
+              <div style="position:absolute;bottom:0;left:0;width:100%;height:60%;background:linear-gradient(180deg,#38bdf8,#0284c7);">
+                <div style="position:absolute;top:-4px;left:-4px;width:calc(100%+8px);height:8px;background:#38bdf8;border-radius:50%;"></div>
+              </div>
+              <div style="position:absolute;left:8px;bottom:20%;width:2px;height:2px;border-radius:50%;background:rgba(255,255,255,0.3);"></div>
+            </div>
+          </div>
+          <div style="color:#38bdf8;font-size:13px;font-weight:700;line-height:1;">1,500</div>
+          <div style="color:#475569;font-size:9px;">/ 2,500 mL</div>
+          <div style="display:flex;gap:3px;width:100%;">
+            <div style="flex:1;background:#0f172a;border:1px solid #334155;color:#64748b;font-size:9px;padding:3px 0;border-radius:5px;text-align:center;">+250</div>
+            <div style="flex:1;background:#0f172a;border:1px solid #334155;color:#64748b;font-size:9px;padding:3px 0;border-radius:5px;text-align:center;">+500</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<p class="subtitle" style="margin-top:16px;font-size:12px;">Option A gives the bottle more room to breathe. Option B is more compact but the bottle is quite tiny.</p>
