@@ -1803,7 +1803,7 @@ function ActiveWorkoutModal({
   }
 
   return (
-    <DialogContent className="max-h-[92vh] max-w-3xl overflow-y-auto p-4 sm:p-6">
+    <DialogContent className="max-h-[92vh] w-[calc(100vw-1rem)] max-w-3xl overflow-x-hidden overflow-y-auto p-3 sm:p-6">
       <DialogHeader>
         <DialogTitle>{workout.name}</DialogTitle>
       </DialogHeader>
@@ -1826,7 +1826,7 @@ function ActiveWorkoutModal({
 
         <Progress value={progress} indicatorClassName="bg-emerald-500" className="h-1.5" />
 
-        <div className="flex gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row">
           <Button type="button" variant="outline" size="sm" onClick={() => setAllSetsCompletion(true)}>
             Select All Complete
           </Button>
@@ -1842,7 +1842,7 @@ function ActiveWorkoutModal({
               <p className="text-xs text-muted-foreground">Search and drop a movement into this live workout.</p>
             </div>
           </div>
-          <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+          <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
             <div className="space-y-2">
               <div className="relative">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -1893,7 +1893,7 @@ function ActiveWorkoutModal({
                 </div>
               )}
             </div>
-            <Button type="button" variant="outline" onClick={addCustomExerciseToLiveWorkout}>
+            <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={addCustomExerciseToLiveWorkout}>
               Add Custom
             </Button>
           </div>
@@ -1904,7 +1904,7 @@ function ActiveWorkoutModal({
             const inputMode = getExerciseInputMode(exercise.exercise)
             const prevData = lastPerformance[exercise.exercise.id] || lastPerformance[`name:${exercise.exercise.name}`]
             return <div key={`${exercise.exercise.id}-${exerciseIndex}`} className="rounded-2xl border border-border/60 bg-card p-4">
-              <div className="mb-3 flex items-start justify-between gap-3">
+              <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
                   <p className="text-sm font-semibold">{exercise.exercise.name}</p>
                   <p className="text-xs text-muted-foreground">{exercise.exercise.equipment}</p>
@@ -1928,7 +1928,7 @@ function ActiveWorkoutModal({
                     </p>
                   )}
                 </div>
-                <div className="flex items-center gap-1 shrink-0">
+                <div className="flex flex-wrap items-center gap-1">
                   <Select
                     value={getExerciseSetMetric(exercise.exercise)}
                     onValueChange={(value) => updateLiveExerciseSetMetric(exerciseIndex, value as ExerciseSetMetric)}
@@ -1978,7 +1978,7 @@ function ActiveWorkoutModal({
                 </div>
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-2 overflow-hidden">
                 {inputMode === 'treadmill' ? (
                   <div className="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 px-3 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
                     <span>Set</span>
@@ -2018,7 +2018,7 @@ function ActiveWorkoutModal({
                 )}
                 {exercise.sets.map((set, setIndex) => (
                   inputMode === 'treadmill' ? (
-                    <div key={`${exercise.exercise.id}-${setIndex}`} className={`grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto_auto] gap-2 items-center rounded-xl border px-3 py-2 ${set.completed ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-border/50 bg-muted/10'}`}>
+                    <div key={`${exercise.exercise.id}-${setIndex}`} className={`grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)] gap-2 rounded-xl border px-3 py-2 sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto_auto] sm:items-center ${set.completed ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-border/50 bg-muted/10'}`}>
                       <span className="font-data text-xs">{set.set_number}</span>
                       <Input
                         type="number"
@@ -2041,39 +2041,39 @@ function ActiveWorkoutModal({
                         disabled={set.completed}
                         placeholder="Minutes"
                       />
-                      <button type="button" onClick={() => toggleSet(exerciseIndex, setIndex)}>
+                      <button type="button" className="justify-self-end sm:justify-self-auto" onClick={() => toggleSet(exerciseIndex, setIndex)}>
                         {set.completed ? <CheckCircle className="h-5 w-5 text-emerald-400" /> : <Circle className="h-5 w-5 text-muted-foreground" />}
                       </button>
-                      <Button type="button" variant="ghost" size="icon-sm" onClick={() => removeSetFromExercise(exerciseIndex, setIndex)} disabled={exercise.sets.length <= 1}>
+                      <Button type="button" variant="ghost" size="icon-sm" className="justify-self-end sm:justify-self-auto" onClick={() => removeSetFromExercise(exerciseIndex, setIndex)} disabled={exercise.sets.length <= 1}>
                         <X className="h-3.5 w-3.5" />
                       </Button>
                     </div>
                   ) : inputMode === 'run_walk' ? (
-                    <div key={`${exercise.exercise.id}-${setIndex}`} className={`grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto_auto] gap-2 items-center rounded-xl border px-3 py-2 ${set.completed ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-border/50 bg-muted/10'}`}>
+                    <div key={`${exercise.exercise.id}-${setIndex}`} className={`grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)] gap-2 rounded-xl border px-3 py-2 sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto_auto] sm:items-center ${set.completed ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-border/50 bg-muted/10'}`}>
                       <span className="font-data text-xs">{set.set_number}</span>
                       <Input type="number" value={formatNumericInput(set.actual_speed_mph)} onChange={(e) => updateSet(exerciseIndex, setIndex, 'actual_speed_mph', e.target.value === '' ? undefined : Number(e.target.value))} disabled={set.completed} placeholder="Speed MPH" />
                       <Input type="number" value={formatNumericInput(set.actual_reps)} onChange={(e) => updateSet(exerciseIndex, setIndex, 'actual_reps', e.target.value === '' ? undefined : Number(e.target.value))} disabled={set.completed} placeholder="Minutes" />
-                      <button type="button" onClick={() => toggleSet(exerciseIndex, setIndex)}>{set.completed ? <CheckCircle className="h-5 w-5 text-emerald-400" /> : <Circle className="h-5 w-5 text-muted-foreground" />}</button>
-                      <Button type="button" variant="ghost" size="icon-sm" onClick={() => removeSetFromExercise(exerciseIndex, setIndex)} disabled={exercise.sets.length <= 1}><X className="h-3.5 w-3.5" /></Button>
+                      <button type="button" className="justify-self-end sm:justify-self-auto" onClick={() => toggleSet(exerciseIndex, setIndex)}>{set.completed ? <CheckCircle className="h-5 w-5 text-emerald-400" /> : <Circle className="h-5 w-5 text-muted-foreground" />}</button>
+                      <Button type="button" variant="ghost" size="icon-sm" className="justify-self-end sm:justify-self-auto" onClick={() => removeSetFromExercise(exerciseIndex, setIndex)} disabled={exercise.sets.length <= 1}><X className="h-3.5 w-3.5" /></Button>
                     </div>
                   ) : inputMode === 'bike' || inputMode === 'rower' ? (
-                    <div key={`${exercise.exercise.id}-${setIndex}`} className={`grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto_auto] gap-2 items-center rounded-xl border px-3 py-2 ${set.completed ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-border/50 bg-muted/10'}`}>
+                    <div key={`${exercise.exercise.id}-${setIndex}`} className={`grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)] gap-2 rounded-xl border px-3 py-2 sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto_auto] sm:items-center ${set.completed ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-border/50 bg-muted/10'}`}>
                       <span className="font-data text-xs">{set.set_number}</span>
                       <Input type="number" value={formatNumericInput(set.actual_watts)} onChange={(e) => updateSet(exerciseIndex, setIndex, 'actual_watts', e.target.value === '' ? undefined : Number(e.target.value))} disabled={set.completed} placeholder="Watts" />
                       <Input type="number" value={formatNumericInput(set.actual_reps)} onChange={(e) => updateSet(exerciseIndex, setIndex, 'actual_reps', e.target.value === '' ? undefined : Number(e.target.value))} disabled={set.completed} placeholder="Minutes" />
-                      <button type="button" onClick={() => toggleSet(exerciseIndex, setIndex)}>{set.completed ? <CheckCircle className="h-5 w-5 text-emerald-400" /> : <Circle className="h-5 w-5 text-muted-foreground" />}</button>
-                      <Button type="button" variant="ghost" size="icon-sm" onClick={() => removeSetFromExercise(exerciseIndex, setIndex)} disabled={exercise.sets.length <= 1}><X className="h-3.5 w-3.5" /></Button>
+                      <button type="button" className="justify-self-end sm:justify-self-auto" onClick={() => toggleSet(exerciseIndex, setIndex)}>{set.completed ? <CheckCircle className="h-5 w-5 text-emerald-400" /> : <Circle className="h-5 w-5 text-muted-foreground" />}</button>
+                      <Button type="button" variant="ghost" size="icon-sm" className="justify-self-end sm:justify-self-auto" onClick={() => removeSetFromExercise(exerciseIndex, setIndex)} disabled={exercise.sets.length <= 1}><X className="h-3.5 w-3.5" /></Button>
                     </div>
                   ) : inputMode === 'level_cardio' || inputMode === 'basic_cardio' ? (
-                    <div key={`${exercise.exercise.id}-${setIndex}`} className={`grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto_auto] gap-2 items-center rounded-xl border px-3 py-2 ${set.completed ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-border/50 bg-muted/10'}`}>
+                    <div key={`${exercise.exercise.id}-${setIndex}`} className={`grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)] gap-2 rounded-xl border px-3 py-2 sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto_auto] sm:items-center ${set.completed ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-border/50 bg-muted/10'}`}>
                       <span className="font-data text-xs">{set.set_number}</span>
                       <Input type="number" value={formatNumericInput(set.actual_machine_level)} onChange={(e) => updateSet(exerciseIndex, setIndex, 'actual_machine_level', e.target.value === '' ? undefined : Number(e.target.value))} disabled={set.completed} placeholder="Level" />
                       <Input type="number" value={formatNumericInput(set.actual_reps)} onChange={(e) => updateSet(exerciseIndex, setIndex, 'actual_reps', e.target.value === '' ? undefined : Number(e.target.value))} disabled={set.completed} placeholder="Minutes" />
-                      <button type="button" onClick={() => toggleSet(exerciseIndex, setIndex)}>{set.completed ? <CheckCircle className="h-5 w-5 text-emerald-400" /> : <Circle className="h-5 w-5 text-muted-foreground" />}</button>
-                      <Button type="button" variant="ghost" size="icon-sm" onClick={() => removeSetFromExercise(exerciseIndex, setIndex)} disabled={exercise.sets.length <= 1}><X className="h-3.5 w-3.5" /></Button>
+                      <button type="button" className="justify-self-end sm:justify-self-auto" onClick={() => toggleSet(exerciseIndex, setIndex)}>{set.completed ? <CheckCircle className="h-5 w-5 text-emerald-400" /> : <Circle className="h-5 w-5 text-muted-foreground" />}</button>
+                      <Button type="button" variant="ghost" size="icon-sm" className="justify-self-end sm:justify-self-auto" onClick={() => removeSetFromExercise(exerciseIndex, setIndex)} disabled={exercise.sets.length <= 1}><X className="h-3.5 w-3.5" /></Button>
                     </div>
                   ) : (
-                    <div key={`${exercise.exercise.id}-${setIndex}`} className={`grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto_auto] gap-2 items-center rounded-xl border px-3 py-2 ${set.completed ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-border/50 bg-muted/10'}`}>
+                    <div key={`${exercise.exercise.id}-${setIndex}`} className={`grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)] gap-2 rounded-xl border px-3 py-2 sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto_auto] sm:items-center ${set.completed ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-border/50 bg-muted/10'}`}>
                       <span className="font-data text-xs">{set.set_number}</span>
                       <Input
                         type="number"
@@ -2093,10 +2093,10 @@ function ActiveWorkoutModal({
                           disabled={set.completed}
                           placeholder={getSetMetricPlaceholder(exercise.exercise)}
                         />
-                      <button type="button" onClick={() => toggleSet(exerciseIndex, setIndex)}>
+                      <button type="button" className="justify-self-end sm:justify-self-auto" onClick={() => toggleSet(exerciseIndex, setIndex)}>
                         {set.completed ? <CheckCircle className="h-5 w-5 text-emerald-400" /> : <Circle className="h-5 w-5 text-muted-foreground" />}
                       </button>
-                      <Button type="button" variant="ghost" size="icon-sm" onClick={() => removeSetFromExercise(exerciseIndex, setIndex)} disabled={exercise.sets.length <= 1}>
+                      <Button type="button" variant="ghost" size="icon-sm" className="justify-self-end sm:justify-self-auto" onClick={() => removeSetFromExercise(exerciseIndex, setIndex)} disabled={exercise.sets.length <= 1}>
                         <X className="h-3.5 w-3.5" />
                       </Button>
                     </div>
@@ -2112,11 +2112,11 @@ function ActiveWorkoutModal({
           })}
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" className="flex-1 min-w-[80px]" onClick={onPause}>Pause</Button>
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+          <Button variant="outline" className="w-full sm:min-w-[80px] sm:flex-1" onClick={onPause}>Pause</Button>
           <Button
             variant="outline"
-            className="flex-1 gap-2"
+            className="w-full gap-2 sm:flex-1"
             onClick={() => handleCompleteWorkout({ saveAsTemplate: true })}
             disabled={isCompleting}
           >
@@ -2124,7 +2124,7 @@ function ActiveWorkoutModal({
           </Button>
           <Button
             variant="brand"
-            className="flex-1 gap-2"
+            className="w-full gap-2 sm:flex-1"
             onClick={() => handleCompleteWorkout()}
             disabled={isCompleting}
           >
