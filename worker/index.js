@@ -5,13 +5,13 @@ self.addEventListener('push', (event) => {
     payload = event.data ? event.data.json() : {}
   } catch {
     payload = {
-      title: 'Rivlo',
+      title: 'Rivora',
       body: event.data ? event.data.text() : 'You have a new notification.',
       actionUrl: '/dashboard',
     }
   }
 
-  const title = payload.title || 'Rivlo'
+  const title = payload.title || 'Rivora'
   const options = {
     body: payload.body || 'You have a new notification.',
     icon: '/icon-192.png',
@@ -19,7 +19,7 @@ self.addEventListener('push', (event) => {
     data: {
       actionUrl: payload.actionUrl || '/dashboard',
     },
-    tag: payload.tag || 'rivlo-notification',
+    tag: payload.tag || 'rivora-notification',
     renotify: false,
   }
 

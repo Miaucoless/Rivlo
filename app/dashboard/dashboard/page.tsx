@@ -127,7 +127,7 @@ export default function DashboardPage() {
     if (typeof window === 'undefined') return
 
     const refreshPausedState = () => {
-      const rawSession = window.localStorage.getItem('rivlo-active-workout-session')
+      const rawSession = window.localStorage.getItem('rivora-active-workout-session')
       setHasPausedWorkout(Boolean(rawSession))
     }
 

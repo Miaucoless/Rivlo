@@ -1,4 +1,4 @@
-# Rivlo
+# Rivora
 
 **The all-in-one fitness and nutrition SaaS platform.**
 

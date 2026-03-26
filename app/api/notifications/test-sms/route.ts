@@ -29,7 +29,7 @@ export async function POST(request: Request) {
 
     await sendSmsMessage({
       to: profile.phone_number,
-      body: 'Rivlo test message: SMS reminders are set up and ready to send.',
+      body: 'Rivora test message: SMS reminders are set up and ready to send.',
     })
 
     return NextResponse.json({ success: true })

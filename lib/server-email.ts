@@ -7,7 +7,7 @@ type SendEmailArgs = {
 
 function getEmailConfig() {
   const apiKey = process.env.RESEND_API_KEY
-  const from = process.env.RESEND_FROM_EMAIL || 'Rivlo <notifications@rivlo.fit>'
+  const from = process.env.RESEND_FROM_EMAIL || 'Rivora <notifications@rivorafit.com>'
 
   if (!apiKey) {
     throw new Error('Missing RESEND_API_KEY. Add it to send email notifications.')

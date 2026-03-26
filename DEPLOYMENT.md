@@ -1,4 +1,4 @@
-# Vercel Deployment Guide for Rivlo Fitness App
+# Vercel Deployment Guide for Rivora Fitness App
 
 ## Prerequisites
 - GitHub repository with your code

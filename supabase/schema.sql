@@ -1,5 +1,5 @@
 -- ============================================================
--- Rivlo — Supabase Database Schema
+-- Rivora — Supabase Database Schema
 -- ============================================================
 -- Run this in your Supabase SQL editor to set up all tables.
 

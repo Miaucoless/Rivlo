@@ -8,7 +8,7 @@ import { sendSmsMessage } from '@/lib/server-sms'
 
 export const runtime = 'nodejs'
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'https://rivlo.fit'
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'https://rivorafit.com'
 
 const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
   daily_workout_reminder: true,
@@ -195,8 +195,8 @@ export async function POST(request: Request) {
           await sendEmailMessage({
             to: profile.email,
             subject: reminder.title,
-            text: `${reminder.body}\n\nOpen Rivlo: ${reminder.actionUrl}`,
-            html: `<p>${reminder.body}</p><p><a href="${APP_URL}${reminder.actionUrl}">Open Rivlo</a></p>`,
+            text: `${reminder.body}\n\nOpen Rivora: ${reminder.actionUrl}`,
+            html: `<p>${reminder.body}</p><p><a href="${APP_URL}${reminder.actionUrl}">Open Rivora</a></p>`,
           })
           emailSent += 1
         } catch {

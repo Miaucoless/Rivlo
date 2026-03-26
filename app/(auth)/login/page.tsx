@@ -264,7 +264,7 @@ export default function LoginPage() {
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <Link href="/" className="text-[1.55rem] font-black tracking-tight text-emerald-300 transition-colors hover:text-emerald-200 lg:hidden">
-                    Rivlo
+                    Rivora
                   </Link>
                   <p className="hidden text-[11px] font-semibold uppercase tracking-[0.26em] text-zinc-500 lg:block">
                     Sign in
@@ -389,7 +389,7 @@ export default function LoginPage() {
 
                 <div>
                   <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-emerald-200/80">
-                    Rivlo
+                    Rivora
                   </p>
                   <h1 className="mt-3 max-w-sm text-[clamp(1.9rem,2.4vw,2.9rem)] font-black leading-[1] tracking-tight text-white">
                     A calmer way back into your routine.

@@ -25,7 +25,7 @@ export async function POST(request: Request) {
     await Promise.all(
       subscriptions.map((subscription) =>
         sendPushMessage(subscription as StoredPushSubscription, {
-          title: 'Rivlo notifications are live',
+          title: 'Rivora notifications are live',
           body: 'This is a test notification from your settings page.',
           actionUrl: '/dashboard/settings',
           tag: `test-${Date.now()}`,

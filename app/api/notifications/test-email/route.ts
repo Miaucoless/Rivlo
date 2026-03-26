@@ -29,9 +29,9 @@ export async function POST(request: Request) {
 
     await sendEmailMessage({
       to: profile.email,
-      subject: 'Rivlo test email',
-      text: 'Rivlo test message: email reminders are set up and ready to send.',
-      html: '<p><strong>Rivlo test message:</strong> email reminders are set up and ready to send.</p>',
+      subject: 'Rivora test email',
+      text: 'Rivora test message: email reminders are set up and ready to send.',
+      html: '<p><strong>Rivora test message:</strong> email reminders are set up and ready to send.</p>',
     })
 
     return NextResponse.json({ success: true })

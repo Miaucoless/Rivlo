@@ -100,7 +100,7 @@ export default function SignupPage() {
   ]
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] flex" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
+    <div className="min-h-[100vh] overflow-y-auto bg-[#0a0a0a] flex" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
       {/* Left panel — visual */}
       <div className="hidden lg:flex flex-1 bg-gradient-to-br from-teal-950/40 to-zinc-900 items-center justify-center p-12 border-r border-white/5 relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-mesh opacity-40" />
@@ -142,7 +142,7 @@ export default function SignupPage() {
             <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center shadow-lg shadow-emerald-500/30">
               <Zap className="w-4 h-4 text-white" strokeWidth={2.5} />
             </div>
-            <span className="text-xl font-bold text-white">Rivlo</span>
+            <span className="text-xl font-bold text-white">Rivora</span>
           </div>
 
           {/* Heading */}

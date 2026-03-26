@@ -109,7 +109,7 @@ The stat card rendered in the third column of the top row.
 **Celebration (100% reached):**
 - Framer Motion wave burst: `scaleX` 1→1.4, opacity 1→0 on the wave element
 - `toast.success("Hydration goal reached! 🎉")`
-- Fires at most once per calendar day, persisting across navigation. Implemented by reading/writing a `rivlo-water-celebrated` key in `localStorage` that stores the ISO date of the last celebration. A `useEffect` watching `todayTotal` triggers the animation only when `todayTotal >= water_goal_ml` and `localStorage.getItem('rivlo-water-celebrated') !== getTodayISO()`, then writes `getTodayISO()` to that key. This survives component unmount/remount and resets naturally the following day.
+- Fires at most once per calendar day, persisting across navigation. Implemented by reading/writing a `rivora-water-celebrated` key in `localStorage` that stores the ISO date of the last celebration. A `useEffect` watching `todayTotal` triggers the animation only when `todayTotal >= water_goal_ml` and `localStorage.getItem('rivora-water-celebrated') !== getTodayISO()`, then writes `getTodayISO()` to that key. This survives component unmount/remount and resets naturally the following day.
 
 ### `components/dashboard/WaterLogModal.tsx`
 

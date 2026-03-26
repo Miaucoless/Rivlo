@@ -7,7 +7,7 @@ This app now uses Supabase for real authentication. Follow these steps to get it
 1. Go to https://app.supabase.com
 2. Sign up or log in
 3. Click "New Project"
-4. Fill in the project name (e.g., "rivlo")
+4. Fill in the project name (e.g., "rivora")
 5. Create a strong database password
 6. Select your region (closest to you)
 7. Click "Create new project" and wait 2-3 minutes

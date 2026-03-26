@@ -15,6 +15,7 @@ function ResetPasswordPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const code = searchParams.get('code')
+  const tokenHash = searchParams.get('token_hash')
   const type = searchParams.get('type')
 
   const [email, setEmail] = useState('')
@@ -26,7 +27,7 @@ function ResetPasswordPageContent() {
   const [recoveryReady, setRecoveryReady] = useState(false)
   const [recoveryChecked, setRecoveryChecked] = useState(false)
 
-  const isRecoveryMode = useMemo(() => Boolean(code) || type === 'recovery', [code, type])
+  const isRecoveryMode = useMemo(() => Boolean(code || tokenHash) || type === 'recovery', [code, tokenHash, type])
 
   useEffect(() => {
     document.documentElement.style.overflowY = 'auto'
@@ -47,7 +48,11 @@ function ResetPasswordPageContent() {
         return
       }
 
-      const response = await finalizePasswordRecoverySession(code)
+      const response = await finalizePasswordRecoverySession({
+        code,
+        tokenHash,
+        type,
+      })
       if (cancelled) return
 
       if (!response.success) {
@@ -63,7 +68,7 @@ function ResetPasswordPageContent() {
     return () => {
       cancelled = true
     }
-  }, [code, isRecoveryMode])
+  }, [code, isRecoveryMode, tokenHash, type])
 
   const handleRequestReset = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -145,7 +150,7 @@ function ResetPasswordPageContent() {
                 </h1>
                 <p className="mt-2 text-sm leading-6 text-zinc-400">
                   {isRecoveryMode
-                    ? 'Choose a new password for your Rivlo account.'
+                    ? 'Choose a new password for your Rivora account.'
                     : 'Enter your email and we will send you a password reset link.'}
                 </p>
               </div>

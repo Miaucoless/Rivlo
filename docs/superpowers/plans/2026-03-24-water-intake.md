@@ -427,9 +427,9 @@ export function WaterIntakeCard() {
   // Celebration effect — must be before any early return (Rules of Hooks)
   useEffect(() => {
     if (!user || todayTotal < waterGoal || waterGoal <= 0) return
-    const celebratedDate = localStorage.getItem('rivlo-water-celebrated')
+    const celebratedDate = localStorage.getItem('rivora-water-celebrated')
     if (celebratedDate !== today) {
-      localStorage.setItem('rivlo-water-celebrated', today)
+      localStorage.setItem('rivora-water-celebrated', today)
       toast.success('Hydration goal reached! 🎉')
     }
   }, [todayTotal, waterGoal, today, user])

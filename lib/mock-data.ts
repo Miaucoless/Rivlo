@@ -19,7 +19,7 @@ import { format, subDays, subWeeks } from 'date-fns'
 
 export const DEMO_USER: UserProfile = {
   id: 'demo-user-001',
-  email: 'alex@rivlo.fit',
+  email: 'alex@rivorafit.com',
   name: 'Alex Morgan',
   height_cm: 178,
   weight_kg: 82,

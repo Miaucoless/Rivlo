@@ -716,7 +716,7 @@ export const useAppStore = create<AppStore>()(
         // Local fallback (per-origin) so goal doesn't "feel" lost if cloud update fails.
         if (typeof window !== 'undefined' && updates.water_goal_ml != null) {
           try {
-            window.localStorage.setItem(`rivlo-water-goal-ml:${state.user.id}`, String(updates.water_goal_ml))
+            window.localStorage.setItem(`rivora-water-goal-ml:${state.user.id}`, String(updates.water_goal_ml))
           } catch {
             // ignore
           }
@@ -1537,7 +1537,7 @@ export const useAppStore = create<AppStore>()(
       },
     }),
     {
-      name: 'rivlo-store',
+      name: 'rivora-store',
       version: 2, // bumped: PlannedSlot is now PlannedItem[] (array) instead of single item | null
       migrate: () => ({}), // clear stale state on version mismatch
       partialize: (state) => ({

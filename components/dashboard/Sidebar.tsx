@@ -72,7 +72,7 @@ export function Sidebar() {
                 transition={{ duration: 0.2 }}
                 className="text-lg font-bold overflow-hidden whitespace-nowrap"
               >
-                Rivlo
+                Rivora
               </motion.span>
             )}
           </AnimatePresence>

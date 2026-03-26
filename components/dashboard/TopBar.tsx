@@ -380,7 +380,7 @@ export function TopBar() {
                 <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center shadow-md shadow-emerald-500/20">
                   <Zap className="w-4 h-4 text-white" strokeWidth={2.5} />
                 </div>
-                <span className="text-lg font-bold">Rivlo</span>
+                <span className="text-lg font-bold">Rivora</span>
               </div>
               <button
                 onClick={handleMobileNavClose}

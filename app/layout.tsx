@@ -6,31 +6,31 @@ import { Toaster } from 'sonner'
 
 export const metadata: Metadata = {
   title: {
-    default: 'Rivlo — Optimize Your Body. Automate Your Fitness.',
-    template: '%s | Rivlo',
+    default: 'Rivora — Optimize Your Body. Automate Your Fitness.',
+    template: '%s | Rivora',
   },
   description:
     'The all-in-one fitness and nutrition platform. Track calories, plan meals, log workouts, and hit your goals with personalized automation.',
   keywords: ['fitness', 'nutrition', 'workout tracker', 'meal planner', 'calorie counter'],
-  authors: [{ name: 'Rivlo' }],
-  creator: 'Rivlo',
+  authors: [{ name: 'Rivora' }],
+  creator: 'Rivora',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
-    title: 'Rivlo',
+    title: 'Rivora',
   },
   openGraph: {
     type: 'website',
     locale: 'en_US',
-    url: 'https://rivlo.fit',
-    title: 'Rivlo — Optimize Your Body. Automate Your Fitness.',
+    url: 'https://rivorafit.com',
+    title: 'Rivora — Optimize Your Body. Automate Your Fitness.',
     description: 'The all-in-one fitness and nutrition platform.',
-    siteName: 'Rivlo',
+    siteName: 'Rivora',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Rivlo',
+    title: 'Rivora',
     description: 'Optimize Your Body. Automate Your Fitness.',
   },
 }

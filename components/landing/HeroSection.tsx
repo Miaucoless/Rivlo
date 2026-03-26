@@ -30,7 +30,7 @@ function DashboardPreview() {
           </div>
           <div className="flex-1 mx-3">
             <div className="bg-zinc-800 rounded-md px-3 py-1 text-xs text-zinc-500 text-center">
-              rivlo.fit/dashboard
+              rivorafit.com/dashboard
             </div>
           </div>
         </div>

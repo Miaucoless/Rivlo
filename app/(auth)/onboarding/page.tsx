@@ -458,7 +458,7 @@ export default function OnboardingPage() {
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center">
             <Zap className="w-4 h-4 text-white" strokeWidth={2.5} />
           </div>
-          <span className="text-lg font-bold text-white">Rivlo</span>
+          <span className="text-lg font-bold text-white">Rivora</span>
         </div>
 
         {/* Progress bar */}

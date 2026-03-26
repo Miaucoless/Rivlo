@@ -57,7 +57,7 @@ interface PersistedActiveWorkoutSession {
   startedAt: string
 }
 
-const ACTIVE_WORKOUT_SESSION_KEY = 'rivlo-active-workout-session'
+const ACTIVE_WORKOUT_SESSION_KEY = 'rivora-active-workout-session'
 
 interface MetProfile {
   weightKg: number

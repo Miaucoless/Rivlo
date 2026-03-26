@@ -13,7 +13,7 @@ let configured = false
 function ensureWebPushConfigured() {
   const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
   const privateKey = process.env.VAPID_PRIVATE_KEY
-  const subject = process.env.VAPID_SUBJECT || 'mailto:notifications@rivlo.fit'
+  const subject = process.env.VAPID_SUBJECT || 'mailto:notifications@rivorafit.com'
 
   if (!publicKey || !privateKey) {
     throw new Error('Missing VAPID keys. Add NEXT_PUBLIC_VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY.')

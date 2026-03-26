@@ -219,7 +219,7 @@ export default function SettingsPage() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `rivlo-export-${new Date().toISOString().slice(0, 10)}.json`
+    a.download = `rivora-export-${new Date().toISOString().slice(0, 10)}.json`
     a.click()
     toast.success('Data exported as JSON!')
   }
@@ -805,7 +805,7 @@ export default function SettingsPage() {
                   <div>
                     <p className="text-sm font-medium">Text me reminders</p>
                     <p className="text-xs text-muted-foreground">
-                      By enabling this, you are opting in to receive transactional fitness reminder texts from Rivlo.
+                      By enabling this, you are opting in to receive transactional fitness reminder texts from Rivora.
                     </p>
                   </div>
                   <div className={`h-5 w-10 rounded-full transition-colors ${smsEnabled ? 'bg-emerald-500' : 'bg-muted'}`}>
