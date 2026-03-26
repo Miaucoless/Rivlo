@@ -101,6 +101,79 @@ export async function signInWithEmail(
   }
 }
 
+export async function requestPasswordReset(email: string): Promise<AuthResponse> {
+  try {
+    const supabase = createClient()
+    const origin = typeof window !== 'undefined' ? window.location.origin : ''
+    const redirectTo = origin ? `${origin}/reset-password` : undefined
+
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo,
+    })
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: String(error) }
+  }
+}
+
+export async function finalizePasswordRecoverySession(code?: string | null): Promise<AuthResponse> {
+  try {
+    const supabase = createClient()
+
+    if (code) {
+      const { error } = await supabase.auth.exchangeCodeForSession(code)
+      if (error) {
+        return { success: false, error: error.message }
+      }
+      return { success: true }
+    }
+
+    if (typeof window !== 'undefined' && window.location.hash) {
+      const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+      const accessToken = hashParams.get('access_token')
+      const refreshToken = hashParams.get('refresh_token')
+      const type = hashParams.get('type')
+
+      if (accessToken && refreshToken && type === 'recovery') {
+        const { error } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        })
+
+        if (error) {
+          return { success: false, error: error.message }
+        }
+
+        window.history.replaceState({}, document.title, window.location.pathname)
+      }
+    }
+
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: String(error) }
+  }
+}
+
+export async function updatePassword(password: string): Promise<AuthResponse> {
+  try {
+    const supabase = createClient()
+    const { error } = await supabase.auth.updateUser({ password })
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: String(error) }
+  }
+}
+
 export async function signOut(): Promise<AuthResponse> {
   try {
     const supabase = createClient()

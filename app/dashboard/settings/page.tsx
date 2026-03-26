@@ -18,8 +18,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useAppStore } from '@/store/useAppStore'
 import { deleteAccount as deleteSupabaseAccount, updateProfile as persistProfile } from '@/lib/auth'
+import { sendTestEmailNotification } from '@/lib/email-notifications'
 import { getPushNotificationStatus, sendTestPushNotification, subscribeToPushNotifications, unsubscribeFromPushNotifications } from '@/lib/push-notifications'
-import { buildUserProfile, formatGoalWeightChangeForInput, formatHeightForInput, formatWeightForInput, getHeightUnitLabel, getWeightUnitLabel, parseHeightInput, parseWeightInput } from '@/lib/utils'
+import { sendTestSmsNotification } from '@/lib/sms-notifications'
+import { buildUserProfile, formatGoalWeightChangeForInput, formatHeightForInput, formatWeightForInput, getHeightUnitLabel, getWeightUnitLabel, normalizePhoneNumber, parseHeightInput, parseWeightInput } from '@/lib/utils'
 import type { ActivityLevel, FitnessGoal, NotificationPreferenceKey, PreferredWorkoutTime, UnitSystem, WorkoutSplit } from '@/types'
 import { useTheme } from 'next-themes'
 import { toast } from 'sonner'
@@ -66,6 +68,11 @@ export default function SettingsPage() {
   const [pushPermission, setPushPermission] = useState<'default' | 'denied' | 'granted' | 'unsupported'>('default')
   const [pushEnabled, setPushEnabled] = useState(false)
   const [pushLoading, setPushLoading] = useState(false)
+  const [emailEnabled, setEmailEnabled] = useState(Boolean(user?.email_notifications_enabled))
+  const [emailLoading, setEmailLoading] = useState(false)
+  const [smsPhone, setSmsPhone] = useState(user?.phone_number || '')
+  const [smsEnabled, setSmsEnabled] = useState(Boolean(user?.sms_notifications_enabled))
+  const [smsLoading, setSmsLoading] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -334,6 +341,78 @@ export default function SettingsPage() {
       toast.error(error instanceof Error ? error.message : 'Failed to send a test notification.')
     } finally {
       setPushLoading(false)
+    }
+  }
+
+  const handleSaveSmsSettings = async () => {
+    const normalizedPhone = smsPhone.trim() ? normalizePhoneNumber(smsPhone) : null
+
+    if (smsEnabled && !normalizedPhone) {
+      toast.error('Enter a valid phone number in international format, like +15551234567.')
+      return
+    }
+
+    setSmsLoading(true)
+
+    try {
+      const nextConsentAt = smsEnabled
+        ? (user?.sms_notifications_consent_at || new Date().toISOString())
+        : user?.sms_notifications_consent_at
+
+      const saved = await saveUserProfile({
+        phone_number: normalizedPhone || null,
+        sms_notifications_enabled: smsEnabled,
+        sms_notifications_consent_at: nextConsentAt,
+      }, smsEnabled ? 'SMS reminders updated!' : 'SMS reminders turned off.')
+
+      if (saved) {
+        setSmsPhone(normalizedPhone || '')
+      }
+    } finally {
+      setSmsLoading(false)
+    }
+  }
+
+  const handleSaveEmailSettings = async () => {
+    setEmailLoading(true)
+
+    try {
+      const nextConsentAt = emailEnabled
+        ? (user?.email_notifications_consent_at || new Date().toISOString())
+        : user?.email_notifications_consent_at
+
+      await saveUserProfile({
+        email_notifications_enabled: emailEnabled,
+        email_notifications_consent_at: nextConsentAt,
+      }, emailEnabled ? 'Email reminders updated!' : 'Email reminders turned off.')
+    } finally {
+      setEmailLoading(false)
+    }
+  }
+
+  const handleSendTestEmail = async () => {
+    setEmailLoading(true)
+
+    try {
+      await sendTestEmailNotification()
+      toast.success('Test email sent.')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to send a test email.')
+    } finally {
+      setEmailLoading(false)
+    }
+  }
+
+  const handleSendTestSms = async () => {
+    setSmsLoading(true)
+
+    try {
+      await sendTestSmsNotification()
+      toast.success('Test SMS sent.')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to send a test SMS.')
+    } finally {
+      setSmsLoading(false)
     }
   }
 
@@ -642,9 +721,108 @@ export default function SettingsPage() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Notifications</CardTitle>
-              <CardDescription>Configure your reminder preferences and browser push delivery</CardDescription>
+              <CardDescription>Configure your reminder preferences and how they get delivered</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
+              <div className="rounded-xl border border-border/60 bg-muted/30 p-4 space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium">Email reminders</p>
+                    <p className="text-xs text-muted-foreground">
+                      Send the same reminder flow to your account email address.
+                    </p>
+                  </div>
+                  <Badge variant={emailEnabled ? 'success' : 'outline'}>
+                    {emailEnabled ? 'Enabled' : 'Off'}
+                  </Badge>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label>Email address</Label>
+                  <Input value={user.email} disabled />
+                </div>
+
+                <button
+                  type="button"
+                  aria-pressed={emailEnabled}
+                  onClick={() => setEmailEnabled((value) => !value)}
+                  className={`flex w-full items-center justify-between rounded-xl border px-3 py-3 text-left transition-colors ${
+                    emailEnabled ? 'border-emerald-500/40 bg-emerald-500/10' : 'border-border/60 bg-background'
+                  }`}
+                >
+                  <div>
+                    <p className="text-sm font-medium">Email me reminders</p>
+                    <p className="text-xs text-muted-foreground">
+                      Receive transactional fitness reminders and weekly updates by email.
+                    </p>
+                  </div>
+                  <div className={`h-5 w-10 rounded-full transition-colors ${emailEnabled ? 'bg-emerald-500' : 'bg-muted'}`}>
+                    <div className={`mt-0.5 h-4 w-4 rounded-full bg-white transition-transform ${emailEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                  </div>
+                </button>
+
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="brand" size="sm" onClick={handleSaveEmailSettings} disabled={emailLoading}>
+                    Save Email
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={handleSendTestEmail} disabled={emailLoading || !emailEnabled}>
+                    Send Test Email
+                  </Button>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-border/60 bg-muted/30 p-4 space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium">SMS reminders</p>
+                    <p className="text-xs text-muted-foreground">
+                      Send due reminders by text message. Use international format like +15551234567.
+                    </p>
+                  </div>
+                  <Badge variant={smsEnabled ? 'success' : 'outline'}>
+                    {smsEnabled ? 'Enabled' : 'Off'}
+                  </Badge>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="sms-phone">Phone number</Label>
+                  <Input
+                    id="sms-phone"
+                    value={smsPhone}
+                    onChange={(event) => setSmsPhone(event.target.value)}
+                    placeholder="+15551234567"
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  aria-pressed={smsEnabled}
+                  onClick={() => setSmsEnabled((value) => !value)}
+                  className={`flex w-full items-center justify-between rounded-xl border px-3 py-3 text-left transition-colors ${
+                    smsEnabled ? 'border-emerald-500/40 bg-emerald-500/10' : 'border-border/60 bg-background'
+                  }`}
+                >
+                  <div>
+                    <p className="text-sm font-medium">Text me reminders</p>
+                    <p className="text-xs text-muted-foreground">
+                      By enabling this, you are opting in to receive transactional fitness reminder texts from Rivlo.
+                    </p>
+                  </div>
+                  <div className={`h-5 w-10 rounded-full transition-colors ${smsEnabled ? 'bg-emerald-500' : 'bg-muted'}`}>
+                    <div className={`mt-0.5 h-4 w-4 rounded-full bg-white transition-transform ${smsEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                  </div>
+                </button>
+
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="brand" size="sm" onClick={handleSaveSmsSettings} disabled={smsLoading}>
+                    Save SMS
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={handleSendTestSms} disabled={smsLoading || !smsEnabled || !smsPhone.trim()}>
+                    Send Test SMS
+                  </Button>
+                </div>
+              </div>
+
               <div className="rounded-xl border border-border/60 bg-muted/30 p-4 space-y-3">
                 <div className="flex items-start justify-between gap-3">
                   <div>

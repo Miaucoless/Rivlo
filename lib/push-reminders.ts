@@ -7,6 +7,7 @@ export type ReminderCandidate = {
   title: string
   body: string
   actionUrl: string
+  smsBody?: string
 }
 
 export type ReminderContext = {
@@ -47,6 +48,7 @@ export function buildReminderCandidates(context: ReminderContext): ReminderCandi
       title: `Workout reminder for ${context.firstName}`,
       body: `You have not logged a workout yet today. Your ${workoutWindow} window is still open.`,
       actionUrl: '/dashboard/workouts',
+      smsBody: `Rivlo: You have not logged a workout yet today. Your ${workoutWindow} window is still open.`,
     })
   }
 
@@ -57,6 +59,7 @@ export function buildReminderCandidates(context: ReminderContext): ReminderCandi
       title: 'Meal log is still empty today',
       body: 'Add your meals to keep calories and macros accurate for the day.',
       actionUrl: '/dashboard/meals',
+      smsBody: 'Rivlo: Add your meals to keep calories and macros accurate for the day.',
     })
   }
 
@@ -72,6 +75,7 @@ export function buildReminderCandidates(context: ReminderContext): ReminderCandi
       title: 'Supplement reminder',
       body,
       actionUrl: '/dashboard/supplements',
+      smsBody: `Rivlo: ${body}`,
     })
   }
 
@@ -82,6 +86,7 @@ export function buildReminderCandidates(context: ReminderContext): ReminderCandi
       title: 'Weekly progress snapshot',
       body: `${context.workoutsThisWeek} workouts logged this week and meals tracked on ${context.mealDaysThisWeek} day${context.mealDaysThisWeek === 1 ? '' : 's'}.`,
       actionUrl: '/dashboard/tracking',
+      smsBody: `Rivlo weekly snapshot: ${context.workoutsThisWeek} workouts logged and meals tracked on ${context.mealDaysThisWeek} day${context.mealDaysThisWeek === 1 ? '' : 's'}.`,
     })
   }
 
@@ -98,6 +103,7 @@ export function buildReminderCandidates(context: ReminderContext): ReminderCandi
       title: 'Goal milestone is getting close',
       body: `Based on your logged weigh-ins, you are about ${Math.round((context.achievedChangeKg / context.goalTargetChangeKg) * 100)}% of the way to your target change.`,
       actionUrl: '/dashboard/tracking',
+      smsBody: `Rivlo: You are about ${Math.round((context.achievedChangeKg / context.goalTargetChangeKg) * 100)}% of the way to your target change.`,
     })
   }
 

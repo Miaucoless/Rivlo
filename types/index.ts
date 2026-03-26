@@ -28,6 +28,11 @@ export interface UserProfile {
   preferred_foods?: string[]
   avoided_foods?: string[]
   notification_preferences?: NotificationPreferences
+  phone_number?: string
+  email_notifications_enabled?: boolean
+  email_notifications_consent_at?: string
+  sms_notifications_enabled?: boolean
+  sms_notifications_consent_at?: string
   bmr: number
   tdee: number
   calorie_target: number

@@ -30,6 +30,11 @@ CREATE TABLE IF NOT EXISTS profiles (
   preferred_foods TEXT[] DEFAULT '{}',
   avoided_foods TEXT[] DEFAULT '{}',
   notification_preferences JSONB NOT NULL DEFAULT '{"daily_workout_reminder": true, "meal_logging_reminder": true, "weekly_progress_summary": false, "goal_milestone_alerts": true}'::jsonb,
+  phone_number   TEXT,
+  email_notifications_enabled BOOLEAN NOT NULL DEFAULT false,
+  email_notifications_consent_at TIMESTAMPTZ,
+  sms_notifications_enabled BOOLEAN NOT NULL DEFAULT false,
+  sms_notifications_consent_at TIMESTAMPTZ,
   bmr           INTEGER,
   tdee          INTEGER,
   calorie_target INTEGER NOT NULL DEFAULT 2000,
@@ -54,6 +59,11 @@ ALTER TABLE profiles
   ADD COLUMN IF NOT EXISTS preferred_foods TEXT[] DEFAULT '{}',
   ADD COLUMN IF NOT EXISTS avoided_foods TEXT[] DEFAULT '{}',
   ADD COLUMN IF NOT EXISTS notification_preferences JSONB NOT NULL DEFAULT '{"daily_workout_reminder": true, "meal_logging_reminder": true, "weekly_progress_summary": false, "goal_milestone_alerts": true}'::jsonb,
+  ADD COLUMN IF NOT EXISTS phone_number TEXT,
+  ADD COLUMN IF NOT EXISTS email_notifications_enabled BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS email_notifications_consent_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS sms_notifications_enabled BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS sms_notifications_consent_at TIMESTAMPTZ,
   ADD COLUMN IF NOT EXISTS water_goal_ml INTEGER;
 
 -- ─── Meals / Nutrition ──────────────────────────────────────────────────────────

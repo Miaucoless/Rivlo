@@ -231,6 +231,16 @@ export function formatGoalWeightChangeForInput(goalChangeKg: number | undefined,
   return unitSystem === 'metric' ? goalChangeKg.toFixed(1) : Math.round(kgToLbs(goalChangeKg)).toString()
 }
 
+export function normalizePhoneNumber(input: string): string | null {
+  const cleaned = input.trim().replace(/[^\d+]/g, '')
+  if (!cleaned) return null
+
+  const normalized = cleaned.startsWith('+') ? cleaned : `+${cleaned}`
+  if (!/^\+[1-9]\d{7,14}$/.test(normalized)) return null
+
+  return normalized
+}
+
 export function parseHeightInput(input: string, unitSystem: UnitSystem): number | null {
   const value = input.trim().toLowerCase()
   if (!value) return null

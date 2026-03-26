@@ -350,6 +350,15 @@ export default function LoginPage() {
                     Explore demo
                   </button>
                 </div>
+
+                <div className="pt-1">
+                  <Link
+                    href="/reset-password"
+                    className="text-sm font-medium text-emerald-300 transition-colors hover:text-emerald-200"
+                  >
+                    Forgot your password?
+                  </Link>
+                </div>
               </form>
 
               <div className="mt-5 border-t border-white/8 pt-4 text-sm">

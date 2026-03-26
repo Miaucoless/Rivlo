@@ -3,8 +3,12 @@ import type { NotificationPreferences, SupplementEntry } from '@/types'
 import { createAdminClient } from '@/lib/server-supabase'
 import { buildReminderCandidates, getReminderDates } from '@/lib/push-reminders'
 import { sendPushMessage, type StoredPushSubscription } from '@/lib/server-push'
+import { sendEmailMessage } from '@/lib/server-email'
+import { sendSmsMessage } from '@/lib/server-sms'
 
 export const runtime = 'nodejs'
+
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'https://rivlo.fit'
 
 const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
   daily_workout_reminder: true,
@@ -56,20 +60,44 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: subscriptionError.message }, { status: 500 })
   }
 
-  if (!subscriptions || subscriptions.length === 0) {
-    return NextResponse.json({ success: true, sent: 0, skipped: 0, users: 0 })
-  }
-
-  const subscriptionsByUser = subscriptions.reduce<Record<string, StoredPushSubscription[]>>((acc, row) => {
+  const subscriptionsByUser = (subscriptions ?? []).reduce<Record<string, StoredPushSubscription[]>>((acc, row) => {
     if (!acc[row.user_id]) acc[row.user_id] = []
     acc[row.user_id].push(row as StoredPushSubscription)
     return acc
   }, {})
 
-  const userIds = Object.keys(subscriptionsByUser)
+  const pushUserIds = Object.keys(subscriptionsByUser)
+  const { data: smsProfiles, error: smsProfileError } = await admin
+    .from('profiles')
+    .select('id')
+    .eq('sms_notifications_enabled', true)
+
+  if (smsProfileError) {
+    return NextResponse.json({ error: smsProfileError.message }, { status: 500 })
+  }
+
+  const { data: emailProfiles, error: emailProfileError } = await admin
+    .from('profiles')
+    .select('id')
+    .eq('email_notifications_enabled', true)
+
+  if (emailProfileError) {
+    return NextResponse.json({ error: emailProfileError.message }, { status: 500 })
+  }
+
+  const userIds = Array.from(new Set([
+    ...pushUserIds,
+    ...(smsProfiles ?? []).map((profile) => profile.id),
+    ...(emailProfiles ?? []).map((profile) => profile.id),
+  ]))
+
+  if (userIds.length === 0) {
+    return NextResponse.json({ success: true, sent: 0, smsSent: 0, emailSent: 0, skipped: 0, users: 0 })
+  }
+
   const { data: profiles, error: profileError } = await admin
     .from('profiles')
-    .select('id, name, preferred_workout_time, goal_target_change_kg, notification_preferences')
+    .select('id, email, name, preferred_workout_time, goal_target_change_kg, notification_preferences, phone_number, email_notifications_enabled, email_notifications_consent_at, sms_notifications_enabled, sms_notifications_consent_at')
     .in('id', userIds)
 
   if (profileError) {
@@ -77,6 +105,8 @@ export async function POST(request: Request) {
   }
 
   let sent = 0
+  let smsSent = 0
+  let emailSent = 0
   let skipped = 0
 
   for (const profile of profiles ?? []) {
@@ -147,12 +177,40 @@ export async function POST(request: Request) {
       )
 
       sent += results.filter((result) => result.ok).length
+
+      if (profile.sms_notifications_enabled && profile.sms_notifications_consent_at && profile.phone_number && reminder.smsBody) {
+        try {
+          await sendSmsMessage({
+            to: profile.phone_number,
+            body: reminder.smsBody,
+          })
+          smsSent += 1
+        } catch {
+          skipped += 1
+        }
+      }
+
+      if (profile.email_notifications_enabled && profile.email_notifications_consent_at && profile.email) {
+        try {
+          await sendEmailMessage({
+            to: profile.email,
+            subject: reminder.title,
+            text: `${reminder.body}\n\nOpen Rivlo: ${reminder.actionUrl}`,
+            html: `<p>${reminder.body}</p><p><a href="${APP_URL}${reminder.actionUrl}">Open Rivlo</a></p>`,
+          })
+          emailSent += 1
+        } catch {
+          skipped += 1
+        }
+      }
     }
   }
 
   return NextResponse.json({
     success: true,
     sent,
+    smsSent,
+    emailSent,
     skipped,
     users: userIds.length,
   })
