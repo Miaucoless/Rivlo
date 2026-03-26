@@ -2018,7 +2018,7 @@ function ActiveWorkoutModal({
                 )}
                 {exercise.sets.map((set, setIndex) => (
                   inputMode === 'treadmill' ? (
-                    <div key={`${exercise.exercise.id}-${setIndex}`} className={`grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)] gap-2 rounded-xl border px-3 py-2 sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto_auto] sm:items-center ${set.completed ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-border/50 bg-muted/10'}`}>
+                    <div key={`${exercise.exercise.id}-${setIndex}`} className={`grid grid-cols-[1.25rem_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_1.75rem_1.75rem] items-center gap-1.5 rounded-xl border px-3 py-2 sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto_auto] sm:gap-2 ${set.completed ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-border/50 bg-muted/10'}`}>
                       <span className="font-data text-xs">{set.set_number}</span>
                       <Input
                         type="number"
@@ -2049,7 +2049,7 @@ function ActiveWorkoutModal({
                       </Button>
                     </div>
                   ) : inputMode === 'run_walk' ? (
-                    <div key={`${exercise.exercise.id}-${setIndex}`} className={`grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)] gap-2 rounded-xl border px-3 py-2 sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto_auto] sm:items-center ${set.completed ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-border/50 bg-muted/10'}`}>
+                    <div key={`${exercise.exercise.id}-${setIndex}`} className={`grid grid-cols-[1.25rem_minmax(0,1fr)_minmax(0,1fr)_1.75rem_1.75rem] items-center gap-1.5 rounded-xl border px-3 py-2 sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto_auto] sm:gap-2 ${set.completed ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-border/50 bg-muted/10'}`}>
                       <span className="font-data text-xs">{set.set_number}</span>
                       <Input type="number" value={formatNumericInput(set.actual_speed_mph)} onChange={(e) => updateSet(exerciseIndex, setIndex, 'actual_speed_mph', e.target.value === '' ? undefined : Number(e.target.value))} disabled={set.completed} placeholder="Speed MPH" />
                       <Input type="number" value={formatNumericInput(set.actual_reps)} onChange={(e) => updateSet(exerciseIndex, setIndex, 'actual_reps', e.target.value === '' ? undefined : Number(e.target.value))} disabled={set.completed} placeholder="Minutes" />
@@ -2057,7 +2057,7 @@ function ActiveWorkoutModal({
                       <Button type="button" variant="ghost" size="icon-sm" className="justify-self-end sm:justify-self-auto" onClick={() => removeSetFromExercise(exerciseIndex, setIndex)} disabled={exercise.sets.length <= 1}><X className="h-3.5 w-3.5" /></Button>
                     </div>
                   ) : inputMode === 'bike' || inputMode === 'rower' ? (
-                    <div key={`${exercise.exercise.id}-${setIndex}`} className={`grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)] gap-2 rounded-xl border px-3 py-2 sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto_auto] sm:items-center ${set.completed ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-border/50 bg-muted/10'}`}>
+                    <div key={`${exercise.exercise.id}-${setIndex}`} className={`grid grid-cols-[1.25rem_minmax(0,1fr)_minmax(0,1fr)_1.75rem_1.75rem] items-center gap-1.5 rounded-xl border px-3 py-2 sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto_auto] sm:gap-2 ${set.completed ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-border/50 bg-muted/10'}`}>
                       <span className="font-data text-xs">{set.set_number}</span>
                       <Input type="number" value={formatNumericInput(set.actual_watts)} onChange={(e) => updateSet(exerciseIndex, setIndex, 'actual_watts', e.target.value === '' ? undefined : Number(e.target.value))} disabled={set.completed} placeholder="Watts" />
                       <Input type="number" value={formatNumericInput(set.actual_reps)} onChange={(e) => updateSet(exerciseIndex, setIndex, 'actual_reps', e.target.value === '' ? undefined : Number(e.target.value))} disabled={set.completed} placeholder="Minutes" />
@@ -2065,7 +2065,7 @@ function ActiveWorkoutModal({
                       <Button type="button" variant="ghost" size="icon-sm" className="justify-self-end sm:justify-self-auto" onClick={() => removeSetFromExercise(exerciseIndex, setIndex)} disabled={exercise.sets.length <= 1}><X className="h-3.5 w-3.5" /></Button>
                     </div>
                   ) : inputMode === 'level_cardio' || inputMode === 'basic_cardio' ? (
-                    <div key={`${exercise.exercise.id}-${setIndex}`} className={`grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)] gap-2 rounded-xl border px-3 py-2 sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto_auto] sm:items-center ${set.completed ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-border/50 bg-muted/10'}`}>
+                    <div key={`${exercise.exercise.id}-${setIndex}`} className={`grid grid-cols-[1.25rem_minmax(0,1fr)_minmax(0,1fr)_1.75rem_1.75rem] items-center gap-1.5 rounded-xl border px-3 py-2 sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto_auto] sm:gap-2 ${set.completed ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-border/50 bg-muted/10'}`}>
                       <span className="font-data text-xs">{set.set_number}</span>
                       <Input type="number" value={formatNumericInput(set.actual_machine_level)} onChange={(e) => updateSet(exerciseIndex, setIndex, 'actual_machine_level', e.target.value === '' ? undefined : Number(e.target.value))} disabled={set.completed} placeholder="Level" />
                       <Input type="number" value={formatNumericInput(set.actual_reps)} onChange={(e) => updateSet(exerciseIndex, setIndex, 'actual_reps', e.target.value === '' ? undefined : Number(e.target.value))} disabled={set.completed} placeholder="Minutes" />
@@ -2073,7 +2073,7 @@ function ActiveWorkoutModal({
                       <Button type="button" variant="ghost" size="icon-sm" className="justify-self-end sm:justify-self-auto" onClick={() => removeSetFromExercise(exerciseIndex, setIndex)} disabled={exercise.sets.length <= 1}><X className="h-3.5 w-3.5" /></Button>
                     </div>
                   ) : (
-                    <div key={`${exercise.exercise.id}-${setIndex}`} className={`grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)] gap-2 rounded-xl border px-3 py-2 sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto_auto] sm:items-center ${set.completed ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-border/50 bg-muted/10'}`}>
+                    <div key={`${exercise.exercise.id}-${setIndex}`} className={`grid grid-cols-[1.25rem_minmax(0,1fr)_minmax(0,1fr)_1.75rem_1.75rem] items-center gap-1.5 rounded-xl border px-3 py-2 sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto_auto] sm:gap-2 ${set.completed ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-border/50 bg-muted/10'}`}>
                       <span className="font-data text-xs">{set.set_number}</span>
                       <Input
                         type="number"
