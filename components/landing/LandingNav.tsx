@@ -57,7 +57,7 @@ export function LandingNav() {
         {/* CTA */}
         <div className="hidden md:flex items-center gap-3">
           <Link href="/login">
-            <Button variant="ghost" size="sm" className="text-zinc-400 hover:text-white">
+            <Button variant="ghost" size="sm" className="bg-transparent text-zinc-400 hover:bg-white/10 hover:text-white">
               Sign in
             </Button>
           </Link>
@@ -100,7 +100,7 @@ export function LandingNav() {
               ))}
               <div className="pt-3 flex flex-col gap-2 border-t border-white/10">
                 <Link href="/login" onClick={() => setMenuOpen(false)}>
-                  <Button variant="outline" className="w-full border-white/20 text-white">Sign in</Button>
+                  <Button variant="outline" className="w-full border-white/20 bg-transparent text-white hover:bg-white/10 hover:text-white hover:border-white/30">Sign in</Button>
                 </Link>
                 <Link href="/signup" onClick={() => setMenuOpen(false)}>
                   <Button variant="brand" className="w-full">Get Started Free</Button>

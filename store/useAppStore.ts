@@ -535,12 +535,40 @@ export const useAppStore = create<AppStore>()(
       streak: 0,
 
       setUser: (user) => {
-        set((state) => withRefreshedNotifications(state, {
-          user,
-          isAuthenticated: !!user,
-          isDemoMode: false,
-          notificationPreferences: user?.notification_preferences ?? state.notificationPreferences,
-        }))
+        set((state) => {
+          const isUserSwitch = !!user && state.user?.id !== user.id
+
+          if (isUserSwitch) {
+            return withRefreshedNotifications(state, {
+              savedMeals: [],
+              customRecipes: [],
+              customWorkouts: [],
+              notifications: [],
+              supplements: [],
+              calendarReminders: [],
+              weightHistory: [],
+              journalEntries: [],
+              workoutLogs: [],
+              mealEntries: {},
+              waterLogs: {},
+              weeklyMealPlan: null,
+              groceryList: null,
+              streak: 0,
+              cloudHydratedUserId: null,
+              user,
+              isAuthenticated: !!user,
+              isDemoMode: false,
+              notificationPreferences: user?.notification_preferences ?? DEFAULT_NOTIFICATION_PREFERENCES,
+            })
+          }
+
+          return withRefreshedNotifications(state, {
+            user,
+            isAuthenticated: !!user,
+            isDemoMode: false,
+            notificationPreferences: user?.notification_preferences ?? state.notificationPreferences,
+          })
+        })
 
         if (user) {
           void get().hydrateFromCloud(user.id)
@@ -599,7 +627,10 @@ export const useAppStore = create<AppStore>()(
         const localOnlyRecipes = localState.customRecipes.filter((r) => !cloudRecipeIds.has(r.id))
 
         const cloudWorkoutTemplateIds = new Set(cloud.customWorkouts.map((w) => w.id))
-        const localOnlyWorkoutTemplates = localState.customWorkouts.filter((w) => !cloudWorkoutTemplateIds.has(w.id))
+        const localOnlyWorkoutTemplates =
+          localState.cloudHydratedUserId === userId
+            ? localState.customWorkouts.filter((w) => !cloudWorkoutTemplateIds.has(w.id))
+            : []
 
         // Seed payload: always upload local data that doesn't exist in cloud yet
         const seedPayload = {

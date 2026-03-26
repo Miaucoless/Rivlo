@@ -71,13 +71,11 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // Title relevance: ALL significant words from the exercise name must appear in the title
+  // Title relevance: at least one word from the exercise name must appear in the title
   const queryWords = query.toLowerCase().split(/\s+/).filter((w) => w.length > 2)
   const isTitleRelevant = (title: string) => {
     const lower = title.toLowerCase()
-    // For multi-word exercises, require ALL words to appear (e.g. "romanian" AND "deadlift")
-    // For single-word exercises, just check that one word
-    return queryWords.every((w) => lower.includes(w))
+    return queryWords.some((w) => lower.includes(w))
   }
 
   // Tutorial keywords that strongly indicate instructional content

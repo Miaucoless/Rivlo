@@ -164,6 +164,7 @@ export interface GroceryList {
 // ─── Workouts ───────────────────────────────────────────────────────────────────
 
 export type MuscleGroup = 'chest' | 'back' | 'shoulders' | 'biceps' | 'triceps' | 'forearms' | 'quads' | 'hamstrings' | 'glutes' | 'calves' | 'core' | 'full_body' | 'cardio'
+export type ExerciseSetMetric = 'reps' | 'seconds' | 'minutes' | 'intervals'
 
 export interface Exercise {
   id: string
@@ -174,6 +175,7 @@ export interface Exercise {
   description: string
   video_url?: string // YouTube embed URL
   instructions: string[]
+  set_metric?: ExerciseSetMetric
 }
 
 export type ExercisePrimaryType = 'strength' | 'bodyweight' | 'time' | 'distance' | 'time_distance' | 'intervals' | 'mixed'

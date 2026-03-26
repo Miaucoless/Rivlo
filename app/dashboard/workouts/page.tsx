@@ -6,11 +6,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  CheckCircle, ChevronDown, ChevronUp, Circle, Copy, Dumbbell, Pencil, Play, PlayCircle, Plus, Search,
+  BookOpen, CheckCircle, ChevronDown, ChevronUp, Circle, Copy, Dumbbell, Pencil, Play, PlayCircle, Plus, Search,
   SlidersHorizontal, Sparkles, Trash2, Trophy, X,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -21,7 +22,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { useAppStore } from '@/store/useAppStore'
 import { EXERCISE_LIBRARY, WORKOUTS } from '@/lib/mock-data'
 import { EXERCISE_CLASSIFICATIONS } from '@/lib/exercise-classifications'
-import type { Exercise, ExerciseLibraryItem, Gender, MuscleGroup, UserProfile, Workout, WorkoutExercise, WorkoutSet, WorkoutSplit } from '@/types'
+import type { Exercise, ExerciseLibraryItem, ExerciseSetMetric, Gender, MuscleGroup, UserProfile, Workout, WorkoutExercise, WorkoutSet, WorkoutSplit } from '@/types'
 import { formatVolumeValue, getTodayISO, getWeightUnitLabel, kgToLbs, lbsToKg } from '@/lib/utils'
 import { createUserWorkoutTemplate, deleteUserWorkoutTemplate, fetchUserWorkoutTemplates, updateUserWorkoutTemplate } from '@/lib/workout-templates'
 import { toast } from 'sonner'
@@ -66,6 +67,13 @@ interface MetProfile {
 }
 
 type ExerciseInputMode = 'strength' | 'treadmill' | 'run_walk' | 'bike' | 'rower' | 'level_cardio' | 'basic_cardio' | 'interval' | 'time_only'
+
+const SET_METRIC_OPTIONS: Array<{ value: ExerciseSetMetric; label: string }> = [
+  { value: 'reps', label: 'Reps' },
+  { value: 'seconds', label: 'Seconds' },
+  { value: 'minutes', label: 'Minutes' },
+  { value: 'intervals', label: 'Intervals' },
+]
 
 function isCardioExercise(exercise: WorkoutExercise['exercise']) {
   const name = exercise.name.toLowerCase()
@@ -118,6 +126,8 @@ function getDefaultTreadmillInclinePct(exercise: WorkoutExercise['exercise']) {
 }
 
 function getExerciseInputMode(exercise: WorkoutExercise['exercise']): ExerciseInputMode {
+  if (exercise.set_metric === 'intervals') return 'interval'
+
   const classification = EXERCISE_CLASSIFICATIONS[exercise.id]
   if (classification) {
     const eq = exercise.equipment.toLowerCase()
@@ -147,6 +157,36 @@ function getExerciseInputMode(exercise: WorkoutExercise['exercise']): ExerciseIn
   if (equipment.includes('elliptical') || equipment.includes('stair') || equipment.includes('versaclimber') || name.includes('versa')) return 'level_cardio'
   if (isCardioExercise(exercise)) return 'basic_cardio'
   return 'strength'
+}
+
+function inferExerciseSetMetric(exercise: WorkoutExercise['exercise']): ExerciseSetMetric {
+  const name = exercise.name.toLowerCase()
+
+  if (exercise.set_metric) return exercise.set_metric
+  if (isIntervalExercise(exercise)) return 'intervals'
+  if (name.includes('plank') || name.includes('wall sit') || name.includes('hold')) return 'seconds'
+  if (isCardioExercise(exercise)) return 'minutes'
+  return 'reps'
+}
+
+function getExerciseSetMetric(exercise: WorkoutExercise['exercise']): ExerciseSetMetric {
+  return exercise.set_metric ?? inferExerciseSetMetric(exercise)
+}
+
+function getSetMetricLabel(exercise: WorkoutExercise['exercise']) {
+  const metric = getExerciseSetMetric(exercise)
+  if (metric === 'seconds') return 'Seconds'
+  if (metric === 'minutes') return 'Minutes'
+  if (metric === 'intervals') return 'Intervals'
+  return isUnilateralExercise(exercise) ? 'Reps/Side' : 'Reps'
+}
+
+function getSetMetricPlaceholder(exercise: WorkoutExercise['exercise']) {
+  const metric = getExerciseSetMetric(exercise)
+  if (metric === 'seconds') return 'Seconds'
+  if (metric === 'minutes') return 'Minutes'
+  if (metric === 'intervals') return '# intervals'
+  return isUnilateralExercise(exercise) ? 'Reps/side' : 'Reps'
 }
 
 function isUnilateralExercise(exercise: WorkoutExercise['exercise']): boolean {
@@ -220,6 +260,53 @@ const SPLIT_OPTIONS: Array<{ value: WorkoutSplit; label: string }> = [
   { value: 'cardio_focus', label: 'Cardio Focus' },
 ]
 
+const ACFT_GUIDE_EMAIL = 'lspetrera1213@email.campbell.edu'
+
+const ACFT_KEY_INSTRUCTIONS = [
+  {
+    title: 'Plank Progression',
+    lines: [
+      'Weeks 1-2: 3x20-30 sec plank',
+      'Weeks 3-4: 3x35-45 sec plank + side planks',
+      'Weeks 5-6: 3x45-60 sec plank + shoulder taps',
+      'Weeks 7-8: 60-75 sec planks + weighted plank',
+      'Weeks 9-10: 1-2 max holds aiming 2:30+',
+    ],
+  },
+  {
+    title: 'Push-Ups',
+    lines: [
+      '5-7 sets stopping 1-2 reps before failure',
+      'Progress weekly by increasing total reps',
+    ],
+  },
+  {
+    title: 'Deadlift Progression',
+    lines: [
+      '4 sets increasing weight each set',
+      'Goal: reach 140 lbs by Week 9',
+    ],
+  },
+  {
+    title: 'Running Types',
+    lines: [
+      'Intervals: 1 min fast / 1 min walk x6-10',
+      'Tempo: steady uncomfortable pace for distance',
+    ],
+  },
+]
+
+function parseAcftWorkoutPosition(workout: Workout) {
+  const match = workout.id.match(/^acft-elite-w(\d{2})-d(\d)$/)
+  if (!match) return null
+
+  return {
+    week: Number(match[1]),
+    day: Number(match[2]),
+    order: (Number(match[1]) - 1) * 5 + Number(match[2]),
+  }
+}
+
 function normalizeExerciseText(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim()
 }
@@ -250,6 +337,7 @@ function createWorkoutExerciseFromLibrary(item: ExerciseLibraryItem): EditableWo
     description: item.description,
     video_url: item.video_url,
     instructions: item.instructions,
+    set_metric: item.set_metric,
   }
   return {
     instanceId: `we-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -278,6 +366,7 @@ function createCustomExercise(name: string): EditableWorkoutExercise {
       difficulty: 'beginner',
       description: 'Custom exercise created by the user.',
       instructions: ['Adjust the movement and notes to match what you did.'],
+      set_metric: 'reps',
     },
     sets: [
       { set_number: 1, reps: 10, weight_kg: 0, rest_seconds: 60 },
@@ -372,17 +461,32 @@ function getCorrectedMet(metBase: number, profile: MetProfile) {
   return metBase * (3.5 / predictedRmrMlKgMin)
 }
 
-function estimateActiveSetSeconds(args: { reps: number; exercise: WorkoutExercise['exercise'] }) {
+function estimateActiveSetSeconds(args: { set: WorkoutSet; exercise: WorkoutExercise['exercise'] }) {
   const exerciseName = args.exercise.name.toLowerCase()
   const isCardio = isCardioExercise(args.exercise)
   const isIsometric = exerciseName.includes('plank') || exerciseName.includes('hold')
+  const metric = getExerciseSetMetric(args.exercise)
+  const reps = Math.max(0, Number(args.set.reps) || 0)
+
+  if (metric === 'intervals') {
+    const workSeconds = Math.max(0, Number(args.set.interval_duration_sec) || 0)
+    return Math.max(20, reps * Math.max(workSeconds, 1))
+  }
+
+  if (metric === 'minutes') {
+    return Math.max(30, reps * 60)
+  }
+
+  if (metric === 'seconds') {
+    return Math.max(1, reps)
+  }
 
   if (isCardio) {
-    return Math.max(300, args.reps * 60)
+    return Math.max(300, reps * 60)
   }
 
   if (isIsometric) {
-    return Math.max(20, args.reps)
+    return Math.max(20, reps)
   }
 
   const perRepSeconds =
@@ -390,7 +494,7 @@ function estimateActiveSetSeconds(args: { reps: number; exercise: WorkoutExercis
       ? 4.8
       : 3.8
 
-  return Math.max(18, args.reps * perRepSeconds + 12)
+  return Math.max(18, reps * perRepSeconds + 12)
 }
 
 function estimateTreadmillMet(args: {
@@ -494,6 +598,7 @@ function estimateAdjustedMet(args: {
 function estimateSetCalories(args: {
   metProfile: MetProfile
   reps: number
+  intervalDurationSec?: number
   weightKg: number
   speedMph?: number
   inclinePct?: number
@@ -539,7 +644,15 @@ function estimateSetCalories(args: {
                   level: args.machineLevel,
                 })
               : libraryMetBase
-  const activeSeconds = estimateActiveSetSeconds({ reps: args.reps, exercise: args.exercise })
+  const activeSeconds = estimateActiveSetSeconds({
+    set: {
+      set_number: 1,
+      reps: args.reps,
+      rest_seconds: args.restSeconds,
+      interval_duration_sec: args.intervalDurationSec,
+    },
+    exercise: args.exercise,
+  })
   const adjustedMet = estimateAdjustedMet({
     metBase,
     metType: libraryMatch?.met_type ?? 'resistance',
@@ -569,6 +682,7 @@ function summarizeExercises(exercises: WorkoutExercise[], metProfile: MetProfile
       caloriesBurned += estimateSetCalories({
         metProfile,
         reps,
+        intervalDurationSec: set.interval_duration_sec,
         weightKg,
         speedMph: set.speed_mph,
         inclinePct: set.incline_pct,
@@ -580,7 +694,7 @@ function summarizeExercises(exercises: WorkoutExercise[], metProfile: MetProfile
         exercise: exercise.exercise,
       })
       totalVolumeKg += reps * weightKg
-      totalDurationSeconds += estimateActiveSetSeconds({ reps, exercise: exercise.exercise }) + restSeconds
+      totalDurationSeconds += estimateActiveSetSeconds({ set, exercise: exercise.exercise }) + restSeconds
     })
   })
 
@@ -706,6 +820,20 @@ function WorkoutBuilderModal({
   const [exercises, setExercises] = useState<EditableWorkoutExercise[]>([])
   const [apiSuggestions, setApiSuggestions] = useState<ExerciseLibraryItem[]>([])
   const [previewExercise, setPreviewExercise] = useState<Exercise | null>(null)
+  const [durationUnits, setDurationUnits] = useState<Record<string, 'sec' | 'min'>>({})
+
+  const getDurationUnit = (key: string, defaultUnit: 'sec' | 'min' = 'sec') => durationUnits[key] ?? defaultUnit
+  const setDurationUnit = (key: string, unit: 'sec' | 'min') => {
+    setDurationUnits((current) => ({ ...current, [key]: unit }))
+  }
+  const displayDurationValue = (valueSec: number | undefined, unit: 'sec' | 'min') => {
+    if (valueSec === undefined || valueSec === 0) return ''
+    return unit === 'min' ? String(Math.round((valueSec / 60) * 100) / 100) : String(valueSec)
+  }
+  const parseDurationValue = (input: string, unit: 'sec' | 'min') => {
+    const parsed = parseFloat(input) || 0
+    return unit === 'min' ? Math.round(parsed * 60) : parsed
+  }
 
   useEffect(() => {
     if (!open) return
@@ -820,6 +948,19 @@ function WorkoutBuilderModal({
       reordered.splice(nextIndex, 0, movedExercise)
       return reordered
     })
+  }
+
+  const updateExerciseSetMetric = (instanceId: string, metric: ExerciseSetMetric) => {
+    setExercises((current) =>
+      current.map((exercise) =>
+        exercise.instanceId === instanceId
+          ? {
+              ...exercise,
+              exercise: { ...exercise.exercise, set_metric: metric },
+            }
+          : exercise
+      )
+    )
   }
 
   const handleSave = () => {
@@ -990,6 +1131,21 @@ function WorkoutBuilderModal({
                     </button>
                   </div>
                   <div className="flex items-center gap-1">
+                    <Select
+                      value={getExerciseSetMetric(exercise.exercise)}
+                      onValueChange={(value) => updateExerciseSetMetric(exercise.instanceId, value as ExerciseSetMetric)}
+                    >
+                      <SelectTrigger className="h-8 w-[110px] text-xs">
+                        <SelectValue placeholder="Metric" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {SET_METRIC_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <Button
                       type="button"
                       variant="ghost"
@@ -1017,12 +1173,14 @@ function WorkoutBuilderModal({
                 </div>
 
                 <div className="space-y-2">
-                  {inputMode === 'interval' ? (
-                    <div className={`grid ${isRunningIntervalExercise(exercise.exercise) ? 'grid-cols-[80px_1fr_1fr_1fr_1fr_auto]' : 'grid-cols-[80px_1fr_1fr_1fr_auto]'} gap-2 px-1 text-[10px] uppercase tracking-[0.12em] text-muted-foreground`}>
+                      {inputMode === 'interval' ? (
+                    <div className={`grid ${isRunningIntervalExercise(exercise.exercise) ? 'grid-cols-[80px_1fr_1fr_1fr_1fr_1fr_auto]' : 'grid-cols-[80px_1fr_1fr_1fr_1fr_auto]'} gap-2 px-1 text-[10px] uppercase tracking-[0.12em] text-muted-foreground`}>
                       <span>Round</span>
                       <span>Intervals</span>
-                      <span>Work (sec)</span>
-                      <span>Rest (sec)</span>
+                      <span>Work</span>
+                      <span>Work Unit</span>
+                      <span>Rest</span>
+                      {!isRunningIntervalExercise(exercise.exercise) && <span>Rest Unit</span>}
                       {isRunningIntervalExercise(exercise.exercise) && <span>Speed MPH</span>}
                       <span />
                     </div>
@@ -1069,14 +1227,21 @@ function WorkoutBuilderModal({
                   ) : (
                     <div className="grid grid-cols-4 gap-2 px-1 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
                       <span>Set</span>
-                      <span>Reps / Min</span>
+                      <span>{getSetMetricLabel(exercise.exercise)}</span>
                       <span>Weight ({getWeightUnitLabel(unitSystem)})</span>
                       <span>Rest Sec</span>
                     </div>
                   )}
                   {exercise.sets.map((set, setIndex) => (
                     inputMode === 'interval' ? (
-                      <div key={`${exercise.instanceId}-${setIndex}`} className={`grid ${isRunningIntervalExercise(exercise.exercise) ? 'grid-cols-[80px_1fr_1fr_1fr_1fr_auto]' : 'grid-cols-[80px_1fr_1fr_1fr_auto]'} gap-2`}>
+                      <div key={`${exercise.instanceId}-${setIndex}`} className={`grid ${isRunningIntervalExercise(exercise.exercise) ? 'grid-cols-[80px_1fr_1fr_1fr_1fr_1fr_auto]' : 'grid-cols-[80px_1fr_1fr_1fr_1fr_auto]'} gap-2`}>
+                        {(() => {
+                          const workUnitKey = `${exercise.instanceId}-${setIndex}-work`
+                          const restUnitKey = `${exercise.instanceId}-${setIndex}-rest`
+                          const workUnit = getDurationUnit(workUnitKey)
+                          const restUnit = getDurationUnit(restUnitKey)
+                          return (
+                            <>
                         <div className="flex items-center px-3 text-sm font-medium text-muted-foreground">Rnd {set.set_number}</div>
                         <Input
                           type="number"
@@ -1088,17 +1253,37 @@ function WorkoutBuilderModal({
                         <Input
                           type="number"
                           min={1}
-                          value={set.interval_duration_sec ?? ''}
-                          onChange={(e) => updateSetField(exercise.instanceId, setIndex, 'interval_duration_sec', e.target.value === '' ? 0 : Number(e.target.value))}
-                          placeholder="e.g. 20"
+                          value={displayDurationValue(set.interval_duration_sec, workUnit)}
+                          onChange={(e) => updateSetField(exercise.instanceId, setIndex, 'interval_duration_sec', e.target.value === '' ? 0 : parseDurationValue(e.target.value, workUnit))}
+                          placeholder={workUnit === 'min' ? 'e.g. 1.5' : 'e.g. 20'}
                         />
+                        <Select value={workUnit} onValueChange={(value) => setDurationUnit(workUnitKey, value as 'sec' | 'min')}>
+                          <SelectTrigger className="h-10 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="sec">sec</SelectItem>
+                            <SelectItem value="min">min</SelectItem>
+                          </SelectContent>
+                        </Select>
                         <Input
                           type="number"
                           min={0}
-                          value={formatNumericInput(set.rest_seconds)}
-                          onChange={(e) => updateSetField(exercise.instanceId, setIndex, 'rest_seconds', e.target.value === '' ? 0 : Number(e.target.value))}
-                          placeholder="e.g. 40"
+                          value={displayDurationValue(set.rest_seconds, restUnit)}
+                          onChange={(e) => updateSetField(exercise.instanceId, setIndex, 'rest_seconds', e.target.value === '' ? 0 : parseDurationValue(e.target.value, restUnit))}
+                          placeholder={restUnit === 'min' ? 'e.g. 1' : 'e.g. 40'}
                         />
+                        {!isRunningIntervalExercise(exercise.exercise) && (
+                          <Select value={restUnit} onValueChange={(value) => setDurationUnit(restUnitKey, value as 'sec' | 'min')}>
+                            <SelectTrigger className="h-10 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="sec">sec</SelectItem>
+                              <SelectItem value="min">min</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        )}
                         {isRunningIntervalExercise(exercise.exercise) && (
                           <Input
                             type="number"
@@ -1110,6 +1295,9 @@ function WorkoutBuilderModal({
                           />
                         )}
                         <Button variant="ghost" size="icon-sm" onClick={() => setExercises((current) => current.map((item) => item.instanceId === exercise.instanceId ? { ...item, sets: item.sets.filter((_, index) => index !== setIndex).map((s, i) => ({ ...s, set_number: i + 1 })) } : item))} disabled={exercise.sets.length <= 1}><X className="h-3.5 w-3.5" /></Button>
+                            </>
+                          )
+                        })()}
                       </div>
                     ) : inputMode === 'treadmill' ? (
                       <div key={`${exercise.instanceId}-${setIndex}`} className="grid grid-cols-[80px_1fr_1fr_1fr_1fr_auto] gap-2">
@@ -1196,7 +1384,7 @@ function WorkoutBuilderModal({
                           type="number"
                           value={formatNumericInput(set.reps)}
                           onChange={(e) => updateSetField(exercise.instanceId, setIndex, 'reps', e.target.value === '' ? 0 : Number(e.target.value))}
-                          placeholder="Reps / min"
+                          placeholder={getSetMetricPlaceholder(exercise.exercise)}
                         />
                         <Input
                           type="number"
@@ -1391,6 +1579,19 @@ function ActiveWorkoutModal({
           ? {
               ...exercise,
               sets: exercise.sets.map((set, currentSetIndex) => currentSetIndex === setIndex ? { ...set, [field]: value } : set),
+            }
+          : exercise
+      )
+    )
+  }
+
+  const updateLiveExerciseSetMetric = (exerciseIndex: number, metric: ExerciseSetMetric) => {
+    setExercises((current) =>
+      current.map((exercise, currentExerciseIndex) =>
+        currentExerciseIndex === exerciseIndex
+          ? {
+              ...exercise,
+              exercise: { ...exercise.exercise, set_metric: metric },
             }
           : exercise
       )
@@ -1728,6 +1929,21 @@ function ActiveWorkoutModal({
                   )}
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
+                  <Select
+                    value={getExerciseSetMetric(exercise.exercise)}
+                    onValueChange={(value) => updateLiveExerciseSetMetric(exerciseIndex, value as ExerciseSetMetric)}
+                  >
+                    <SelectTrigger className="h-8 w-[110px] text-xs">
+                      <SelectValue placeholder="Metric" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {SET_METRIC_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <Button
                     type="button"
                     variant="ghost"
@@ -1796,7 +2012,7 @@ function ActiveWorkoutModal({
                   <div className="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 px-3 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
                     <span>Set</span>
                     <span>Weight ({getWeightUnitLabel(unitSystem)})</span>
-                    <span>{isCardioExercise(exercise.exercise) ? 'Minutes' : isUnilateralExercise(exercise.exercise) ? 'Reps/Side' : 'Reps'}</span>
+                    <span>{getSetMetricLabel(exercise.exercise)}</span>
                     <span>Done</span>
                   </div>
                 )}
@@ -1870,13 +2086,13 @@ function ActiveWorkoutModal({
                             ? `Assistance (${getWeightUnitLabel(unitSystem)})`
                             : `Weight (${getWeightUnitLabel(unitSystem)})`}
                       />
-                      <Input
-                        type="number"
-                        value={formatNumericInput(set.actual_reps)}
-                        onChange={(e) => updateSet(exerciseIndex, setIndex, 'actual_reps', e.target.value === '' ? undefined : Number(e.target.value))}
-                        disabled={set.completed}
-                        placeholder={isCardioExercise(exercise.exercise) ? 'Minutes' : isUnilateralExercise(exercise.exercise) ? 'Reps/side' : 'Reps'}
-                      />
+                        <Input
+                          type="number"
+                          value={formatNumericInput(set.actual_reps)}
+                          onChange={(e) => updateSet(exerciseIndex, setIndex, 'actual_reps', e.target.value === '' ? undefined : Number(e.target.value))}
+                          disabled={set.completed}
+                          placeholder={getSetMetricPlaceholder(exercise.exercise)}
+                        />
                       <button type="button" onClick={() => toggleSet(exerciseIndex, setIndex)}>
                         {set.completed ? <CheckCircle className="h-5 w-5 text-emerald-400" /> : <Circle className="h-5 w-5 text-muted-foreground" />}
                       </button>
@@ -1936,6 +2152,21 @@ function formatDuration(sec: number): string {
   return m > 0 ? `${m}:${String(s).padStart(2, '0')}` : `0:${String(s).padStart(2, '0')}`
 }
 
+function extractYouTubeVideoId(url?: string | null): string | null {
+  if (!url) return null
+
+  const embedMatch = url.match(/youtube\.com\/embed\/([^?&/]+)/i)
+  if (embedMatch?.[1]) return embedMatch[1]
+
+  const watchMatch = url.match(/[?&]v=([^?&/]+)/i)
+  if (watchMatch?.[1]) return watchMatch[1]
+
+  const shortMatch = url.match(/youtu\.be\/([^?&/]+)/i)
+  if (shortMatch?.[1]) return shortMatch[1]
+
+  return null
+}
+
 function ExercisePreviewDialog({ exercise, onClose }: { exercise: Exercise | null; onClose: () => void }) {
   const [videos, setVideos] = useState<YouTubeVideo[]>([])
   const [loading, setLoading] = useState(false)
@@ -1943,11 +2174,18 @@ function ExercisePreviewDialog({ exercise, onClose }: { exercise: Exercise | nul
 
   useEffect(() => {
     if (!exercise) { setVideos([]); setActiveId(null); return }
+    const embeddedVideoId = extractYouTubeVideoId(exercise.video_url)
+
     setLoading(true)
-    setActiveId(null)
+    setActiveId(embeddedVideoId)
     fetch(`/api/youtube?q=${encodeURIComponent(exercise.name)}`)
       .then((r) => r.ok ? r.json() : [])
-      .then((data: YouTubeVideo[]) => { setVideos(data); if (data.length > 0) setActiveId(data[0].id) })
+      .then((data: YouTubeVideo[]) => {
+        setVideos(data)
+        if (data.length > 0) {
+          setActiveId((current) => current ?? data[0].id)
+        }
+      })
       .catch(() => setVideos([]))
       .finally(() => setLoading(false))
   }, [exercise])
@@ -2000,7 +2238,7 @@ function ExercisePreviewDialog({ exercise, onClose }: { exercise: Exercise | nul
           </div>
         )}
 
-        {!loading && videos.length === 0 && (
+        {!loading && !activeId && videos.length === 0 && (
           <div className="py-6 text-center text-sm text-muted-foreground">No short videos found.</div>
         )}
       </DialogContent>
@@ -2058,16 +2296,11 @@ export default function WorkoutsPage() {
   const [manualSuggestionIndex, setManualSuggestionIndex] = useState(0)
   const unitSystem = user?.unit_system || 'imperial'
   const weightUnitLabel = getWeightUnitLabel(unitSystem)
+  const showAcftKeyInstructions = user?.email?.toLowerCase() === ACFT_GUIDE_EMAIL
   const accountCustomWorkouts = useMemo(() => {
     if (isDemoMode) return customWorkouts
 
-    const merged = [...remoteCustomWorkouts, ...customWorkouts]
-    const seen = new Set<string>()
-    return merged.filter((workout) => {
-      if (seen.has(workout.id)) return false
-      seen.add(workout.id)
-      return true
-    })
+    return remoteCustomWorkouts
   }, [isDemoMode, remoteCustomWorkouts, customWorkouts])
   const shouldResumeFromQuery = searchParams.get('resume') === '1'
 
@@ -2087,7 +2320,7 @@ export default function WorkoutsPage() {
   }, [premadeSearch, premadeSplit, premadeDifficulty, premadeMuscle])
 
   const filteredSavedWorkouts = useMemo(() => {
-    return accountCustomWorkouts.filter((w) => {
+    const filtered = accountCustomWorkouts.filter((w) => {
       if (savedWorkoutSplit !== 'all' && w.split_type !== savedWorkoutSplit) return false
       if (savedWorkoutMuscle !== 'all' && !w.muscle_groups.includes(savedWorkoutMuscle)) return false
       if (savedWorkoutSearch.trim()) {
@@ -2096,7 +2329,55 @@ export default function WorkoutsPage() {
       }
       return true
     })
-  }, [accountCustomWorkouts, savedWorkoutSearch, savedWorkoutSplit, savedWorkoutMuscle])
+
+    if (!showAcftKeyInstructions) return filtered
+
+    const completionTimes = new Map<string, number>()
+    workoutLogs.forEach((log) => {
+      const position = parseAcftWorkoutPosition(log.workout)
+      if (!position) return
+
+      const completedAt = log.completed_at || log.started_at
+      const completionTime = completedAt ? new Date(completedAt).getTime() : 0
+      if (!completionTime) return
+
+      const existing = completionTimes.get(log.workout_id)
+      if (existing === undefined || completionTime > existing) {
+        completionTimes.set(log.workout_id, completionTime)
+      }
+    })
+
+    return [...filtered].sort((left, right) => {
+      const leftPosition = parseAcftWorkoutPosition(left)
+      const rightPosition = parseAcftWorkoutPosition(right)
+
+      if (!leftPosition && !rightPosition) {
+        return new Date(right.updated_at || 0).getTime() - new Date(left.updated_at || 0).getTime()
+      }
+
+      if (!leftPosition) return -1
+      if (!rightPosition) return 1
+
+      const leftCompletedAt = completionTimes.get(left.id)
+      const rightCompletedAt = completionTimes.get(right.id)
+      const leftCompleted = leftCompletedAt !== undefined
+      const rightCompleted = rightCompletedAt !== undefined
+
+      if (leftCompleted !== rightCompleted) {
+        return leftCompleted ? 1 : -1
+      }
+
+      if (!leftCompleted && !rightCompleted) {
+        return leftPosition.order - rightPosition.order
+      }
+
+      if (leftCompletedAt !== rightCompletedAt) {
+        return (leftCompletedAt || 0) - (rightCompletedAt || 0)
+      }
+
+      return leftPosition.order - rightPosition.order
+    })
+  }, [accountCustomWorkouts, savedWorkoutSearch, savedWorkoutSplit, savedWorkoutMuscle, showAcftKeyInstructions, workoutLogs])
 
   const totalCaloriesBurned = workoutLogs.reduce((sum, log) => sum + (log.calories_burned_kcal || 0), 0)
   const todayLoggedWorkouts = workoutLogs.filter((log) => log.date === getTodayISO())
@@ -2282,6 +2563,16 @@ export default function WorkoutsPage() {
     })
   }
 
+  const updatePendingExerciseSetMetric = (metric: ExerciseSetMetric) => {
+    setPendingExercise((current) => {
+      if (!current) return current
+      return {
+        ...current,
+        exercise: { ...current.exercise, set_metric: metric },
+      }
+    })
+  }
+
   const addSetToPendingExercise = () => {
     setPendingExercise((current) => {
       if (!current) return current
@@ -2370,6 +2661,19 @@ export default function WorkoutsPage() {
           ? {
               ...exercise,
               sets: exercise.sets.map((set, index) => index === setIndex ? { ...set, [field]: value } : set),
+            }
+          : exercise
+      )
+    )
+  }
+
+  const updateManualExerciseSetMetric = (instanceId: string, metric: ExerciseSetMetric) => {
+    setManualExercises((current) =>
+      current.map((exercise) =>
+        exercise.instanceId === instanceId
+          ? {
+              ...exercise,
+              exercise: { ...exercise.exercise, set_metric: metric },
             }
           : exercise
       )
@@ -3074,9 +3378,26 @@ export default function WorkoutsPage() {
                           How to do this
                         </button>
                       </div>
-                      <Button variant="ghost" size="icon-sm" onClick={() => setPendingExercise(null)}>
-                        <X className="h-3.5 w-3.5" />
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        <Select
+                          value={getExerciseSetMetric(pendingExercise.exercise)}
+                          onValueChange={(value) => updatePendingExerciseSetMetric(value as ExerciseSetMetric)}
+                        >
+                          <SelectTrigger className="h-8 w-[110px] text-xs">
+                            <SelectValue placeholder="Metric" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {SET_METRIC_OPTIONS.map((option) => (
+                              <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Button variant="ghost" size="icon-sm" onClick={() => setPendingExercise(null)}>
+                          <X className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
                     </div>
 
                     {(() => {
@@ -3127,7 +3448,7 @@ export default function WorkoutsPage() {
                       ) : (
                         <div className="grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2 px-1 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
                           <span>Set</span>
-                          <span>{isUnilateralExercise(pendingExercise.exercise) ? 'Reps/Side' : 'Reps'}</span>
+                          <span>{getSetMetricLabel(pendingExercise.exercise, pendingExercise.exercise.name)}</span>
                           <span>{isAssistedPullExercise(pendingExercise.exercise) ? `Assistance (${weightUnitLabel})` : `Weight (${weightUnitLabel})`}</span>
                           <span>Rest Sec</span>
                           <span />
@@ -3178,7 +3499,7 @@ export default function WorkoutsPage() {
                         ) : (
                           <div key={`${pendingExercise.instanceId}-${setIndex}`} className="grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2">
                             <div className="flex items-center px-3 text-sm font-medium text-muted-foreground">Set {set.set_number}</div>
-                            <Input type="number" value={formatNumericInput(set.reps)} onChange={(e) => updatePendingSetField(setIndex, 'reps', e.target.value === '' ? 0 : Number(e.target.value))} placeholder={isUnilateralExercise(pendingExercise.exercise) ? 'Reps/side' : 'Reps'} />
+                            <Input type="number" value={formatNumericInput(set.reps)} onChange={(e) => updatePendingSetField(setIndex, 'reps', e.target.value === '' ? 0 : Number(e.target.value))} placeholder={getSetMetricPlaceholder(pendingExercise.exercise, pendingExercise.exercise.name)} />
                             <Input type="number" value={formatWorkoutWeightInput(set.weight_kg, unitSystem)} onChange={(e) => updatePendingSetField(setIndex, 'weight_kg', parseWorkoutWeightInput(e.target.value, unitSystem))} placeholder={isAssistedPullExercise(pendingExercise.exercise) ? `Assistance (${weightUnitLabel})` : `Weight (${weightUnitLabel})`} />
                             <Input type="number" value={formatNumericInput(set.rest_seconds)} onChange={(e) => updatePendingSetField(setIndex, 'rest_seconds', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Rest sec" />
                             <Button variant="ghost" size="icon-sm" onClick={() => removeSetFromPendingExercise(setIndex)} disabled={pendingExercise.sets.length <= 1}><X className="h-3.5 w-3.5" /></Button>
@@ -3291,6 +3612,21 @@ export default function WorkoutsPage() {
                           </button>
                         </div>
                         <div className="flex items-center gap-2">
+                          <Select
+                            value={getExerciseSetMetric(exercise.exercise)}
+                            onValueChange={(value) => updateManualExerciseSetMetric(exercise.instanceId, value as ExerciseSetMetric)}
+                          >
+                            <SelectTrigger className="h-8 w-[110px] text-xs">
+                              <SelectValue placeholder="Metric" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {SET_METRIC_OPTIONS.map((option) => (
+                                <SelectItem key={option.value} value={option.value}>
+                                  {option.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                           <Badge variant="outline" className="capitalize">{exercise.exercise.difficulty}</Badge>
                           <Button variant="ghost" size="icon-sm" className="text-destructive/70 hover:text-destructive" onClick={() => setManualExercises((current) => current.filter((item) => item.instanceId !== exercise.instanceId))}>
                             <Trash2 className="h-3.5 w-3.5" />
@@ -3350,7 +3686,7 @@ export default function WorkoutsPage() {
                         ) : (
                           <div className="grid grid-cols-5 gap-2 border-b border-border/40 bg-muted/20 px-3 py-2 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
                             <span>Set</span>
-                            <span>{cardioExercise ? 'Minutes' : 'Reps'}</span>
+                            <span>{getSetMetricLabel(exercise.exercise)}</span>
                             <span>{cardioExercise
                               ? `Incline / Load (${weightUnitLabel})`
                               : isAssistedPullExercise(exercise.exercise)
@@ -3424,7 +3760,7 @@ export default function WorkoutsPage() {
                                 value={set.reps}
                                 onChange={(e) => updateManualSetField(exercise.instanceId, setIndex, 'reps', Number(e.target.value))}
                                 className="h-8 text-xs"
-                                placeholder={cardioExercise ? 'Minutes' : 'Reps'}
+                                placeholder={getSetMetricPlaceholder(exercise.exercise)}
                               />
                               <Input
                                 type="number"
@@ -3515,6 +3851,34 @@ export default function WorkoutsPage() {
               Create Saved Workout
             </Button>
           </div>
+
+          {showAcftKeyInstructions && (
+            <Card className="border-primary/20 bg-primary/[0.04]">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <BookOpen className="h-4 w-4 text-primary" />
+                  ACFT Key Exercise Instructions
+                </CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Quick reference for the 10-week ACFT saved workout plan.
+                </p>
+              </CardHeader>
+              <CardContent className="grid gap-3 sm:grid-cols-2">
+                {ACFT_KEY_INSTRUCTIONS.map((section) => (
+                  <div key={section.title} className="rounded-xl border border-border/60 bg-background/80 p-3">
+                    <p className="text-sm font-semibold">{section.title}</p>
+                    <div className="mt-2 space-y-1">
+                      {section.lines.map((line) => (
+                        <p key={line} className="text-xs leading-relaxed text-muted-foreground">
+                          {line}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
 
           {accountCustomWorkouts.length > 0 && (
             <div className="space-y-4">
