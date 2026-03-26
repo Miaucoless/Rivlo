@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { ArrowLeft, Eye, EyeOff, Mail, ShieldCheck } from 'lucide-react'
@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label'
 import { finalizePasswordRecoverySession, requestPasswordReset, updatePassword } from '@/lib/auth'
 import { toast } from 'sonner'
 
-export default function ResetPasswordPage() {
+function ResetPasswordPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const code = searchParams.get('code')
@@ -237,5 +237,25 @@ export default function ResetPasswordPage() {
         </motion.div>
       </div>
     </div>
+  )
+}
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="relative min-h-[100dvh] overflow-y-auto overflow-x-hidden bg-[#06100f] text-white" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.18),_transparent_28%),radial-gradient(circle_at_80%_18%,_rgba(45,212,191,0.12),_transparent_25%),linear-gradient(140deg,_#06100f_0%,_#0b1715_55%,_#060908_100%)]" />
+          <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:88px_88px] opacity-[0.06]" />
+          <div className="relative flex min-h-[100dvh] items-center justify-center px-4 py-8 sm:px-6 lg:px-8">
+            <div className="w-full max-w-md rounded-[2rem] border border-white/10 bg-[rgba(8,18,17,0.88)] p-6 text-sm text-zinc-400 shadow-[0_30px_100px_rgba(0,0,0,0.45)] backdrop-blur-2xl sm:p-7">
+              Loading password reset...
+            </div>
+          </div>
+        </div>
+      }
+    >
+      <ResetPasswordPageContent />
+    </Suspense>
   )
 }
