@@ -209,9 +209,9 @@ export function HeroSection() {
   return (
     <section className="relative min-h-screen flex items-center pt-24 pb-16 px-6 overflow-hidden">
       {/* Gradient background */}
-      <div className="absolute inset-0 bg-gradient-mesh opacity-60" />
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[400px] bg-emerald-500/5 rounded-full blur-3xl" />
-      <div className="absolute bottom-0 left-0 w-[400px] h-[300px] bg-teal-500/5 rounded-full blur-3xl" />
+      <div className="pointer-events-none absolute inset-0 bg-gradient-mesh opacity-60" />
+      <div className="pointer-events-none absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[400px] bg-emerald-500/5 rounded-full blur-3xl" />
+      <div className="pointer-events-none absolute bottom-0 left-0 w-[400px] h-[300px] bg-teal-500/5 rounded-full blur-3xl" />
 
       <div className="relative max-w-7xl mx-auto w-full">
         <div className="grid lg:grid-cols-2 gap-16 items-center">

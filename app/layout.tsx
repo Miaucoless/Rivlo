@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import './globals.css'
 import { ThemeProvider } from '@/components/ui/theme-provider'
+import { ScrollLockGuard } from '@/components/ScrollLockGuard'
 import { Toaster } from 'sonner'
 
 export const metadata: Metadata = {
@@ -54,6 +55,7 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange={false}
         >
+          <ScrollLockGuard />
           {children}
           <Toaster
             position="top-right"

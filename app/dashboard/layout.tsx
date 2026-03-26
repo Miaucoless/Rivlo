@@ -85,7 +85,7 @@ export default function DashboardLayout({
   if (!isAuthenticated) return null
 
   return (
-    <div className="flex min-h-screen bg-background relative">
+    <div className="relative flex min-h-screen overflow-hidden bg-background md:h-screen md:min-h-0">
       {process.env.NODE_ENV === 'production' ? null : <ExposeStore />}
       {/* Subtle ambient gradient */}
       <div className="pointer-events-none fixed inset-0 bg-gradient-to-br from-emerald-500/[0.03] via-transparent to-transparent" />
@@ -99,12 +99,12 @@ export default function DashboardLayout({
       <motion.div
         animate={{ marginLeft: isMobile ? 0 : sidebarCollapsed ? 64 : 240 }}
         transition={{ duration: 0.25, ease: [0.22, 0.61, 0.36, 1] }}
-        className="flex-1 flex flex-col min-w-0"
+        className="flex min-w-0 flex-1 flex-col md:min-h-0"
       >
         {/* Spacer matching the fixed TopBar height (3.5rem) + safe area inset */}
         <div style={{ height: 'calc(3.5rem + env(safe-area-inset-top, 0px))' }} className="flex-shrink-0" />
 
-        <main className="flex-1 overflow-y-auto">
+        <main className="flex-1 overflow-y-auto md:min-h-0">
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}

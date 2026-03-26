@@ -189,6 +189,24 @@ export default function LoginPage() {
   const expandedCardRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
+    document.documentElement.style.overflowY = 'auto'
+    document.documentElement.style.height = 'auto'
+    document.documentElement.style.pointerEvents = 'auto'
+    document.body.style.overflowY = 'auto'
+    document.body.style.height = 'auto'
+    document.body.style.pointerEvents = 'auto'
+
+    return () => {
+      document.documentElement.style.overflowY = ''
+      document.documentElement.style.height = ''
+      document.documentElement.style.pointerEvents = ''
+      document.body.style.overflowY = ''
+      document.body.style.height = ''
+      document.body.style.pointerEvents = ''
+    }
+  }, [])
+
+  useEffect(() => {
     if (!activeSection || !expandedCardRef.current) return
 
     requestAnimationFrame(() => {
@@ -228,14 +246,14 @@ export default function LoginPage() {
 
   return (
     <div
-      className={`relative overflow-x-hidden bg-[#06100f] text-white ${isFeatureExpanded ? 'min-h-[100svh]' : 'h-[100svh] overflow-y-hidden'}`}
+      className="relative h-[100dvh] overflow-y-auto overflow-x-hidden bg-[#06100f] text-white"
       style={{ paddingTop: 'env(safe-area-inset-top)' }}
     >
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.18),_transparent_28%),radial-gradient(circle_at_80%_18%,_rgba(45,212,191,0.12),_transparent_25%),linear-gradient(140deg,_#06100f_0%,_#0b1715_55%,_#060908_100%)]" />
-      <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:88px_88px] opacity-[0.06]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.18),_transparent_28%),radial-gradient(circle_at_80%_18%,_rgba(45,212,191,0.12),_transparent_25%),linear-gradient(140deg,_#06100f_0%,_#0b1715_55%,_#060908_100%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:88px_88px] opacity-[0.06]" />
 
-      <div className={`relative lg:grid lg:grid-cols-[minmax(0,1.02fr)_minmax(320px,0.98fr)] ${isFeatureExpanded ? 'min-h-[100svh] items-start' : 'h-full'}`}>
-        <main className={`flex items-center justify-center px-4 py-4 sm:px-6 sm:py-6 lg:px-8 xl:px-10 ${isFeatureExpanded ? 'lg:sticky lg:top-0 lg:h-[100svh]' : 'h-full'}`}>
+      <div className={`relative lg:grid lg:grid-cols-[minmax(0,1.02fr)_minmax(320px,0.98fr)] ${isFeatureExpanded ? 'min-h-[100svh] items-start' : 'min-h-[100svh]'}`}>
+        <main className={`flex items-center justify-center px-4 py-4 sm:px-6 sm:py-6 lg:px-8 xl:px-10 ${isFeatureExpanded ? 'lg:sticky lg:top-0 lg:h-[100svh]' : 'min-h-[100svh]'}`}>
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
@@ -409,8 +427,8 @@ export default function LoginPage() {
                     transition={{ duration: 0.24 }}
                     className="relative mt-4 overflow-hidden rounded-[1.6rem] border border-white/10 bg-[rgba(3,10,10,0.72)] p-5"
                   >
-                    <div className={`absolute inset-0 bg-gradient-to-br ${activeSectionData.accent}`} />
-                    <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:52px_52px] opacity-40" />
+                    <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${activeSectionData.accent}`} />
+                    <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:52px_52px] opacity-40" />
 
                     <div className="relative">
                       <div className="flex items-start justify-between gap-4">

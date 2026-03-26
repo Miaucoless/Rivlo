@@ -103,7 +103,7 @@ const colorMap: Record<string, { bg: string; text: string; ring: string }> = {
 export function FeaturesSection() {
   return (
     <section id="features" className="py-24 px-6 relative">
-      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-emerald-950/10 to-transparent" />
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-transparent via-emerald-950/10 to-transparent" />
 
       <div className="max-w-7xl mx-auto relative">
         {/* Header */}
