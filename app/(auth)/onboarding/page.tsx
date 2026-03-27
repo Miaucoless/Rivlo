@@ -111,6 +111,22 @@ export default function OnboardingPage() {
     }
   }, [router, user?.onboarded])
 
+  useEffect(() => {
+    document.documentElement.style.overflowY = 'auto'
+    document.documentElement.style.height = 'auto'
+    document.body.style.overflowY = 'auto'
+    document.body.style.height = 'auto'
+    document.body.style.pointerEvents = 'auto'
+
+    return () => {
+      document.documentElement.style.overflowY = ''
+      document.documentElement.style.height = ''
+      document.body.style.overflowY = ''
+      document.body.style.height = ''
+      document.body.style.pointerEvents = ''
+    }
+  }, [])
+
   const handleUnitSystemChange = (unitSystem: UnitSystem) => {
     const currentHeightCm = parseHeightInput(form.height_input, form.unit_system) ?? user?.height_cm ?? 175
     const currentWeightKg = parseWeightInput(form.weight_input, form.unit_system) ?? user?.weight_kg ?? 75
@@ -451,8 +467,11 @@ export default function OnboardingPage() {
   const currentStep = steps[step - 1]
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center p-6" style={{ paddingTop: 'max(1.5rem, env(safe-area-inset-top))' }}>
-      <div className="w-full max-w-md">
+    <div
+      className="min-h-[100dvh] overflow-y-auto bg-[#0a0a0a] px-6 py-8"
+      style={{ paddingTop: 'max(1.5rem, env(safe-area-inset-top))' }}
+    >
+      <div className="mx-auto w-full max-w-md">
         {/* Logo */}
         <div className="flex items-center gap-2 mb-8">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center">

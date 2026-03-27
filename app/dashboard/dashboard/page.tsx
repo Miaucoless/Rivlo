@@ -24,7 +24,7 @@ import { Label } from '@/components/ui/label'
 import { useAppStore } from '@/store/useAppStore'
 import { WaterIntakeCard } from '@/components/dashboard/WaterIntakeCard'
 import { DailyQuoteCard } from '@/components/dashboard/DailyQuoteCard'
-import { percentage, generateRecommendation, getTodayISO, formatCalories, formatWeightDelta, formatWeightValue, getWeightUnitLabel } from '@/lib/utils'
+import { percentage, getTodayISO, formatCalories, formatWeightDelta, formatWeightValue, getWeightUnitLabel } from '@/lib/utils'
 import { toast } from 'sonner'
 
 const stagger = {
@@ -117,7 +117,7 @@ function QuickAddMealDialog() {
 
 export default function DashboardPage() {
   const router = useRouter()
-  const { user, getDailyTotals, getDailyMeals, mealEntries, weightHistory, workoutLogs, streak, journalEntries } = useAppStore()
+  const { user, getDailyTotals, getDailyMeals, mealEntries, weightHistory, workoutLogs, streak } = useAppStore()
   const [hasPausedWorkout, setHasPausedWorkout] = useState(false)
   const [expandedDashboardLogId, setExpandedDashboardLogId] = useState<string | null>(null)
   const [expandedMealType, setExpandedMealType] = useState<string | null>(null)
@@ -200,24 +200,6 @@ export default function DashboardPage() {
     { name: 'Carbs', value: todayTotals.carbs_g * 4, color: '#3b82f6' },
     { name: 'Fat', value: todayTotals.fat_g * 9, color: '#f59e0b' },
   ]
-
-  const loggedMealDays = recentMealDays.filter((day) => day.meals.length > 0)
-  const workoutsThisWeek = workoutLogs.filter((w) => {
-    const d = new Date(w.date)
-    const now = new Date()
-    return now.getTime() - d.getTime() < 7 * 24 * 60 * 60 * 1000
-  }).length
-  const recentAvg = loggedMealDays.length > 0
-    ? {
-        avg_calories: loggedMealDays.reduce((sum, day) => sum + day.calories, 0) / loggedMealDays.length,
-        avg_protein: loggedMealDays.reduce((sum, day) => sum + day.protein_g, 0) / loggedMealDays.length,
-        workouts_this_week: workoutsThisWeek,
-        current_weight: weightHistory[weightHistory.length - 1]?.weight_kg || user.weight_kg,
-      }
-    : null
-  const recommendation = recentAvg
-    ? generateRecommendation(user, recentAvg)
-    : 'Log a few meals, workouts, or weigh-ins and your dashboard insights will start reflecting real trends.'
 
   const todayWorkoutLogs = workoutLogs.filter((workout) => workout.date === today)
   const todayWorkoutCalories = todayWorkoutLogs.reduce((sum, workout) => sum + (workout.calories_burned_kcal || 0), 0)
@@ -856,7 +838,6 @@ export default function DashboardPage() {
             </Card>
           )}
 
-          {/* Quick links */}
           <Card>
             <CardContent className="p-4">
               <p className="text-xs font-semibold mb-3">Quick Actions</p>

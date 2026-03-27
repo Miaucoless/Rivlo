@@ -666,22 +666,36 @@ export default function JournalPage() {
               ))}
             </AnimatePresence>
           ) : (
-            <div className="flex flex-col items-center justify-center h-64 text-muted-foreground text-center">
-              <BookOpen className="w-12 h-12 mb-4 opacity-20" />
-              <p className="font-medium">
+            <div className="rounded-[1.75rem] border border-dashed border-border/70 bg-muted/20 px-6 py-10 text-center">
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-background/80">
+                <BookOpen className="h-6 w-6 text-muted-foreground/60" />
+              </div>
+              <p className="mt-5 font-medium text-foreground">
                 {search || filterTag !== 'all' ? 'No matching entries' : 'No journal entries yet'}
               </p>
-              <p className="text-sm mt-1">
+              <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted-foreground">
                 {search || filterTag !== 'all'
-                  ? 'Try a different search or filter'
-                  : 'Write your first entry to get started'}
+                  ? 'Try a different search term or clear your filters.'
+                  : 'Start with one quick reflection. Your journal becomes much more useful once Rivora can connect mood, energy, meals, and workouts over time.'}
               </p>
               {!search && filterTag === 'all' && (
-                <JournalEditorDialog onSave={handleCreate}>
-                  <Button variant="brand" className="mt-4" size="sm">
-                    Write Your First Entry
-                  </Button>
-                </JournalEditorDialog>
+                <>
+                  <div className="mx-auto mt-5 max-w-lg rounded-2xl border border-border/60 bg-background/70 p-4 text-left">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">Starter prompts</p>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                      {PROMPTS.slice(0, 4).map((prompt) => (
+                        <div key={prompt} className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5 text-xs text-muted-foreground">
+                          {prompt}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <JournalEditorDialog onSave={handleCreate}>
+                    <Button variant="brand" className="mt-5" size="sm">
+                      Write Your First Entry
+                    </Button>
+                  </JournalEditorDialog>
+                </>
               )}
             </div>
           )}

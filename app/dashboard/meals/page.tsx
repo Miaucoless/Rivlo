@@ -326,7 +326,7 @@ function DailyNutritionSummary({
   user: {
     calorie_target?: number
     protein_target_g?: number
-    carbs_target_g?: number
+    carb_target_g?: number
     fat_target_g?: number
   }
 }) {
@@ -347,7 +347,7 @@ function DailyNutritionSummary({
     {
       label: 'Carbs',
       consumed: Math.round(totals.carbs_g),
-      target: user.carbs_target_g || 0,
+      target: user.carb_target_g || 0,
       suffix: 'g',
     },
     {
@@ -356,31 +356,32 @@ function DailyNutritionSummary({
       target: user.fat_target_g || 0,
       suffix: 'g',
     },
-  ]
+  ].filter((macro) => macro.target > 0)
+  const macroGridClass = macroCards.length >= 3 ? 'grid-cols-3' : macroCards.length === 2 ? 'grid-cols-2' : 'grid-cols-1'
 
   return (
     <div className="grid gap-2.5 xl:grid-cols-[1.05fr_0.78fr_0.78fr_0.78fr]">
-      <div className="rounded-[1.35rem] border border-border/60 bg-[linear-gradient(135deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02))] p-3.5 shadow-[0_16px_44px_-38px_rgba(0,0,0,0.65)]">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="rounded-[1.1rem] border border-border/60 bg-[linear-gradient(135deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02))] p-3 shadow-[0_16px_44px_-38px_rgba(0,0,0,0.65)] xl:rounded-[1.35rem] xl:p-3.5">
+        <div className="flex items-center justify-between gap-3">
           <div className="space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-muted-foreground">Daily calories</p>
-            <div className="flex items-end gap-2.5">
-              <span className="font-data text-[1.7rem] font-semibold tracking-tight text-foreground">{todayNumber(totals.calories)}</span>
+            <div className="flex flex-wrap items-end gap-1.5 sm:gap-2.5">
+              <span className="font-data text-[1.4rem] font-semibold tracking-tight text-foreground sm:text-[1.7rem]">{todayNumber(totals.calories)}</span>
               <span className="pb-0.5 text-xs text-muted-foreground">
                 / {calorieTarget > 0 ? todayNumber(calorieTarget) : 'No target'}
               </span>
             </div>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-[11px] text-muted-foreground sm:text-xs">
               {calorieTarget > 0 ? `${todayNumber(calorieRemaining)} remaining today` : 'Set a calorie target to track progress'}
             </p>
           </div>
 
-          <div className="flex flex-col items-center self-start sm:self-auto">
-            <div className="relative flex h-20 w-20 items-center justify-center">
+          <div className="flex flex-col items-center">
+            <div className="relative flex h-16 w-16 items-center justify-center sm:h-20 sm:w-20">
             <div className="absolute inset-0 rounded-full" style={ringStyle} />
-            <div className="absolute inset-[8px] rounded-full bg-background" />
+            <div className="absolute inset-[7px] rounded-full bg-background sm:inset-[8px]" />
             <div className="relative flex h-full w-full items-center justify-center text-center leading-none">
-              <p className="font-data text-lg font-semibold text-foreground">{caloriePct}%</p>
+              <p className="font-data text-sm font-semibold text-foreground sm:text-lg">{caloriePct}%</p>
             </div>
             </div>
             <p className="mt-1.5 text-[9px] uppercase tracking-[0.16em] text-muted-foreground">Consumed</p>
@@ -388,39 +389,41 @@ function DailyNutritionSummary({
         </div>
       </div>
 
-      {macroCards.map((macro) => {
-        const pct = progressValue(macro.consumed, macro.target)
-        const remaining = remainingValue(macro.consumed, macro.target)
-        return (
-          <div
-            key={macro.label}
-            className="rounded-[1.2rem] border border-border/60 bg-card/80 p-3.5 shadow-[0_14px_32px_-32px_rgba(0,0,0,0.55)]"
-          >
-            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">{macro.label}</p>
-            <div className="mt-2.5 flex items-end justify-between gap-2">
-              <span className="font-data text-lg font-semibold text-foreground">
-                {macro.consumed}
-                {' '}
-                {macro.suffix}
-              </span>
-              <span className="text-[11px] text-muted-foreground">
-                / {macro.target > 0 ? `${macro.target} ${macro.suffix}` : 'No target'}
-              </span>
+      <div className={`grid gap-2 ${macroGridClass} xl:contents`}>
+        {macroCards.map((macro) => {
+          const pct = progressValue(macro.consumed, macro.target)
+          const remaining = remainingValue(macro.consumed, macro.target)
+          return (
+            <div
+              key={macro.label}
+              className="rounded-[1rem] border border-border/60 bg-card/80 p-2.5 shadow-[0_14px_32px_-32px_rgba(0,0,0,0.55)] xl:rounded-[1.2rem] xl:p-3.5"
+            >
+              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground xl:text-[11px] xl:tracking-[0.24em]">{macro.label}</p>
+              <div className="mt-1.5 flex flex-col gap-0.5 xl:mt-2.5 xl:flex-row xl:items-end xl:justify-between xl:gap-2">
+                <span className="font-data text-sm font-semibold text-foreground xl:text-lg">
+                  {macro.consumed}
+                  {' '}
+                  {macro.suffix}
+                </span>
+                <span className="text-[10px] text-muted-foreground xl:text-[11px]">
+                  / {macro.target > 0 ? `${macro.target} ${macro.suffix}` : 'No target'}
+                </span>
+              </div>
+              <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted/70 xl:mt-2.5">
+                <motion.div
+                  className="h-full rounded-full bg-primary"
+                  initial={{ width: 0 }}
+                  animate={{ width: `${pct}%` }}
+                  transition={{ duration: 0.5, ease: [0.22, 0.61, 0.36, 1] }}
+                />
+              </div>
+              <p className="mt-1 text-[10px] text-muted-foreground xl:mt-1.5 xl:text-[11px]">
+                {macro.target > 0 ? `${remaining} ${macro.suffix} remaining` : `${pct}% of goal`}
+              </p>
             </div>
-            <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-muted/70">
-              <motion.div
-                className="h-full rounded-full bg-primary"
-                initial={{ width: 0 }}
-                animate={{ width: `${pct}%` }}
-                transition={{ duration: 0.5, ease: [0.22, 0.61, 0.36, 1] }}
-              />
-            </div>
-            <p className="mt-1.5 text-[11px] text-muted-foreground">
-              {macro.target > 0 ? `${remaining} ${macro.suffix} remaining` : `${pct}% of goal`}
-            </p>
-          </div>
-        )
-      })}
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -434,6 +437,8 @@ function MealTimelineSection({
   meals,
   expandedMeals,
   setExpandedMeals,
+  sectionExpanded,
+  toggleSectionExpanded,
   openAdd,
   openEdit,
   handleDeleteMeal,
@@ -443,13 +448,15 @@ function MealTimelineSection({
   meals: MealLogEntry[]
   expandedMeals: Record<string, boolean>
   setExpandedMeals: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
+  sectionExpanded: boolean
+  toggleSectionExpanded: () => void
   openAdd: (mealType?: MealType) => void
   openEdit: (meal: MealLogEntry) => void
   handleDeleteMeal: (mealId: string) => void
   user: {
     calorie_target?: number
     protein_target_g?: number
-    carbs_target_g?: number
+    carb_target_g?: number
     fat_target_g?: number
   }
 }) {
@@ -467,9 +474,26 @@ function MealTimelineSection({
   return (
     <section className="space-y-2.5">
       <div className={`rounded-[1.25rem] border bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.02))] p-3.5 shadow-[0_14px_34px_-32px_rgba(0,0,0,0.6)] ${theme.border}`}>
+        <button
+          type="button"
+          onClick={toggleSectionExpanded}
+          className="flex w-full items-center justify-between gap-3 pb-2 text-left sm:hidden"
+        >
+          <div className="min-w-0">
+            <h3 className="text-lg font-semibold tracking-tight text-foreground">{mealTypeLabel(mealType)}</h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {meals.length > 0
+                ? `${totals.calories} kcal · ${fmtMacro(totals.protein_g)} g protein · ${meals.length} ${meals.length === 1 ? 'entry' : 'entries'}`
+                : theme.hint}
+            </p>
+          </div>
+          <ChevronDown className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${sectionExpanded ? 'rotate-180' : ''}`} />
+        </button>
+
+        <div className={sectionExpanded ? 'block' : 'hidden sm:block'}>
         <div className="flex flex-col gap-2.5 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-2">
-              <div>
+              <div className="hidden sm:block">
                 <h3 className="text-lg font-semibold tracking-tight text-foreground">{mealTypeLabel(mealType)}</h3>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -509,14 +533,14 @@ function MealTimelineSection({
                   {
                     label: 'Carbs',
                     value: meal.macros.carbs_g,
-                    target: user.carbs_target_g || 0,
+                    target: user.carb_target_g || 0,
                   },
                   {
                     label: 'Fat',
                     value: meal.macros.fat_g,
                     target: user.fat_target_g || 0,
                   },
-                ]
+                ].filter((macro) => macro.target > 0)
 
                 const mealItems = meal.recipe
                   ? meal.recipe.ingredients.map((ingredient, index) => ({
@@ -572,7 +596,7 @@ function MealTimelineSection({
                                   <motion.div
                                     className="h-full rounded-full bg-primary"
                                     initial={{ width: 0 }}
-                                    animate={{ width: `${progressValue(macro.value, macro.target || macro.value || 1)}%` }}
+                                    animate={{ width: `${progressValue(macro.value, macro.target)}%` }}
                                     transition={{ duration: 0.35 }}
                                   />
                                 </div>
@@ -657,6 +681,7 @@ function MealTimelineSection({
               })}
             </div>
           )}
+        </div>
         </div>
     </section>
   )
@@ -3668,6 +3693,13 @@ export default function MealsPage() {
   const [customIngUnit, setCustomIngUnit] = useState('g')
   const [addMealMode, setAddMealMode] = useState<'recipe' | 'saved' | 'custom'>('saved')
   const [expandedMeals, setExpandedMeals] = useState<Record<string, boolean>>({})
+  const [expandedMealSections, setExpandedMealSections] = useState<Record<MealType, boolean>>({
+    breakfast: true,
+    lunch: false,
+    dinner: false,
+    snack: false,
+    drink: false,
+  })
   // Planner filter state
   const [plannerFiltersOpen, setPlannerFiltersOpen] = useState(false)
   const [plannerMealTypeFilter, setPlannerMealTypeFilter] = useState<string>('all')
@@ -4265,6 +4297,8 @@ export default function MealsPage() {
               meals={todayMealsByType[mealType]}
               expandedMeals={expandedMeals}
               setExpandedMeals={setExpandedMeals}
+              sectionExpanded={expandedMealSections[mealType]}
+              toggleSectionExpanded={() => setExpandedMealSections((prev) => ({ ...prev, [mealType]: !prev[mealType] }))}
               openAdd={openAdd}
               openEdit={openEdit}
               handleDeleteMeal={handleDeleteMeal}

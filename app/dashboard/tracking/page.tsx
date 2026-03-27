@@ -3,15 +3,16 @@
 import React from 'react'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { motion } from 'framer-motion'
 import { format, subDays } from 'date-fns'
 import {
-  TrendingDown, TrendingUp, Scale, BarChart3, Plus, Download,
-  Target, Calendar, Dumbbell, Flame, Zap, Trophy, Edit, Trash2,
+  Scale, Plus, Download,
+  Target, Dumbbell, Flame, Zap, Trophy, Edit, Trash2, ChevronRight,
 } from 'lucide-react'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  LineChart, Line, ReferenceLine, BarChart, Bar, Legend,
+  LineChart, Line, ReferenceLine, BarChart, Bar,
 } from 'recharts'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -23,6 +24,151 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { useAppStore } from '@/store/useAppStore'
 import { formatWeightForInput, formatWeightValue, getTodayISO, getWeightUnitLabel, kgToLbs, lbsToKg, percentage } from '@/lib/utils'
 import { toast } from 'sonner'
+
+function TrackingEmptyState({
+  icon: Icon,
+  title,
+  body,
+  children,
+}: {
+  icon: React.ComponentType<{ className?: string }>
+  title: string
+  body: string
+  children?: React.ReactNode
+}) {
+  return (
+    <div className="flex h-[220px] flex-col items-center justify-center rounded-2xl border border-dashed border-border/70 bg-muted/20 px-6 text-center">
+      <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-background/80">
+        <Icon className="h-5 w-5 text-muted-foreground/60" />
+      </div>
+      <p className="text-sm font-medium text-foreground">{title}</p>
+      <p className="mt-2 max-w-xs text-xs leading-5 text-muted-foreground">{body}</p>
+      {children ? <div className="mt-4">{children}</div> : null}
+    </div>
+  )
+}
+
+type ConnectedTrackingRecommendation = {
+  title: string
+  body: string
+  supportingPoints: string[]
+  status: string
+  actionLabel: string
+  actionHref: string
+}
+
+function buildTrackingRecommendation(args: {
+  fitnessGoal: string
+  avgCalories: number
+  avgProtein: number
+  calorieTarget: number
+  proteinTarget: number
+  workoutsThisWeek: number
+  weightDeltaKg: number | null
+  loggedNutritionDays: number
+}) : ConnectedTrackingRecommendation {
+  const {
+    fitnessGoal,
+    avgCalories,
+    avgProtein,
+    calorieTarget,
+    proteinTarget,
+    workoutsThisWeek,
+    weightDeltaKg,
+    loggedNutritionDays,
+  } = args
+
+  if (loggedNutritionDays < 4) {
+    return {
+      title: 'Build a better signal first',
+      body: 'You need a few more logged nutrition days before Rivora can confidently connect intake to your weight trend.',
+      supportingPoints: [
+        'Log meals on at least 4 separate days',
+        'Add one or two weigh-ins this week',
+        'Then revisit the trend instead of changing targets early',
+      ],
+      status: 'Needs more data',
+      actionLabel: 'Log Meals',
+      actionHref: '/dashboard/meals',
+    }
+  }
+
+  const calorieGap = calorieTarget - avgCalories
+  const proteinGap = proteinTarget - avgProtein
+
+  if (fitnessGoal === 'fat_loss' && weightDeltaKg != null && weightDeltaKg >= -0.15 && calorieGap < 200) {
+    return {
+      title: 'Your cut looks flatter than expected',
+      body: 'Weight is not moving down much even though calories are fairly close to target. The next move is consistency, not a huge calorie change.',
+      supportingPoints: [
+        'Keep intake tighter across the next 7 days',
+        'Watch for untracked extras and weekend drift',
+        'Recheck the trend before lowering calories further',
+      ],
+      status: 'Stall risk',
+      actionLabel: 'Review Meals',
+      actionHref: '/dashboard/meals',
+    }
+  }
+
+  if (fitnessGoal === 'muscle_gain' && weightDeltaKg != null && weightDeltaKg <= 0.05 && calorieGap > 150) {
+    return {
+      title: 'You probably need more consistent intake',
+      body: 'Your recent weight trend is flat while average calories are still below target. The problem looks more like under-eating than training.',
+      supportingPoints: [
+        'Add one repeatable meal or shake daily',
+        'Bring average intake closer to target before making other changes',
+        'Let the scale trend update for 1 to 2 weeks',
+      ],
+      status: 'Under target',
+      actionLabel: 'Open Meals',
+      actionHref: '/dashboard/meals',
+    }
+  }
+
+  if (proteinGap > 20) {
+    return {
+      title: 'Protein is the cleanest lever right now',
+      body: `You are averaging about ${Math.round(avgProtein)} g against a ${proteinTarget} g goal. Bringing protein up is the most direct improvement available right now.`,
+      supportingPoints: [
+        'Aim to close the gap with one extra high-protein meal',
+        'Prioritize protein earlier in the day',
+        'Keep calories steady while you fix the macro split',
+      ],
+      status: 'Protein low',
+      actionLabel: 'Open Meals',
+      actionHref: '/dashboard/meals',
+    }
+  }
+
+  if (workoutsThisWeek < 3 && fitnessGoal !== 'maintenance') {
+    return {
+      title: 'Training consistency is the bottleneck',
+      body: `You have ${workoutsThisWeek} logged workout${workoutsThisWeek === 1 ? '' : 's'} this week. Right now, getting another session in will probably matter more than adjusting food.`,
+      supportingPoints: [
+        'Keep meals reasonably on target',
+        'Log one more workout before making nutrition changes',
+        'Use next week to judge whether progress re-accelerates',
+      ],
+      status: 'Training low',
+      actionLabel: 'Log Workout',
+      actionHref: '/dashboard/workouts',
+    }
+  }
+
+  return {
+    title: 'Your data is lining up well',
+    body: 'Nutrition, training, and scale trend look coherent enough that you do not need a major adjustment right now.',
+    supportingPoints: [
+      'Keep your current calorie target steady',
+      'Protect protein and workout consistency',
+      'Judge progress from the next 1 to 2 weeks of trend data',
+    ],
+    status: 'On track',
+    actionLabel: 'Review Tracking',
+    actionHref: '/dashboard/tracking',
+  }
+}
 
 function CustomTooltip({ active, payload, label, unitSystem }: any) {
   if (!active || !payload?.length) return null
@@ -45,7 +191,7 @@ function LogWeightDialog() {
   const [weight, setWeight] = useState('')
   const [bodyFat, setBodyFat] = useState('')
   const [notes, setNotes] = useState('')
-  const { addWeightEntry, removeWeightEntry, user } = useAppStore()
+  const { addWeightEntry, user } = useAppStore()
 
   const handleLog = () => {
     if (!weight || isNaN(Number(weight))) {
@@ -291,6 +437,34 @@ export default function TrackingPage() {
     }
   }).filter(Boolean) as { date: string; calories: number; protein: number; target: number; protein_target: number }[]
 
+  const workoutsThisWeek = workoutLogs.filter((workout) => {
+    const workoutDate = new Date(workout.date)
+    return (now.getTime() - workoutDate.getTime()) < 7 * 24 * 60 * 60 * 1000
+  }).length
+
+  const avgCalories = calorieHistory.length > 0
+    ? calorieHistory.reduce((sum, day) => sum + day.calories, 0) / calorieHistory.length
+    : 0
+  const avgProtein = calorieHistory.length > 0
+    ? calorieHistory.reduce((sum, day) => sum + day.protein, 0) / calorieHistory.length
+    : 0
+
+  const recentWeightWindow = filteredWeight.slice(-14)
+  const recentWeightDeltaKg = recentWeightWindow.length >= 2
+    ? recentWeightWindow[recentWeightWindow.length - 1].weight_kg - recentWeightWindow[0].weight_kg
+    : null
+
+  const connectedRecommendation = buildTrackingRecommendation({
+    fitnessGoal: user.fitness_goal,
+    avgCalories,
+    avgProtein,
+    calorieTarget: user.calorie_target,
+    proteinTarget: user.protein_target_g,
+    workoutsThisWeek,
+    weightDeltaKg: recentWeightDeltaKg,
+    loggedNutritionDays: calorieHistory.length,
+  })
+
   // Personal records — derived from actual logged workout sets
   const prMap = new Map<string, { weight: number; date: string }>()
   for (const log of workoutLogs) {
@@ -367,10 +541,7 @@ export default function TrackingPage() {
           {
             label: 'Workouts Logged',
             value: workoutLogs.length.toString(),
-            sub: `${workoutLogs.filter(w => {
-              const d = new Date(w.date)
-              return (now.getTime() - d.getTime()) < 7 * 24 * 60 * 60 * 1000
-            }).length} this week`,
+            sub: `${workoutsThisWeek} this week`,
             icon: Dumbbell,
           },
           {
@@ -406,6 +577,76 @@ export default function TrackingPage() {
           )
         })}
       </div>
+
+      <Card className="border-primary/15 bg-[linear-gradient(135deg,rgba(16,185,129,0.07),rgba(255,255,255,0.02))]">
+        <CardContent className="p-5">
+          <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+            <div className="max-w-2xl">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-primary">Connected Recommendation</p>
+                <Badge variant="outline" className="border-primary/20 bg-background/70 text-[10px]">
+                  {connectedRecommendation.status}
+                </Badge>
+              </div>
+              <h3 className="mt-2 text-lg font-semibold tracking-tight text-foreground">{connectedRecommendation.title}</h3>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">{connectedRecommendation.body}</p>
+              <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                {connectedRecommendation.supportingPoints.map((point) => (
+                  <div key={point} className="rounded-xl border border-border/60 bg-background/70 px-3 py-3 text-sm text-muted-foreground">
+                    {point}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="xl:w-[280px]">
+              <div className="rounded-2xl border border-border/60 bg-background/80 p-4">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Read From Your Data</p>
+                <div className="mt-3 space-y-3">
+                  <div>
+                    <div className="mb-1 flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">Calorie adherence</span>
+                      <span className="font-medium">{percentage(Math.round(avgCalories), user.calorie_target)}%</span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-muted">
+                      <div className="h-full rounded-full bg-primary transition-all duration-300" style={{ width: `${Math.min(percentage(Math.round(avgCalories), user.calorie_target), 100)}%` }} />
+                    </div>
+                  </div>
+                  <div>
+                    <div className="mb-1 flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">Protein adherence</span>
+                      <span className="font-medium">{percentage(Math.round(avgProtein), user.protein_target_g)}%</span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-muted">
+                      <div className="h-full rounded-full bg-primary/80 transition-all duration-300" style={{ width: `${Math.min(percentage(Math.round(avgProtein), user.protein_target_g), 100)}%` }} />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5">
+                      <p className="text-muted-foreground">Workouts</p>
+                      <p className="mt-1 font-medium text-foreground">{workoutsThisWeek} this week</p>
+                    </div>
+                    <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5">
+                      <p className="text-muted-foreground">Weight trend</p>
+                      <p className="mt-1 font-medium text-foreground">
+                        {recentWeightDeltaKg == null
+                          ? 'Not enough data'
+                          : `${recentWeightDeltaKg < 0 ? 'Down' : 'Up'} ${formatWeightValue(Math.abs(recentWeightDeltaKg), unitSystem)}`}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <Button asChild variant="outline" size="sm" className="mt-4 w-full gap-1.5">
+                  <Link href={connectedRecommendation.actionHref}>
+                    {connectedRecommendation.actionLabel}
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </Link>
+                </Button>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Charts */}
       <Tabs defaultValue="weight">
@@ -444,7 +685,7 @@ export default function TrackingPage() {
               <CardContent>
                 <div className="w-full">
                   <ResponsiveContainer width="100%" height={220}>
-                    <AreaChart data={weightChartData} margin={{ top: 6, right: 10, left: 0, bottom: 0 }}>
+                    <AreaChart data={weightChartData} margin={{ top: 6, right: 18, left: 0, bottom: 0 }}>
                         <defs>
                           <linearGradient id="wt-grad" x1="0" y1="0" x2="0" y2="1">
                             <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
@@ -452,7 +693,12 @@ export default function TrackingPage() {
                           </linearGradient>
                         </defs>
                         <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="date" tick={{ fontSize: 10 }} interval={Math.floor(weightChartData.length / 6)} />
+                        <XAxis
+                          dataKey="date"
+                          tick={{ fontSize: 10 }}
+                          interval={Math.floor(weightChartData.length / 6)}
+                          padding={{ left: 4, right: 16 }}
+                        />
                         <YAxis
                           tick={{ fontSize: 10 }}
                           domain={weightAxisDomain}
@@ -542,11 +788,15 @@ export default function TrackingPage() {
               </CardHeader>
               <CardContent>
                 {calorieHistory.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-[220px] text-center">
-                    <Flame className="w-10 h-10 mb-3 opacity-20" />
-                    <p className="text-sm font-medium">No nutrition data yet</p>
-                    <p className="text-xs text-muted-foreground mt-1">Log meals and your calorie history will appear here.</p>
-                  </div>
+                  <TrackingEmptyState
+                    icon={Flame}
+                    title="No nutrition data yet"
+                    body="Log meals for a few days and this chart will turn into a real intake trend against your target."
+                  >
+                    <Button asChild size="sm" variant="outline" className="gap-1.5 text-xs">
+                      <a href="/dashboard/meals">Open Meals</a>
+                    </Button>
+                  </TrackingEmptyState>
                 ) : (
                   <div
                     className="overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden -mx-2 px-2"
@@ -575,11 +825,15 @@ export default function TrackingPage() {
               </CardHeader>
               <CardContent>
                 {calorieHistory.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-[220px] text-center">
-                    <Zap className="w-10 h-10 mb-3 opacity-20" />
-                    <p className="text-sm font-medium">No protein data yet</p>
-                    <p className="text-xs text-muted-foreground mt-1">Log meals and your protein history will appear here.</p>
-                  </div>
+                  <TrackingEmptyState
+                    icon={Zap}
+                    title="No protein data yet"
+                    body="Once you start logging meals, Rivora will show how closely your protein intake matches your target."
+                  >
+                    <Button asChild size="sm" variant="outline" className="gap-1.5 text-xs">
+                      <a href="/dashboard/meals">Start Logging Meals</a>
+                    </Button>
+                  </TrackingEmptyState>
                 ) : (
                   <div
                     className="overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden -mx-2 px-2"
@@ -612,11 +866,15 @@ export default function TrackingPage() {
             </CardHeader>
             <CardContent>
               {prs.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12 text-center">
-                  <Trophy className="w-10 h-10 mb-3 opacity-20" />
-                  <p className="text-sm font-medium">No personal records yet</p>
-                  <p className="text-xs text-muted-foreground mt-1">Log workouts with weighted sets and your PRs will appear here automatically.</p>
-                </div>
+                <TrackingEmptyState
+                  icon={Trophy}
+                  title="No personal records yet"
+                  body="Log weighted workouts and Rivora will surface your best lifts here automatically."
+                >
+                  <Button asChild size="sm" variant="outline" className="gap-1.5 text-xs">
+                    <a href="/dashboard/workouts">Open Workouts</a>
+                  </Button>
+                </TrackingEmptyState>
               ) : (
                 <div className="space-y-3">
                   {prs.map((pr, i) => (
