@@ -345,6 +345,7 @@ function createWorkoutExerciseFromLibrary(item: ExerciseLibraryItem): EditableWo
     sets: [
       {
         set_number: 1,
+        set_type: 'standard',
         reps: item.default_reps,
         weight_kg: 0,
         ...getDefaultSetMetrics(exercise),
@@ -369,9 +370,28 @@ function createCustomExercise(name: string): EditableWorkoutExercise {
       set_metric: 'reps',
     },
     sets: [
-      { set_number: 1, reps: 10, weight_kg: 0, rest_seconds: 60 },
+      { set_number: 1, set_type: 'standard', reps: 10, weight_kg: 0, rest_seconds: 60 },
     ],
   }
+}
+
+function getSetDisplayName(set: Pick<WorkoutSet, 'set_number' | 'set_type' | 'drop_from_set_number'>) {
+  if (set.set_type === 'drop') {
+    return `Drop ${set.drop_from_set_number ?? Math.max(1, set.set_number - 1)}`
+  }
+  return `Set ${set.set_number}`
+}
+
+function getShortSetDisplayName(set: Pick<WorkoutSet, 'set_number' | 'set_type' | 'drop_from_set_number'>) {
+  if (set.set_type === 'drop') {
+    return `DS ${set.drop_from_set_number ?? Math.max(1, set.set_number - 1)}`
+  }
+  return String(set.set_number)
+}
+
+function getDropSetWeight(weightKg?: number) {
+  if (!weightKg || weightKg <= 0) return 0
+  return Math.max(0, Math.round(weightKg * 0.8 * 10) / 10)
 }
 
 function createActiveExercisesFromWorkout(workout: Workout): ActiveExercise[] {
@@ -379,6 +399,7 @@ function createActiveExercisesFromWorkout(workout: Workout): ActiveExercise[] {
     exercise: exercise.exercise,
     sets: exercise.sets.map((set) => ({
       ...set,
+      set_type: set.set_type || 'standard',
       completed: false,
       actual_reps: set.reps,
       actual_weight: set.weight_kg || 0,
@@ -397,6 +418,8 @@ function normalizeActiveExercisesForWorkout(exercises: ActiveExercise[]): Workou
     exercise: exercise.exercise,
     sets: exercise.sets.map((set, index) => ({
       set_number: index + 1,
+      set_type: set.set_type || 'standard',
+      drop_from_set_number: set.drop_from_set_number,
       reps: Math.max(1, Number(set.actual_reps ?? set.reps) || 1),
       weight_kg: Math.max(0, Number(set.actual_weight ?? set.weight_kg ?? 0) || 0),
       speed_mph: set.actual_speed_mph,
@@ -922,12 +945,39 @@ function WorkoutBuilderModal({
             ...exercise.sets,
             {
               set_number: exercise.sets.length + 1,
+              set_type: 'standard',
               reps: lastSet?.reps ?? 10,
               weight_kg: lastSet?.weight_kg ?? 0,
               speed_mph: lastSet?.speed_mph,
               incline_pct: lastSet?.incline_pct,
               interval_duration_sec: lastSet?.interval_duration_sec,
               rest_seconds: lastSet?.rest_seconds ?? 60,
+            },
+          ],
+        }
+      })
+    )
+  }
+
+  const addDropSetToExercise = (instanceId: string) => {
+    setExercises((current) =>
+      current.map((exercise) => {
+        if (exercise.instanceId !== instanceId) return exercise
+        const lastSet = exercise.sets[exercise.sets.length - 1]
+        return {
+          ...exercise,
+          sets: [
+            ...exercise.sets,
+            {
+              set_number: exercise.sets.length + 1,
+              set_type: 'drop',
+              drop_from_set_number: lastSet?.set_number ?? exercise.sets.length,
+              reps: lastSet?.reps ?? 10,
+              weight_kg: getDropSetWeight(lastSet?.weight_kg),
+              speed_mph: lastSet?.speed_mph,
+              incline_pct: lastSet?.incline_pct,
+              interval_duration_sec: lastSet?.interval_duration_sec,
+              rest_seconds: 0,
             },
           ],
         }
@@ -978,6 +1028,8 @@ function WorkoutBuilderModal({
       exercise: exercise.exercise,
       sets: exercise.sets.map((set, index) => ({
         set_number: index + 1,
+        set_type: set.set_type || 'standard',
+        drop_from_set_number: set.drop_from_set_number,
         reps: Math.max(1, Number(set.reps) || 1),
         weight_kg: Math.max(0, Number(set.weight_kg) || 0),
         speed_mph: set.speed_mph !== undefined ? Math.max(0, Number(set.speed_mph) || 0) : undefined,
@@ -1242,7 +1294,7 @@ function WorkoutBuilderModal({
                           const restUnit = getDurationUnit(restUnitKey)
                           return (
                             <>
-                        <div className="flex items-center px-3 text-sm font-medium text-muted-foreground">Rnd {set.set_number}</div>
+                        <div className="flex items-center px-3 text-sm font-medium text-muted-foreground">{getSetDisplayName(set)}</div>
                         <Input
                           type="number"
                           min={1}
@@ -1302,7 +1354,7 @@ function WorkoutBuilderModal({
                     ) : inputMode === 'treadmill' ? (
                       <div key={`${exercise.instanceId}-${setIndex}`} className="grid grid-cols-[80px_1fr_1fr_1fr_1fr_auto] gap-2">
                         <div className="flex items-center px-3 text-sm font-medium text-muted-foreground">
-                          Set {set.set_number}
+                          {getSetDisplayName(set)}
                         </div>
                         <Input
                           type="number"
@@ -1334,7 +1386,7 @@ function WorkoutBuilderModal({
                       </div>
                     ) : inputMode === 'run_walk' ? (
                       <div key={`${exercise.instanceId}-${setIndex}`} className="grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2">
-                        <div className="flex items-center px-3 text-sm font-medium text-muted-foreground">Set {set.set_number}</div>
+                        <div className="flex items-center px-3 text-sm font-medium text-muted-foreground">{getSetDisplayName(set)}</div>
                         <Input type="number" value={formatNumericInput(set.reps)} onChange={(e) => updateSetField(exercise.instanceId, setIndex, 'reps', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Minutes" />
                         <Input type="number" value={formatNumericInput(set.speed_mph)} onChange={(e) => updateSetField(exercise.instanceId, setIndex, 'speed_mph', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Speed MPH" />
                         <Input type="number" value={formatNumericInput(set.rest_seconds)} onChange={(e) => updateSetField(exercise.instanceId, setIndex, 'rest_seconds', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Rest sec" />
@@ -1342,7 +1394,7 @@ function WorkoutBuilderModal({
                       </div>
                     ) : inputMode === 'bike' || inputMode === 'rower' ? (
                       <div key={`${exercise.instanceId}-${setIndex}`} className="grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2">
-                        <div className="flex items-center px-3 text-sm font-medium text-muted-foreground">Set {set.set_number}</div>
+                        <div className="flex items-center px-3 text-sm font-medium text-muted-foreground">{getSetDisplayName(set)}</div>
                         <Input type="number" value={formatNumericInput(set.reps)} onChange={(e) => updateSetField(exercise.instanceId, setIndex, 'reps', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Minutes" />
                         <Input type="number" value={formatNumericInput(set.watts)} onChange={(e) => updateSetField(exercise.instanceId, setIndex, 'watts', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Watts" />
                         <Input type="number" value={formatNumericInput(set.rest_seconds)} onChange={(e) => updateSetField(exercise.instanceId, setIndex, 'rest_seconds', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Rest sec" />
@@ -1350,7 +1402,7 @@ function WorkoutBuilderModal({
                       </div>
                     ) : inputMode === 'time_only' ? (
                       <div key={`${exercise.instanceId}-${setIndex}`} className="grid grid-cols-[80px_1fr_1fr_auto] gap-2">
-                        <div className="flex items-center px-3 text-sm font-medium text-muted-foreground">Set {set.set_number}</div>
+                        <div className="flex items-center px-3 text-sm font-medium text-muted-foreground">{getSetDisplayName(set)}</div>
                         <Input
                           type="number"
                           min={0}
@@ -1369,7 +1421,7 @@ function WorkoutBuilderModal({
                       </div>
                     ) : inputMode === 'level_cardio' || inputMode === 'basic_cardio' ? (
                       <div key={`${exercise.instanceId}-${setIndex}`} className="grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2">
-                        <div className="flex items-center px-3 text-sm font-medium text-muted-foreground">Set {set.set_number}</div>
+                        <div className="flex items-center px-3 text-sm font-medium text-muted-foreground">{getSetDisplayName(set)}</div>
                         <Input type="number" value={formatNumericInput(set.reps)} onChange={(e) => updateSetField(exercise.instanceId, setIndex, 'reps', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Minutes" />
                         <Input type="number" value={formatNumericInput(set.machine_level)} onChange={(e) => updateSetField(exercise.instanceId, setIndex, 'machine_level', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Level" />
                         <Input type="number" value={formatNumericInput(set.rest_seconds)} onChange={(e) => updateSetField(exercise.instanceId, setIndex, 'rest_seconds', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Rest sec" />
@@ -1378,7 +1430,7 @@ function WorkoutBuilderModal({
                     ) : (
                       <div key={`${exercise.instanceId}-${setIndex}`} className="grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2">
                         <div className="flex items-center px-3 text-sm font-medium text-muted-foreground">
-                          Set {set.set_number}
+                          {getSetDisplayName(set)}
                         </div>
                         <Input
                           type="number"
@@ -1406,10 +1458,18 @@ function WorkoutBuilderModal({
                   ))}
                 </div>
 
-                <Button type="button" size="sm" variant="outline" className="mt-3" onClick={() => addSetToExercise(exercise.instanceId)}>
-                  <Plus className="mr-1 h-3.5 w-3.5" />
-                  {inputMode === 'interval' ? 'Add round' : 'Add set'}
-                </Button>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button type="button" size="sm" variant="outline" onClick={() => addSetToExercise(exercise.instanceId)}>
+                    <Plus className="mr-1 h-3.5 w-3.5" />
+                    {inputMode === 'interval' ? 'Add round' : 'Add set'}
+                  </Button>
+                  {inputMode === 'strength' && (
+                    <Button type="button" size="sm" variant="outline" onClick={() => addDropSetToExercise(exercise.instanceId)}>
+                      <Plus className="mr-1 h-3.5 w-3.5" />
+                      Add drop set
+                    </Button>
+                  )}
+                </div>
               </div>
             })}
           </div>
@@ -1609,6 +1669,7 @@ function ActiveWorkoutModal({
             ...exercise.sets,
             {
               set_number: exercise.sets.length + 1,
+              set_type: 'standard',
               reps: lastSet?.reps ?? 10,
               weight_kg: lastSet?.weight_kg ?? 0,
               speed_mph: lastSet?.speed_mph,
@@ -1621,6 +1682,47 @@ function ActiveWorkoutModal({
               completed: false,
               actual_reps: lastSet?.actual_reps ?? lastSet?.reps ?? 10,
               actual_weight: lastSet?.actual_weight ?? lastSet?.weight_kg ?? 0,
+              actual_speed_mph: lastSet?.actual_speed_mph ?? lastSet?.speed_mph,
+              actual_incline_pct: lastSet?.actual_incline_pct ?? lastSet?.incline_pct,
+              actual_machine_level: lastSet?.actual_machine_level ?? lastSet?.machine_level,
+              actual_resistance_level: lastSet?.actual_resistance_level ?? lastSet?.resistance_level,
+              actual_watts: lastSet?.actual_watts ?? lastSet?.watts,
+              actual_cadence_rpm: lastSet?.actual_cadence_rpm ?? lastSet?.cadence_rpm,
+            },
+          ],
+        }
+      })
+    )
+  }
+
+  const addDropSetToExercise = (exerciseIndex: number) => {
+    setExercises((current) =>
+      current.map((exercise, currentExerciseIndex) => {
+        if (currentExerciseIndex !== exerciseIndex) return exercise
+        const lastSet = exercise.sets[exercise.sets.length - 1]
+        const sourceSetNumber = lastSet?.set_number ?? exercise.sets.length
+        const baseWeight = lastSet?.actual_weight ?? lastSet?.weight_kg ?? 0
+        const dropWeight = getDropSetWeight(baseWeight)
+        return {
+          ...exercise,
+          sets: [
+            ...exercise.sets,
+            {
+              set_number: exercise.sets.length + 1,
+              set_type: 'drop',
+              drop_from_set_number: sourceSetNumber,
+              reps: lastSet?.reps ?? 10,
+              weight_kg: dropWeight,
+              speed_mph: lastSet?.speed_mph,
+              incline_pct: lastSet?.incline_pct,
+              machine_level: lastSet?.machine_level,
+              resistance_level: lastSet?.resistance_level,
+              watts: lastSet?.watts,
+              cadence_rpm: lastSet?.cadence_rpm,
+              rest_seconds: 0,
+              completed: false,
+              actual_reps: lastSet?.actual_reps ?? lastSet?.reps ?? 10,
+              actual_weight: dropWeight,
               actual_speed_mph: lastSet?.actual_speed_mph ?? lastSet?.speed_mph,
               actual_incline_pct: lastSet?.actual_incline_pct ?? lastSet?.incline_pct,
               actual_machine_level: lastSet?.actual_machine_level ?? lastSet?.machine_level,
@@ -2018,8 +2120,8 @@ function ActiveWorkoutModal({
                 )}
                 {exercise.sets.map((set, setIndex) => (
                   inputMode === 'treadmill' ? (
-                    <div key={`${exercise.exercise.id}-${setIndex}`} className={`grid grid-cols-[1.25rem_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_1.75rem_1.75rem] items-center gap-1.5 rounded-xl border px-3 py-2 sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto_auto] sm:gap-2 ${set.completed ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-border/50 bg-muted/10'}`}>
-                      <span className="font-data text-xs">{set.set_number}</span>
+                    <div key={`${exercise.exercise.id}-${setIndex}`} className={`grid grid-cols-[2.75rem_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_1.75rem_1.75rem] items-center gap-1.5 rounded-xl border px-3 py-2 sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto_auto] sm:gap-2 ${set.completed ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-border/50 bg-muted/10'}`}>
+                      <span className="font-data text-xs">{getShortSetDisplayName(set)}</span>
                       <Input
                         type="number"
                         value={formatNumericInput(set.actual_speed_mph)}
@@ -2049,32 +2151,32 @@ function ActiveWorkoutModal({
                       </Button>
                     </div>
                   ) : inputMode === 'run_walk' ? (
-                    <div key={`${exercise.exercise.id}-${setIndex}`} className={`grid grid-cols-[1.25rem_minmax(0,1fr)_minmax(0,1fr)_1.75rem_1.75rem] items-center gap-1.5 rounded-xl border px-3 py-2 sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto_auto] sm:gap-2 ${set.completed ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-border/50 bg-muted/10'}`}>
-                      <span className="font-data text-xs">{set.set_number}</span>
+                    <div key={`${exercise.exercise.id}-${setIndex}`} className={`grid grid-cols-[2.75rem_minmax(0,1fr)_minmax(0,1fr)_1.75rem_1.75rem] items-center gap-1.5 rounded-xl border px-3 py-2 sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto_auto] sm:gap-2 ${set.completed ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-border/50 bg-muted/10'}`}>
+                      <span className="font-data text-xs">{getShortSetDisplayName(set)}</span>
                       <Input type="number" value={formatNumericInput(set.actual_speed_mph)} onChange={(e) => updateSet(exerciseIndex, setIndex, 'actual_speed_mph', e.target.value === '' ? undefined : Number(e.target.value))} disabled={set.completed} placeholder="Speed MPH" />
                       <Input type="number" value={formatNumericInput(set.actual_reps)} onChange={(e) => updateSet(exerciseIndex, setIndex, 'actual_reps', e.target.value === '' ? undefined : Number(e.target.value))} disabled={set.completed} placeholder="Minutes" />
                       <button type="button" className="justify-self-end sm:justify-self-auto" onClick={() => toggleSet(exerciseIndex, setIndex)}>{set.completed ? <CheckCircle className="h-5 w-5 text-emerald-400" /> : <Circle className="h-5 w-5 text-muted-foreground" />}</button>
                       <Button type="button" variant="ghost" size="icon-sm" className="justify-self-end sm:justify-self-auto" onClick={() => removeSetFromExercise(exerciseIndex, setIndex)} disabled={exercise.sets.length <= 1}><X className="h-3.5 w-3.5" /></Button>
                     </div>
                   ) : inputMode === 'bike' || inputMode === 'rower' ? (
-                    <div key={`${exercise.exercise.id}-${setIndex}`} className={`grid grid-cols-[1.25rem_minmax(0,1fr)_minmax(0,1fr)_1.75rem_1.75rem] items-center gap-1.5 rounded-xl border px-3 py-2 sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto_auto] sm:gap-2 ${set.completed ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-border/50 bg-muted/10'}`}>
-                      <span className="font-data text-xs">{set.set_number}</span>
+                    <div key={`${exercise.exercise.id}-${setIndex}`} className={`grid grid-cols-[2.75rem_minmax(0,1fr)_minmax(0,1fr)_1.75rem_1.75rem] items-center gap-1.5 rounded-xl border px-3 py-2 sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto_auto] sm:gap-2 ${set.completed ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-border/50 bg-muted/10'}`}>
+                      <span className="font-data text-xs">{getShortSetDisplayName(set)}</span>
                       <Input type="number" value={formatNumericInput(set.actual_watts)} onChange={(e) => updateSet(exerciseIndex, setIndex, 'actual_watts', e.target.value === '' ? undefined : Number(e.target.value))} disabled={set.completed} placeholder="Watts" />
                       <Input type="number" value={formatNumericInput(set.actual_reps)} onChange={(e) => updateSet(exerciseIndex, setIndex, 'actual_reps', e.target.value === '' ? undefined : Number(e.target.value))} disabled={set.completed} placeholder="Minutes" />
                       <button type="button" className="justify-self-end sm:justify-self-auto" onClick={() => toggleSet(exerciseIndex, setIndex)}>{set.completed ? <CheckCircle className="h-5 w-5 text-emerald-400" /> : <Circle className="h-5 w-5 text-muted-foreground" />}</button>
                       <Button type="button" variant="ghost" size="icon-sm" className="justify-self-end sm:justify-self-auto" onClick={() => removeSetFromExercise(exerciseIndex, setIndex)} disabled={exercise.sets.length <= 1}><X className="h-3.5 w-3.5" /></Button>
                     </div>
                   ) : inputMode === 'level_cardio' || inputMode === 'basic_cardio' ? (
-                    <div key={`${exercise.exercise.id}-${setIndex}`} className={`grid grid-cols-[1.25rem_minmax(0,1fr)_minmax(0,1fr)_1.75rem_1.75rem] items-center gap-1.5 rounded-xl border px-3 py-2 sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto_auto] sm:gap-2 ${set.completed ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-border/50 bg-muted/10'}`}>
-                      <span className="font-data text-xs">{set.set_number}</span>
+                    <div key={`${exercise.exercise.id}-${setIndex}`} className={`grid grid-cols-[2.75rem_minmax(0,1fr)_minmax(0,1fr)_1.75rem_1.75rem] items-center gap-1.5 rounded-xl border px-3 py-2 sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto_auto] sm:gap-2 ${set.completed ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-border/50 bg-muted/10'}`}>
+                      <span className="font-data text-xs">{getShortSetDisplayName(set)}</span>
                       <Input type="number" value={formatNumericInput(set.actual_machine_level)} onChange={(e) => updateSet(exerciseIndex, setIndex, 'actual_machine_level', e.target.value === '' ? undefined : Number(e.target.value))} disabled={set.completed} placeholder="Level" />
                       <Input type="number" value={formatNumericInput(set.actual_reps)} onChange={(e) => updateSet(exerciseIndex, setIndex, 'actual_reps', e.target.value === '' ? undefined : Number(e.target.value))} disabled={set.completed} placeholder="Minutes" />
                       <button type="button" className="justify-self-end sm:justify-self-auto" onClick={() => toggleSet(exerciseIndex, setIndex)}>{set.completed ? <CheckCircle className="h-5 w-5 text-emerald-400" /> : <Circle className="h-5 w-5 text-muted-foreground" />}</button>
                       <Button type="button" variant="ghost" size="icon-sm" className="justify-self-end sm:justify-self-auto" onClick={() => removeSetFromExercise(exerciseIndex, setIndex)} disabled={exercise.sets.length <= 1}><X className="h-3.5 w-3.5" /></Button>
                     </div>
                   ) : (
-                    <div key={`${exercise.exercise.id}-${setIndex}`} className={`grid grid-cols-[1.25rem_minmax(0,1fr)_minmax(0,1fr)_1.75rem_1.75rem] items-center gap-1.5 rounded-xl border px-3 py-2 sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto_auto] sm:gap-2 ${set.completed ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-border/50 bg-muted/10'}`}>
-                      <span className="font-data text-xs">{set.set_number}</span>
+                    <div key={`${exercise.exercise.id}-${setIndex}`} className={`grid grid-cols-[2.75rem_minmax(0,1fr)_minmax(0,1fr)_1.75rem_1.75rem] items-center gap-1.5 rounded-xl border px-3 py-2 sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto_auto] sm:gap-2 ${set.completed ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-border/50 bg-muted/10'}`}>
+                      <span className="font-data text-xs">{getShortSetDisplayName(set)}</span>
                       <Input
                         type="number"
                         value={formatWorkoutWeightInput(set.actual_weight, unitSystem)}
@@ -2104,10 +2206,18 @@ function ActiveWorkoutModal({
                 ))}
               </div>
 
-              <Button type="button" size="sm" variant="outline" className="mt-3" onClick={() => addSetToExercise(exerciseIndex)}>
-                <Plus className="mr-1 h-3.5 w-3.5" />
-                Add set
-              </Button>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button type="button" size="sm" variant="outline" onClick={() => addSetToExercise(exerciseIndex)}>
+                  <Plus className="mr-1 h-3.5 w-3.5" />
+                  Add set
+                </Button>
+                {inputMode === 'strength' && (
+                  <Button type="button" size="sm" variant="outline" onClick={() => addDropSetToExercise(exerciseIndex)}>
+                    <Plus className="mr-1 h-3.5 w-3.5" />
+                    Add drop set
+                  </Button>
+                )}
+              </div>
             </div>
           })}
         </div>
@@ -2583,6 +2693,7 @@ export default function WorkoutsPage() {
           ...current.sets,
           {
             set_number: current.sets.length + 1,
+            set_type: 'standard',
             reps: lastSet?.reps ?? 10,
             weight_kg: lastSet?.weight_kg ?? 0,
             speed_mph: lastSet?.speed_mph,
@@ -2592,6 +2703,33 @@ export default function WorkoutsPage() {
             watts: lastSet?.watts,
             cadence_rpm: lastSet?.cadence_rpm,
             rest_seconds: lastSet?.rest_seconds ?? 60,
+          },
+        ],
+      }
+    })
+  }
+
+  const addDropSetToPendingExercise = () => {
+    setPendingExercise((current) => {
+      if (!current) return current
+      const lastSet = current.sets[current.sets.length - 1]
+      return {
+        ...current,
+        sets: [
+          ...current.sets,
+          {
+            set_number: current.sets.length + 1,
+            set_type: 'drop',
+            drop_from_set_number: lastSet?.set_number ?? current.sets.length,
+            reps: lastSet?.reps ?? 10,
+            weight_kg: getDropSetWeight(lastSet?.weight_kg),
+            speed_mph: lastSet?.speed_mph,
+            incline_pct: lastSet?.incline_pct,
+            machine_level: lastSet?.machine_level,
+            resistance_level: lastSet?.resistance_level,
+            watts: lastSet?.watts,
+            cadence_rpm: lastSet?.cadence_rpm,
+            rest_seconds: 0,
           },
         ],
       }
@@ -2691,6 +2829,7 @@ export default function WorkoutsPage() {
             ...exercise.sets,
             {
               set_number: exercise.sets.length + 1,
+              set_type: 'standard',
               reps: lastSet?.reps ?? 10,
               weight_kg: lastSet?.weight_kg ?? 0,
               speed_mph: lastSet?.speed_mph,
@@ -2700,6 +2839,35 @@ export default function WorkoutsPage() {
               watts: lastSet?.watts,
               cadence_rpm: lastSet?.cadence_rpm,
               rest_seconds: lastSet?.rest_seconds ?? 60,
+            },
+          ],
+        }
+      })
+    )
+  }
+
+  const addDropSetToManualExercise = (instanceId: string) => {
+    setManualExercises((current) =>
+      current.map((exercise) => {
+        if (exercise.instanceId !== instanceId) return exercise
+        const lastSet = exercise.sets[exercise.sets.length - 1]
+        return {
+          ...exercise,
+          sets: [
+            ...exercise.sets,
+            {
+              set_number: exercise.sets.length + 1,
+              set_type: 'drop',
+              drop_from_set_number: lastSet?.set_number ?? exercise.sets.length,
+              reps: lastSet?.reps ?? 10,
+              weight_kg: getDropSetWeight(lastSet?.weight_kg),
+              speed_mph: lastSet?.speed_mph,
+              incline_pct: lastSet?.incline_pct,
+              machine_level: lastSet?.machine_level,
+              resistance_level: lastSet?.resistance_level,
+              watts: lastSet?.watts,
+              cadence_rpm: lastSet?.cadence_rpm,
+              rest_seconds: 0,
             },
           ],
         }
@@ -2790,6 +2958,8 @@ export default function WorkoutsPage() {
         exercise_name: exercise.exercise.name,
         sets: exercise.sets.map((set) => ({
           set_number: set.set_number,
+          set_type: set.set_type || 'standard',
+          drop_from_set_number: set.drop_from_set_number,
           target_reps: set.reps,
           actual_reps: set.reps,
           weight_kg: set.weight_kg || 0,
@@ -3193,7 +3363,7 @@ export default function WorkoutsPage() {
                                                           key={set.set_number}
                                                           className="grid grid-cols-3 items-center text-xs rounded-lg px-2 py-1.5 bg-background/60"
                                                         >
-                                                          <span className="text-muted-foreground font-medium">{set.set_number}</span>
+                                                          <span className="text-muted-foreground font-medium">{getSetDisplayName(set)}</span>
                                                           <span className="text-center font-data font-semibold tabular-nums">
                                                             {set.actual_reps ?? set.target_reps}
                                                           </span>
@@ -3457,7 +3627,7 @@ export default function WorkoutsPage() {
                       {pendingExercise.sets.map((set, setIndex) => (
                         pendingMode === 'interval' ? (
                           <div key={`${pendingExercise.instanceId}-${setIndex}`} className="grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2">
-                            <div className="flex items-center px-3 text-sm font-medium text-muted-foreground">Rnd {set.set_number}</div>
+                            <div className="flex items-center px-3 text-sm font-medium text-muted-foreground">{getSetDisplayName(set)}</div>
                             <Input type="number" min={1} value={formatNumericInput(set.reps)} onChange={(e) => updatePendingSetField(setIndex, 'reps', e.target.value === '' ? 1 : Math.max(1, Number(e.target.value)))} placeholder="# intervals" />
                             <Input type="number" min={1} value={formatNumericInput(set.interval_duration_sec)} onChange={(e) => updatePendingSetField(setIndex, 'interval_duration_sec', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Work sec" />
                             <Input type="number" min={0} value={formatNumericInput(set.rest_seconds)} onChange={(e) => updatePendingSetField(setIndex, 'rest_seconds', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Rest sec" />
@@ -3465,7 +3635,7 @@ export default function WorkoutsPage() {
                           </div>
                         ) : pendingMode === 'treadmill' ? (
                           <div key={`${pendingExercise.instanceId}-${setIndex}`} className="grid grid-cols-[80px_1fr_1fr_1fr_1fr_auto] gap-2">
-                            <div className="flex items-center px-3 text-sm font-medium text-muted-foreground">Set {set.set_number}</div>
+                            <div className="flex items-center px-3 text-sm font-medium text-muted-foreground">{getSetDisplayName(set)}</div>
                             <Input type="number" value={formatNumericInput(set.reps)} onChange={(e) => updatePendingSetField(setIndex, 'reps', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Minutes" />
                             <Input type="number" value={formatNumericInput(set.speed_mph)} onChange={(e) => updatePendingSetField(setIndex, 'speed_mph', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Speed MPH" />
                             <Input type="number" value={formatNumericInput(set.incline_pct)} onChange={(e) => updatePendingSetField(setIndex, 'incline_pct', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Incline %" />
@@ -3474,7 +3644,7 @@ export default function WorkoutsPage() {
                           </div>
                         ) : pendingMode === 'run_walk' ? (
                           <div key={`${pendingExercise.instanceId}-${setIndex}`} className="grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2">
-                            <div className="flex items-center px-3 text-sm font-medium text-muted-foreground">Set {set.set_number}</div>
+                            <div className="flex items-center px-3 text-sm font-medium text-muted-foreground">{getSetDisplayName(set)}</div>
                             <Input type="number" value={formatNumericInput(set.reps)} onChange={(e) => updatePendingSetField(setIndex, 'reps', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Minutes" />
                             <Input type="number" value={formatNumericInput(set.speed_mph)} onChange={(e) => updatePendingSetField(setIndex, 'speed_mph', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Speed MPH" />
                             <Input type="number" value={formatNumericInput(set.rest_seconds)} onChange={(e) => updatePendingSetField(setIndex, 'rest_seconds', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Rest sec" />
@@ -3482,7 +3652,7 @@ export default function WorkoutsPage() {
                           </div>
                         ) : pendingMode === 'bike' || pendingMode === 'rower' ? (
                           <div key={`${pendingExercise.instanceId}-${setIndex}`} className="grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2">
-                            <div className="flex items-center px-3 text-sm font-medium text-muted-foreground">Set {set.set_number}</div>
+                            <div className="flex items-center px-3 text-sm font-medium text-muted-foreground">{getSetDisplayName(set)}</div>
                             <Input type="number" value={formatNumericInput(set.reps)} onChange={(e) => updatePendingSetField(setIndex, 'reps', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Minutes" />
                             <Input type="number" value={formatNumericInput(set.watts)} onChange={(e) => updatePendingSetField(setIndex, 'watts', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Watts" />
                             <Input type="number" value={formatNumericInput(set.rest_seconds)} onChange={(e) => updatePendingSetField(setIndex, 'rest_seconds', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Rest sec" />
@@ -3490,7 +3660,7 @@ export default function WorkoutsPage() {
                           </div>
                         ) : pendingMode === 'level_cardio' || pendingMode === 'basic_cardio' ? (
                           <div key={`${pendingExercise.instanceId}-${setIndex}`} className="grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2">
-                            <div className="flex items-center px-3 text-sm font-medium text-muted-foreground">Set {set.set_number}</div>
+                            <div className="flex items-center px-3 text-sm font-medium text-muted-foreground">{getSetDisplayName(set)}</div>
                             <Input type="number" value={formatNumericInput(set.reps)} onChange={(e) => updatePendingSetField(setIndex, 'reps', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Minutes" />
                             <Input type="number" value={formatNumericInput(set.machine_level)} onChange={(e) => updatePendingSetField(setIndex, 'machine_level', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Level" />
                             <Input type="number" value={formatNumericInput(set.rest_seconds)} onChange={(e) => updatePendingSetField(setIndex, 'rest_seconds', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Rest sec" />
@@ -3498,7 +3668,7 @@ export default function WorkoutsPage() {
                           </div>
                         ) : (
                           <div key={`${pendingExercise.instanceId}-${setIndex}`} className="grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2">
-                            <div className="flex items-center px-3 text-sm font-medium text-muted-foreground">Set {set.set_number}</div>
+                            <div className="flex items-center px-3 text-sm font-medium text-muted-foreground">{getSetDisplayName(set)}</div>
                             <Input type="number" value={formatNumericInput(set.reps)} onChange={(e) => updatePendingSetField(setIndex, 'reps', e.target.value === '' ? 0 : Number(e.target.value))} placeholder={getSetMetricPlaceholder(pendingExercise.exercise, pendingExercise.exercise.name)} />
                             <Input type="number" value={formatWorkoutWeightInput(set.weight_kg, unitSystem)} onChange={(e) => updatePendingSetField(setIndex, 'weight_kg', parseWorkoutWeightInput(e.target.value, unitSystem))} placeholder={isAssistedPullExercise(pendingExercise.exercise) ? `Assistance (${weightUnitLabel})` : `Weight (${weightUnitLabel})`} />
                             <Input type="number" value={formatNumericInput(set.rest_seconds)} onChange={(e) => updatePendingSetField(setIndex, 'rest_seconds', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Rest sec" />
@@ -3510,11 +3680,17 @@ export default function WorkoutsPage() {
                   )
                 })()}
 
-                    <div className="mt-3 flex gap-2">
+                    <div className="mt-3 flex flex-wrap gap-2">
                       <Button type="button" size="sm" variant="outline" onClick={addSetToPendingExercise}>
                         <Plus className="mr-1 h-3.5 w-3.5" />
                         {getExerciseInputMode(pendingExercise.exercise) === 'interval' ? 'Add round' : 'Add set'}
                       </Button>
+                      {pendingMode === 'strength' && (
+                        <Button type="button" size="sm" variant="outline" onClick={addDropSetToPendingExercise}>
+                          <Plus className="mr-1 h-3.5 w-3.5" />
+                          Add drop set
+                        </Button>
+                      )}
                       <Button type="button" size="sm" variant="brand" onClick={confirmPendingExercise}>
                         Add exercise
                       </Button>
@@ -3699,7 +3875,7 @@ export default function WorkoutsPage() {
                         {exercise.sets.map((set, setIndex) => (
                           inputMode === 'treadmill' ? (
                             <div key={`${exercise.instanceId}-${setIndex}`} className="grid grid-cols-[80px_1fr_1fr_1fr_1fr_auto] gap-2 border-b border-border/30 px-3 py-2 last:border-b-0">
-                              <span className="flex items-center font-data text-sm">{set.set_number}</span>
+                              <span className="flex items-center font-data text-sm">{getSetDisplayName(set)}</span>
                               <Input
                                 type="number"
                                 value={set.reps}
@@ -3730,7 +3906,7 @@ export default function WorkoutsPage() {
                             </div>
                           ) : inputMode === 'run_walk' ? (
                             <div key={`${exercise.instanceId}-${setIndex}`} className="grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2 border-b border-border/30 px-3 py-2 last:border-b-0">
-                              <span className="flex items-center font-data text-sm">{set.set_number}</span>
+                              <span className="flex items-center font-data text-sm">{getSetDisplayName(set)}</span>
                               <Input type="number" value={set.reps} onChange={(e) => updateManualSetField(exercise.instanceId, setIndex, 'reps', Number(e.target.value))} className="h-8 text-xs" placeholder="Minutes" />
                               <Input type="number" value={formatNumericInput(set.speed_mph)} onChange={(e) => updateManualSetField(exercise.instanceId, setIndex, 'speed_mph', Number(e.target.value))} className="h-8 text-xs" placeholder="Speed MPH" />
                               <Input type="number" value={set.rest_seconds} onChange={(e) => updateManualSetField(exercise.instanceId, setIndex, 'rest_seconds', Number(e.target.value))} className="h-8 text-xs" />
@@ -3738,7 +3914,7 @@ export default function WorkoutsPage() {
                             </div>
                           ) : inputMode === 'bike' || inputMode === 'rower' ? (
                             <div key={`${exercise.instanceId}-${setIndex}`} className="grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2 border-b border-border/30 px-3 py-2 last:border-b-0">
-                              <span className="flex items-center font-data text-sm">{set.set_number}</span>
+                              <span className="flex items-center font-data text-sm">{getSetDisplayName(set)}</span>
                               <Input type="number" value={set.reps} onChange={(e) => updateManualSetField(exercise.instanceId, setIndex, 'reps', Number(e.target.value))} className="h-8 text-xs" placeholder="Minutes" />
                               <Input type="number" value={formatNumericInput(set.watts)} onChange={(e) => updateManualSetField(exercise.instanceId, setIndex, 'watts', Number(e.target.value))} className="h-8 text-xs" placeholder="Watts" />
                               <Input type="number" value={set.rest_seconds} onChange={(e) => updateManualSetField(exercise.instanceId, setIndex, 'rest_seconds', Number(e.target.value))} className="h-8 text-xs" />
@@ -3746,7 +3922,7 @@ export default function WorkoutsPage() {
                             </div>
                           ) : inputMode === 'level_cardio' || inputMode === 'basic_cardio' ? (
                             <div key={`${exercise.instanceId}-${setIndex}`} className="grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2 border-b border-border/30 px-3 py-2 last:border-b-0">
-                              <span className="flex items-center font-data text-sm">{set.set_number}</span>
+                              <span className="flex items-center font-data text-sm">{getSetDisplayName(set)}</span>
                               <Input type="number" value={set.reps} onChange={(e) => updateManualSetField(exercise.instanceId, setIndex, 'reps', Number(e.target.value))} className="h-8 text-xs" placeholder="Minutes" />
                               <Input type="number" value={formatNumericInput(set.machine_level)} onChange={(e) => updateManualSetField(exercise.instanceId, setIndex, 'machine_level', Number(e.target.value))} className="h-8 text-xs" placeholder="Level" />
                               <Input type="number" value={set.rest_seconds} onChange={(e) => updateManualSetField(exercise.instanceId, setIndex, 'rest_seconds', Number(e.target.value))} className="h-8 text-xs" />
@@ -3754,7 +3930,7 @@ export default function WorkoutsPage() {
                             </div>
                           ) : (
                             <div key={`${exercise.instanceId}-${setIndex}`} className="grid grid-cols-5 gap-2 border-b border-border/30 px-3 py-2 last:border-b-0">
-                              <span className="flex items-center font-data text-sm">{set.set_number}</span>
+                              <span className="flex items-center font-data text-sm">{getSetDisplayName(set)}</span>
                               <Input
                                 type="number"
                                 value={set.reps}
@@ -3784,10 +3960,18 @@ export default function WorkoutsPage() {
                         ))}
                       </div>
 
-                      <Button type="button" size="sm" variant="outline" className="mt-3" onClick={() => addSetToManualExercise(exercise.instanceId)}>
-                        <Plus className="mr-1 h-3.5 w-3.5" />
-                        Add set
-                      </Button>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Button type="button" size="sm" variant="outline" onClick={() => addSetToManualExercise(exercise.instanceId)}>
+                          <Plus className="mr-1 h-3.5 w-3.5" />
+                          Add set
+                        </Button>
+                        {inputMode === 'strength' && (
+                          <Button type="button" size="sm" variant="outline" onClick={() => addDropSetToManualExercise(exercise.instanceId)}>
+                            <Plus className="mr-1 h-3.5 w-3.5" />
+                            Add drop set
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   )
                 })}
@@ -4162,6 +4346,8 @@ export default function WorkoutsPage() {
                   exercise_name: exercise.exercise.name,
                   sets: exercise.sets.map((set) => ({
                     set_number: set.set_number,
+                    set_type: set.set_type || 'standard',
+                    drop_from_set_number: set.drop_from_set_number,
                     target_reps: set.reps,
                     actual_reps: set.actual_reps ?? set.reps,
                     weight_kg: set.actual_weight ?? set.weight_kg ?? 0,

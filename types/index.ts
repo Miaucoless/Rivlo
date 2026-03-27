@@ -199,6 +199,8 @@ export interface ExerciseLibraryItem extends Exercise {
 
 export interface WorkoutSet {
   set_number: number
+  set_type?: 'standard' | 'drop'
+  drop_from_set_number?: number
   reps: number
   weight_kg?: number
   incline_pct?: number
@@ -255,6 +257,8 @@ export interface WorkoutLog {
     exercise_name: string
     sets: Array<{
       set_number: number
+      set_type?: 'standard' | 'drop'
+      drop_from_set_number?: number
       target_reps: number
       actual_reps: number
       weight_kg: number
