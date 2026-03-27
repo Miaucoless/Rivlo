@@ -201,6 +201,7 @@ export interface WorkoutSet {
   set_number: number
   set_type?: 'standard' | 'drop'
   drop_from_set_number?: number
+  drop_set_index?: number
   reps: number
   weight_kg?: number
   incline_pct?: number
@@ -259,6 +260,7 @@ export interface WorkoutLog {
       set_number: number
       set_type?: 'standard' | 'drop'
       drop_from_set_number?: number
+      drop_set_index?: number
       target_reps: number
       actual_reps: number
       weight_kg: number

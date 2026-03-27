@@ -2778,282 +2778,364 @@ const CUSTOM_FOOD_CATALOG: FoodCatalogItem[] = [
 {
   id: 'celsius-cherry-cola',
   name: 'Celsius Cherry Cola',
-  aliases: ['cherry cola celsius'],
+  aliases: [
+    'cherry cola celsius', 'celsius cherry cola', 'celsius cola cherry',
+    'cherry coke celsius', 'celsius cherry'
+  ],
   default_serving_amount: 355,
   default_serving_unit: 'ml',
   default_serving_label: '12 fl oz (355 ml)',
   grams_per_serving: 355,
-  macros_per_serving: { calories: 10, protein_g: 0, carbs_g: 2, fat_g: 0 },
+  macros_per_serving: { calories: 10, protein_g: 0, carbs_g: 2, fat_g: 0 }
 },
 {
   id: 'celsius-cola',
   name: 'Celsius Cola',
-  aliases: ['cola celsius'],
+  aliases: [
+    'cola celsius', 'celsius cola drink', 'celsius original cola',
+    'celsius diet cola', 'celsius soda flavor'
+  ],
   default_serving_amount: 355,
   default_serving_unit: 'ml',
   default_serving_label: '12 fl oz (355 ml)',
   grams_per_serving: 355,
-  macros_per_serving: { calories: 10, protein_g: 0, carbs_g: 2, fat_g: 0 },
+  macros_per_serving: { calories: 10, protein_g: 0, carbs_g: 2, fat_g: 0 }
 },
 {
   id: 'celsius-fuji-apple-pear',
   name: 'Celsius Fuji Apple Pear',
-  aliases: ['fuji apple pear', 'apple pear celsius'],
+  aliases: [
+    'fuji apple pear', 'celsius fuji apple pear', 'apple pear celsius',
+    'fuji pear celsius', 'celsius apple flavor'
+  ],
   default_serving_amount: 355,
   default_serving_unit: 'ml',
   default_serving_label: '12 fl oz (355 ml)',
   grams_per_serving: 355,
-  macros_per_serving: { calories: 10, protein_g: 0, carbs_g: 2, fat_g: 0 },
+  macros_per_serving: { calories: 10, protein_g: 0, carbs_g: 2, fat_g: 0 }
 },
 {
   id: 'celsius-green-apple-cherry',
   name: 'Celsius Green Apple Cherry',
-  aliases: ['green apple cherry', 'apple cherry celsius'],
+  aliases: [
+    'green apple cherry', 'apple cherry celsius', 'celsius green apple',
+    'celsius apple cherry', 'green apple celsius'
+  ],
   default_serving_amount: 355,
   default_serving_unit: 'ml',
   default_serving_label: '12 fl oz (355 ml)',
   grams_per_serving: 355,
-  macros_per_serving: { calories: 10, protein_g: 0, carbs_g: 2, fat_g: 0 },
+  macros_per_serving: { calories: 10, protein_g: 0, carbs_g: 2, fat_g: 0 }  
 },
 {
-  id: 'celsius-kiwi-guava',
-  name: 'Celsius Kiwi Guava',
-  aliases: ['kiwi guava'],
+  id: 'celsius-astro-vibe',
+  name: 'Celsius Astro Vibe (Blue Razz)',
+  aliases: [
+    'astro vibe', 'blue razz vibe', 'celsius blue razz vibe', 
+    'astro celsius', 'celsius vibe blue'
+  ],
   default_serving_amount: 355,
   default_serving_unit: 'ml',
   default_serving_label: '12 fl oz (355 ml)',
   grams_per_serving: 355,
-  macros_per_serving: { calories: 10, protein_g: 0, carbs_g: 2, fat_g: 0 },
+  macros_per_serving: { calories: 10, protein_g: 0, carbs_g: 2, fat_g: 0 }
 },
 {
-  id: 'celsius-lemon-lime',
-  name: 'Celsius Lemon Lime',
-  aliases: ['lemon lime'],
+  id: 'celsius-fantasy-vibe',
+  name: 'Celsius Fantasy Vibe (Marshmallow)',
+  aliases: [
+    'fantasy vibe', 'celsius fantasy vibe', 'marshmallow celsius',
+    'marshmallow vibe', 'fantasy marshmallow'
+  ],
   default_serving_amount: 355,
   default_serving_unit: 'ml',
   default_serving_label: '12 fl oz (355 ml)',
   grams_per_serving: 355,
-  macros_per_serving: { calories: 10, protein_g: 0, carbs_g: 2, fat_g: 0 },
+  macros_per_serving: { calories: 10, protein_g: 0, carbs_g: 2, fat_g: 0 }
 },
 {
-  id: 'celsius-mango-passionfruit',
-  name: 'Celsius Mango Passionfruit',
-  aliases: ['mango passionfruit'],
+  id: 'celsius-galaxy-vibe',
+  name: 'Celsius Galaxy Vibe',
+  aliases: [
+    'galaxy vibe', 'celsius galaxy vibe', 'galactic celsius', 
+    'space vibe celsius'
+  ],
   default_serving_amount: 355,
   default_serving_unit: 'ml',
   default_serving_label: '12 fl oz (355 ml)',
   grams_per_serving: 355,
-  macros_per_serving: { calories: 10, protein_g: 0, carbs_g: 2, fat_g: 0 },
+  macros_per_serving: { calories: 10, protein_g: 0, carbs_g: 2, fat_g: 0 }
 },
 {
-  id: 'celsius-orange',
-  name: 'Celsius Orange',
-  aliases: ['orange celsius'],
+  id: 'celsius-oasis-vibe',
+  name: 'Celsius Oasis Vibe',
+  aliases: [
+    'oasis vibe', 'celsius oasis vibe', 'oasis drink celsius',
+    'oasis flavored celsius'
+  ],
   default_serving_amount: 355,
   default_serving_unit: 'ml',
   default_serving_label: '12 fl oz (355 ml)',
   grams_per_serving: 355,
-  macros_per_serving: { calories: 10, protein_g: 0, carbs_g: 2, fat_g: 0 },
+  macros_per_serving: { calories: 10, protein_g: 0, carbs_g: 2, fat_g: 0 }
 },
 {
-  id: 'celsius-strawberry-lemonade',
-  name: 'Celsius Strawberry Lemonade',
-  aliases: ['strawberry lemonade'],
+  id: 'celsius-peach-vibe',
+  name: 'Celsius Peach Vibe (White Peach)',
+  aliases: [
+    'peach vibe', 'white peach vibe', 'celsius peach vibe',
+    'celsius white peach', 'white peach celsius'
+  ],
   default_serving_amount: 355,
   default_serving_unit: 'ml',
   default_serving_label: '12 fl oz (355 ml)',
   grams_per_serving: 355,
-  macros_per_serving: { calories: 10, protein_g: 0, carbs_g: 2, fat_g: 0 },
+  macros_per_serving: { calories: 10, protein_g: 0, carbs_g: 2, fat_g: 0 }
 },
 {
-  id: 'celsius-strawberry-guava',
-  name: 'Celsius Strawberry Guava',
-  aliases: ['strawberry guava'],
+  id: 'celsius-playa-vibe',
+  name: 'Celsius Playa Vibe (Piña Colada)',
+  aliases: [
+    'playa vibe', 'pina colada celsius', 'pina celsius', 
+    'colada vibe', 'celsius pina'
+  ],
   default_serving_amount: 355,
   default_serving_unit: 'ml',
   default_serving_label: '12 fl oz (355 ml)',
   grams_per_serving: 355,
-  macros_per_serving: { calories: 10, protein_g: 0, carbs_g: 2, fat_g: 0 },
+  macros_per_serving: { calories: 10, protein_g: 0, carbs_g: 2, fat_g: 0 }
 },
 {
-  id: 'celsius-watermelon',
-  name: 'Celsius Watermelon',
-  aliases: ['watermelon celsius'],
+  id: 'celsius-retro-vibe',
+  name: 'Celsius Retro Vibe (Sherbet)',
+  aliases: [
+    'retro vibe', 'sherbet vibe', 'celsius sherbet', 
+    'celsius retro flavor'
+  ],
   default_serving_amount: 355,
   default_serving_unit: 'ml',
   default_serving_label: '12 fl oz (355 ml)',
   grams_per_serving: 355,
-  macros_per_serving: { calories: 10, protein_g: 0, carbs_g: 2, fat_g: 0 },
+  macros_per_serving: { calories: 10, protein_g: 0, carbs_g: 2, fat_g: 0 }
 },
 {
-  id: 'celsius-wild-berry',
-  name: 'Celsius Wild Berry',
-  aliases: ['wild berry'],
+  id: 'celsius-tropical-vibe',
+  name: 'Celsius Tropical Vibe',
+  aliases: [
+    'tropical vibe', 'celsius tropical vibe', 'tropical celsius'
+  ],
   default_serving_amount: 355,
   default_serving_unit: 'ml',
   default_serving_label: '12 fl oz (355 ml)',
   grams_per_serving: 355,
-  macros_per_serving: { calories: 10, protein_g: 0, carbs_g: 2, fat_g: 0 },
+  macros_per_serving: { calories: 10, protein_g: 0, carbs_g: 2, fat_g: 0 }
 },
 {
   id: 'celsius-blue-razz-lemonade',
-  name: 'Celsius Blue Razz Lemonade (Fizz‑Free)',
-  aliases: ['blue razz lemonade', 'celsius fizz free blue razz'],
+  name: 'Celsius Blue Razz Lemonade (Fizz-Free)',
+  aliases: [
+    'blue razz lemonade', 'blue raspberry lemonade celsius',
+    'non carbonated celsius blue', 'celsius fizz free blue razz'
+  ],
   default_serving_amount: 355,
   default_serving_unit: 'ml',
   default_serving_label: '12 fl oz (355 ml)',
   grams_per_serving: 355,
-  macros_per_serving: { calories: 10, protein_g: 0, carbs_g: 2, fat_g: 0 },
+  macros_per_serving: { calories: 10, protein_g: 0, carbs_g: 2, fat_g: 0 }
 },
 {
   id: 'celsius-peach-mango-green-tea',
-  name: 'Celsius Peach Mango + Green Tea (Fizz‑Free)',
-  aliases: ['peach mango green tea', 'celsius green tea peach mango'],
+  name: 'Celsius Peach Mango + Green Tea (Fizz-Free)',
+  aliases: [
+    'peach mango green tea', 'celsius peach mango tea', 
+    'celsius green tea peach', 'peach mango tea celsius'
+  ],
   default_serving_amount: 355,
   default_serving_unit: 'ml',
   default_serving_label: '12 fl oz (355 ml)',
   grams_per_serving: 355,
-  macros_per_serving: { calories: 10, protein_g: 0, carbs_g: 2, fat_g: 0 },
+  macros_per_serving: { calories: 10, protein_g: 0, carbs_g: 2, fat_g: 0 }
 },
 {
   id: 'celsius-raspberry-acai-green-tea',
-  name: 'Celsius Raspberry Açaí + Green Tea (Fizz‑Free)',
-  aliases: ['raspberry acai green tea'],
+  name: 'Celsius Raspberry Açaí + Green Tea (Fizz-Free)',
+  aliases: [
+    'raspberry acai tea', 'celsius acai raspberry', 
+    'acai green tea celsius', 'celsius raspberry tea'
+  ],
   default_serving_amount: 355,
   default_serving_unit: 'ml',
   default_serving_label: '12 fl oz (355 ml)',
   grams_per_serving: 355,
-  macros_per_serving: { calories: 10, protein_g: 0, carbs_g: 2, fat_g: 0 },
+  macros_per_serving: { calories: 10, protein_g: 0, carbs_g: 2, fat_g: 0 }
 },
 {
   id: 'celsius-hydration-arctic-cherry',
   name: 'Celsius Hydration Arctic Cherry',
-  aliases: ['arctic cherry hydration'],
+  aliases: [
+    'arctic cherry hydration', 'celsius hydration cherry', 
+    'hydration cherry celsius'
+  ],
   default_serving_amount: 355,
   default_serving_unit: 'ml',
   default_serving_label: '12 fl oz (355 ml)',
   grams_per_serving: 355,
-  macros_per_serving: { calories: 15, protein_g: 0, carbs_g: 4, fat_g: 0 },
+  macros_per_serving: { calories: 15, protein_g: 0, carbs_g: 4, fat_g: 0 }
 },
 {
   id: 'celsius-hydration-blue-razz',
   name: 'Celsius Hydration Blue Razz',
-  aliases: ['hydration blue razz'],
+  aliases: [
+    'hydration blue razz', 'celsius hydration blue', 
+    'hydro blue razz'
+  ],
   default_serving_amount: 355,
   default_serving_unit: 'ml',
   default_serving_label: '12 fl oz (355 ml)',
   grams_per_serving: 355,
-  macros_per_serving: { calories: 15, protein_g: 0, carbs_g: 4, fat_g: 0 },
+  macros_per_serving: { calories: 15, protein_g: 0, carbs_g: 4, fat_g: 0 }
 },
 {
   id: 'celsius-hydration-fruit-punch',
   name: 'Celsius Hydration Fruit Punch',
-  aliases: ['hydration fruit punch'],
+  aliases: [
+    'hydration fruit punch', 'celsius fruit punch hydro', 
+    'hydration punch celsius'
+  ],
   default_serving_amount: 355,
   default_serving_unit: 'ml',
   default_serving_label: '12 fl oz (355 ml)',
   grams_per_serving: 355,
-  macros_per_serving: { calories: 15, protein_g: 0, carbs_g: 4, fat_g: 0 },
+  macros_per_serving: { calories: 15, protein_g: 0, carbs_g: 4, fat_g: 0 }
 },
 {
   id: 'celsius-hydration-lemon-lime',
   name: 'Celsius Hydration Lemon Lime',
-  aliases: ['hydration lemon lime'],
+  aliases: [
+    'hydration lemon lime', 'celsius lemon lime hydration', 
+    'hydro lemon lime'
+  ],
   default_serving_amount: 355,
   default_serving_unit: 'ml',
   default_serving_label: '12 fl oz (355 ml)',
   grams_per_serving: 355,
-  macros_per_serving: { calories: 15, protein_g: 0, carbs_g: 4, fat_g: 0 },
+  macros_per_serving: { calories: 15, protein_g: 0, carbs_g: 4, fat_g: 0 }
 },
 {
   id: 'celsius-hydration-strawberry-watermelon',
   name: 'Celsius Hydration Strawberry Watermelon',
-  aliases: ['hydration strawberry watermelon'],
+  aliases: [
+    'hydration strawberry watermelon', 'celsius hydration watermelon', 
+    'hydro strawberry melon'
+  ],
   default_serving_amount: 355,
   default_serving_unit: 'ml',
   default_serving_label: '12 fl oz (355 ml)',
   grams_per_serving: 355,
-  macros_per_serving: { calories: 15, protein_g: 0, carbs_g: 4, fat_g: 0 },
+  macros_per_serving: { calories: 15, protein_g: 0, carbs_g: 4, fat_g: 0 }
 },
 {
   id: 'celsius-essentials-blue-crush',
   name: 'Celsius Essentials Blue Crush',
-  aliases: ['blue crush'],
+  aliases: [
+    'blue crush', 'celsius blue crush', 'essentials blue crush', 
+    'blue crush celsius essentials'
+  ],
   default_serving_amount: 355,
   default_serving_unit: 'ml',
   default_serving_label: '12 fl oz (355 ml)',
   grams_per_serving: 355,
-  macros_per_serving: { calories: 10, protein_g: 0, carbs_g: 2, fat_g: 0 },
+  macros_per_serving: { calories: 10, protein_g: 0, carbs_g: 2, fat_g: 0 }
 },
 {
   id: 'celsius-essentials-grape-slush',
   name: 'Celsius Essentials Grape Slush',
-  aliases: ['grape slush'],
+  aliases: [
+    'grape slush', 'celsius grape slush', 'essentials grape slush',
+    'purple celsius essentials'
+  ],
   default_serving_amount: 355,
   default_serving_unit: 'ml',
   default_serving_label: '12 fl oz (355 ml)',
   grams_per_serving: 355,
-  macros_per_serving: { calories: 10, protein_g: 0, carbs_g: 2, fat_g: 0 },
+  macros_per_serving: { calories: 10, protein_g: 0, carbs_g: 2, fat_g: 0 }
 },
 {
   id: 'celsius-essentials-watermelon-ice',
   name: 'Celsius Essentials Watermelon Ice',
-  aliases: ['watermelon ice'],
+  aliases: [
+    'watermelon ice', 'celsius watermelon ice', 'essentials watermelon ice'
+  ],
   default_serving_amount: 355,
   default_serving_unit: 'ml',
   default_serving_label: '12 fl oz (355 ml)',
   grams_per_serving: 355,
-  macros_per_serving: { calories: 10, protein_g: 0, carbs_g: 2, fat_g: 0 },
+  macros_per_serving: { calories: 10, protein_g: 0, carbs_g: 2, fat_g: 0 }
 },
 {
   id: 'celsius-essentials-dragonberry',
   name: 'Celsius Essentials Dragonberry',
-  aliases: ['dragonberry'],
+  aliases: [
+    'dragonberry', 'celsius dragonberry', 'dragon fruit berry celsius',
+    'essentials dragonberry'
+  ],
   default_serving_amount: 355,
   default_serving_unit: 'ml',
   default_serving_label: '12 fl oz (355 ml)',
   grams_per_serving: 355,
-  macros_per_serving: { calories: 10, protein_g: 0, carbs_g: 2, fat_g: 0 },
+  macros_per_serving: { calories: 10, protein_g: 0, carbs_g: 2, fat_g: 0 }
 },
 {
   id: 'celsius-essentials-fruit-burst',
   name: 'Celsius Essentials Fruit Burst',
-  aliases: ['fruit burst'],
+  aliases: [
+    'fruit burst', 'celsius fruit burst', 'essentials fruit burst',
+    'burst celsius'
+  ],
   default_serving_amount: 355,
   default_serving_unit: 'ml',
   default_serving_label: '12 fl oz (355 ml)',
   grams_per_serving: 355,
-  macros_per_serving: { calories: 10, protein_g: 0, carbs_g: 2, fat_g: 0 },
+  macros_per_serving: { calories: 10, protein_g: 0, carbs_g: 2, fat_g: 0 }
 },
 {
   id: 'celsius-essentials-orangesicle',
   name: 'Celsius Essentials Orangesicle',
-  aliases: ['orangesicle'],
+  aliases: [
+    'orangesicle', 'orange creamsicle celsius', 'celsius essentials orange',
+    'creamsicle celsius'
+  ],
   default_serving_amount: 355,
   default_serving_unit: 'ml',
   default_serving_label: '12 fl oz (355 ml)',
   grams_per_serving: 355,
-  macros_per_serving: { calories: 10, protein_g: 0, carbs_g: 2, fat_g: 0 },
+  macros_per_serving: { calories: 10, protein_g: 0, carbs_g: 2, fat_g: 0 }
 },
 {
   id: 'celsius-essentials-mango-tango',
   name: 'Celsius Essentials Mango Tango',
-  aliases: ['mango tango'],
+  aliases: [
+    'mango tango', 'celsius mango tango', 'essentials mango tango',
+    'tango mango celsius'
+  ],
   default_serving_amount: 355,
   default_serving_unit: 'ml',
   default_serving_label: '12 fl oz (355 ml)',
   grams_per_serving: 355,
-  macros_per_serving: { calories: 10, protein_g: 0, carbs_g: 2, fat_g: 0 },
+  macros_per_serving: { calories: 10, protein_g: 0, carbs_g: 2, fat_g: 0 }
 },
 {
   id: 'celsius-essentials-cherry-limeade',
   name: 'Celsius Essentials Cherry Limeade',
-  aliases: ['cherry limeade'],
+  aliases: [
+    'cherry limeade', 'celsius cherry limeade', 'cherry lime celsius',
+    'essentials cherry limeade'
+  ],
   default_serving_amount: 355,
   default_serving_unit: 'ml',
   default_serving_label: '12 fl oz (355 ml)',
   grams_per_serving: 355,
-  macros_per_serving: { calories: 10, protein_g: 0, carbs_g: 2, fat_g: 0 },
+  macros_per_serving: { calories: 10, protein_g: 0, carbs_g: 2, fat_g: 0 }
 }
 
   // 👆 PASTE YOUR FOODS HERE 👆

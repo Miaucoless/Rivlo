@@ -23,7 +23,7 @@ import { useAppStore } from '@/store/useAppStore'
 import { EXERCISE_LIBRARY, WORKOUTS } from '@/lib/mock-data'
 import { EXERCISE_CLASSIFICATIONS } from '@/lib/exercise-classifications'
 import type { Exercise, ExerciseLibraryItem, ExerciseSetMetric, Gender, MuscleGroup, UserProfile, Workout, WorkoutExercise, WorkoutSet, WorkoutSplit } from '@/types'
-import { formatVolumeValue, getTodayISO, getWeightUnitLabel, kgToLbs, lbsToKg } from '@/lib/utils'
+import { cn, formatVolumeValue, getTodayISO, getWeightUnitLabel, kgToLbs, lbsToKg } from '@/lib/utils'
 import { createUserWorkoutTemplate, deleteUserWorkoutTemplate, fetchUserWorkoutTemplates, updateUserWorkoutTemplate } from '@/lib/workout-templates'
 import { toast } from 'sonner'
 import type { UnitSystem } from '@/types'
@@ -375,16 +375,16 @@ function createCustomExercise(name: string): EditableWorkoutExercise {
   }
 }
 
-function getSetDisplayName(set: Pick<WorkoutSet, 'set_number' | 'set_type' | 'drop_from_set_number'>) {
+function getSetDisplayName(set: Pick<WorkoutSet, 'set_number' | 'set_type' | 'drop_from_set_number' | 'drop_set_index'>) {
   if (set.set_type === 'drop') {
-    return `Drop ${set.drop_from_set_number ?? Math.max(1, set.set_number - 1)}`
+    return `Drop Set ${set.drop_set_index ?? 1}`
   }
   return `Set ${set.set_number}`
 }
 
-function getShortSetDisplayName(set: Pick<WorkoutSet, 'set_number' | 'set_type' | 'drop_from_set_number'>) {
+function getShortSetDisplayName(set: Pick<WorkoutSet, 'set_number' | 'set_type' | 'drop_from_set_number' | 'drop_set_index'>) {
   if (set.set_type === 'drop') {
-    return `DS ${set.drop_from_set_number ?? Math.max(1, set.set_number - 1)}`
+    return `Drop ${set.drop_set_index ?? 1}`
   }
   return String(set.set_number)
 }
@@ -392,6 +392,24 @@ function getShortSetDisplayName(set: Pick<WorkoutSet, 'set_number' | 'set_type' 
 function getDropSetWeight(weightKg?: number) {
   if (!weightKg || weightKg <= 0) return 0
   return Math.max(0, Math.round(weightKg * 0.8 * 10) / 10)
+}
+
+function isDropSet(set: Pick<WorkoutSet, 'set_type'>) {
+  return set.set_type === 'drop'
+}
+
+function getDropSetRowClass(baseClassName: string, set: Pick<WorkoutSet, 'set_type'>) {
+  return cn(
+    baseClassName,
+    isDropSet(set) && 'ml-5 w-[calc(100%-1.25rem)] border-dashed border-primary/30 bg-primary/[0.05]'
+  )
+}
+
+function getDropSetLabelClass(set: Pick<WorkoutSet, 'set_type'>) {
+  return cn(
+    'text-muted-foreground',
+    isDropSet(set) && 'text-primary'
+  )
 }
 
 function createActiveExercisesFromWorkout(workout: Workout): ActiveExercise[] {
@@ -420,6 +438,7 @@ function normalizeActiveExercisesForWorkout(exercises: ActiveExercise[]): Workou
       set_number: index + 1,
       set_type: set.set_type || 'standard',
       drop_from_set_number: set.drop_from_set_number,
+      drop_set_index: set.drop_set_index,
       reps: Math.max(1, Number(set.actual_reps ?? set.reps) || 1),
       weight_kg: Math.max(0, Number(set.actual_weight ?? set.weight_kg ?? 0) || 0),
       speed_mph: set.actual_speed_mph,
@@ -972,6 +991,7 @@ function WorkoutBuilderModal({
               set_number: exercise.sets.length + 1,
               set_type: 'drop',
               drop_from_set_number: lastSet?.set_number ?? exercise.sets.length,
+              drop_set_index: exercise.sets.filter((set) => set.set_type === 'drop' && set.drop_from_set_number === (lastSet?.set_number ?? exercise.sets.length)).length + 1,
               reps: lastSet?.reps ?? 10,
               weight_kg: getDropSetWeight(lastSet?.weight_kg),
               speed_mph: lastSet?.speed_mph,
@@ -1030,6 +1050,7 @@ function WorkoutBuilderModal({
         set_number: index + 1,
         set_type: set.set_type || 'standard',
         drop_from_set_number: set.drop_from_set_number,
+        drop_set_index: set.drop_set_index,
         reps: Math.max(1, Number(set.reps) || 1),
         weight_kg: Math.max(0, Number(set.weight_kg) || 0),
         speed_mph: set.speed_mph !== undefined ? Math.max(0, Number(set.speed_mph) || 0) : undefined,
@@ -1428,8 +1449,11 @@ function WorkoutBuilderModal({
                         <Button variant="ghost" size="icon-sm" onClick={() => setExercises((current) => current.map((item) => item.instanceId === exercise.instanceId ? { ...item, sets: item.sets.filter((_, index) => index !== setIndex).map((nextSet, index) => ({ ...nextSet, set_number: index + 1 })) || item.sets } : item))} disabled={exercise.sets.length <= 1}><X className="h-3.5 w-3.5" /></Button>
                       </div>
                     ) : (
-                      <div key={`${exercise.instanceId}-${setIndex}`} className="grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2">
-                        <div className="flex items-center px-3 text-sm font-medium text-muted-foreground">
+                      <div
+                        key={`${exercise.instanceId}-${setIndex}`}
+                        className={getDropSetRowClass('grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2 rounded-xl border border-transparent px-2 py-2', set)}
+                      >
+                        <div className={cn('flex items-center px-3 text-sm font-medium', getDropSetLabelClass(set))}>
                           {getSetDisplayName(set)}
                         </div>
                         <Input
@@ -1711,6 +1735,7 @@ function ActiveWorkoutModal({
               set_number: exercise.sets.length + 1,
               set_type: 'drop',
               drop_from_set_number: sourceSetNumber,
+              drop_set_index: exercise.sets.filter((set) => set.set_type === 'drop' && set.drop_from_set_number === sourceSetNumber).length + 1,
               reps: lastSet?.reps ?? 10,
               weight_kg: dropWeight,
               speed_mph: lastSet?.speed_mph,
@@ -2111,7 +2136,7 @@ function ActiveWorkoutModal({
                     <span>Done</span>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 px-3 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                  <div className="grid grid-cols-[3.75rem_minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 px-3 text-[10px] uppercase tracking-[0.12em] text-muted-foreground sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto]">
                     <span>Set</span>
                     <span>Weight ({getWeightUnitLabel(unitSystem)})</span>
                     <span>{getSetMetricLabel(exercise.exercise)}</span>
@@ -2175,8 +2200,14 @@ function ActiveWorkoutModal({
                       <Button type="button" variant="ghost" size="icon-sm" className="justify-self-end sm:justify-self-auto" onClick={() => removeSetFromExercise(exerciseIndex, setIndex)} disabled={exercise.sets.length <= 1}><X className="h-3.5 w-3.5" /></Button>
                     </div>
                   ) : (
-                    <div key={`${exercise.exercise.id}-${setIndex}`} className={`grid grid-cols-[2.75rem_minmax(0,1fr)_minmax(0,1fr)_1.75rem_1.75rem] items-center gap-1.5 rounded-xl border px-3 py-2 sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto_auto] sm:gap-2 ${set.completed ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-border/50 bg-muted/10'}`}>
-                      <span className="font-data text-xs">{getShortSetDisplayName(set)}</span>
+                    <div
+                      key={`${exercise.exercise.id}-${setIndex}`}
+                      className={getDropSetRowClass(
+                        `grid grid-cols-[3.75rem_minmax(0,1fr)_minmax(0,1fr)_1.75rem_1.75rem] items-center gap-1.5 rounded-xl border px-3 py-2 sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto_auto] sm:gap-2 ${set.completed ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-border/50 bg-muted/10'}`,
+                        set,
+                      )}
+                    >
+                      <span className={cn('font-data text-xs', getDropSetLabelClass(set))}>{getShortSetDisplayName(set)}</span>
                       <Input
                         type="number"
                         value={formatWorkoutWeightInput(set.actual_weight, unitSystem)}
@@ -2721,6 +2752,7 @@ export default function WorkoutsPage() {
             set_number: current.sets.length + 1,
             set_type: 'drop',
             drop_from_set_number: lastSet?.set_number ?? current.sets.length,
+            drop_set_index: current.sets.filter((set) => set.set_type === 'drop' && set.drop_from_set_number === (lastSet?.set_number ?? current.sets.length)).length + 1,
             reps: lastSet?.reps ?? 10,
             weight_kg: getDropSetWeight(lastSet?.weight_kg),
             speed_mph: lastSet?.speed_mph,
@@ -2859,6 +2891,7 @@ export default function WorkoutsPage() {
               set_number: exercise.sets.length + 1,
               set_type: 'drop',
               drop_from_set_number: lastSet?.set_number ?? exercise.sets.length,
+              drop_set_index: exercise.sets.filter((set) => set.set_type === 'drop' && set.drop_from_set_number === (lastSet?.set_number ?? exercise.sets.length)).length + 1,
               reps: lastSet?.reps ?? 10,
               weight_kg: getDropSetWeight(lastSet?.weight_kg),
               speed_mph: lastSet?.speed_mph,
@@ -2960,6 +2993,7 @@ export default function WorkoutsPage() {
           set_number: set.set_number,
           set_type: set.set_type || 'standard',
           drop_from_set_number: set.drop_from_set_number,
+          drop_set_index: set.drop_set_index,
           target_reps: set.reps,
           actual_reps: set.reps,
           weight_kg: set.weight_kg || 0,
@@ -3361,9 +3395,12 @@ export default function WorkoutsPage() {
                                                       return (
                                                         <div
                                                           key={set.set_number}
-                                                          className="grid grid-cols-3 items-center text-xs rounded-lg px-2 py-1.5 bg-background/60"
+                                                          className={getDropSetRowClass(
+                                                            'grid grid-cols-3 items-center text-xs rounded-lg border border-transparent px-2 py-1.5 bg-background/60',
+                                                            set,
+                                                          )}
                                                         >
-                                                          <span className="text-muted-foreground font-medium">{getSetDisplayName(set)}</span>
+                                                          <span className={cn('font-medium', getDropSetLabelClass(set))}>{getSetDisplayName(set)}</span>
                                                           <span className="text-center font-data font-semibold tabular-nums">
                                                             {set.actual_reps ?? set.target_reps}
                                                           </span>
@@ -3667,8 +3704,11 @@ export default function WorkoutsPage() {
                             <Button variant="ghost" size="icon-sm" onClick={() => removeSetFromPendingExercise(setIndex)} disabled={pendingExercise.sets.length <= 1}><X className="h-3.5 w-3.5" /></Button>
                           </div>
                         ) : (
-                          <div key={`${pendingExercise.instanceId}-${setIndex}`} className="grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2">
-                            <div className="flex items-center px-3 text-sm font-medium text-muted-foreground">{getSetDisplayName(set)}</div>
+                          <div
+                            key={`${pendingExercise.instanceId}-${setIndex}`}
+                            className={getDropSetRowClass('grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2 rounded-xl border border-transparent px-2 py-2', set)}
+                          >
+                            <div className={cn('flex items-center px-3 text-sm font-medium', getDropSetLabelClass(set))}>{getSetDisplayName(set)}</div>
                             <Input type="number" value={formatNumericInput(set.reps)} onChange={(e) => updatePendingSetField(setIndex, 'reps', e.target.value === '' ? 0 : Number(e.target.value))} placeholder={getSetMetricPlaceholder(pendingExercise.exercise, pendingExercise.exercise.name)} />
                             <Input type="number" value={formatWorkoutWeightInput(set.weight_kg, unitSystem)} onChange={(e) => updatePendingSetField(setIndex, 'weight_kg', parseWorkoutWeightInput(e.target.value, unitSystem))} placeholder={isAssistedPullExercise(pendingExercise.exercise) ? `Assistance (${weightUnitLabel})` : `Weight (${weightUnitLabel})`} />
                             <Input type="number" value={formatNumericInput(set.rest_seconds)} onChange={(e) => updatePendingSetField(setIndex, 'rest_seconds', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Rest sec" />
@@ -3929,8 +3969,11 @@ export default function WorkoutsPage() {
                               <div className="flex justify-end"><Button type="button" size="icon-sm" variant="ghost" onClick={() => removeSetFromManualExercise(exercise.instanceId, setIndex)} disabled={exercise.sets.length <= 1}><X className="h-3.5 w-3.5" /></Button></div>
                             </div>
                           ) : (
-                            <div key={`${exercise.instanceId}-${setIndex}`} className="grid grid-cols-5 gap-2 border-b border-border/30 px-3 py-2 last:border-b-0">
-                              <span className="flex items-center font-data text-sm">{getSetDisplayName(set)}</span>
+                            <div
+                              key={`${exercise.instanceId}-${setIndex}`}
+                              className={getDropSetRowClass('grid grid-cols-5 gap-2 border-b border-border/30 px-3 py-2 last:border-b-0', set)}
+                            >
+                              <span className={cn('flex items-center font-data text-sm', getDropSetLabelClass(set))}>{getSetDisplayName(set)}</span>
                               <Input
                                 type="number"
                                 value={set.reps}
@@ -4348,6 +4391,7 @@ export default function WorkoutsPage() {
                     set_number: set.set_number,
                     set_type: set.set_type || 'standard',
                     drop_from_set_number: set.drop_from_set_number,
+                    drop_set_index: set.drop_set_index,
                     target_reps: set.reps,
                     actual_reps: set.actual_reps ?? set.reps,
                     weight_kg: set.actual_weight ?? set.weight_kg ?? 0,
