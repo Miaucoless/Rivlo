@@ -394,6 +394,47 @@ function getDropSetWeight(weightKg?: number) {
   return Math.max(0, Math.round(weightKg * 0.8 * 10) / 10)
 }
 
+function getNextStandardSetNumber(sets: Array<Pick<WorkoutSet, 'set_type'>>) {
+  return sets.filter((set) => set.set_type !== 'drop').length + 1
+}
+
+function getDropSetSourceNumber(sets: Array<Pick<WorkoutSet, 'set_number' | 'set_type' | 'drop_from_set_number'>>) {
+  const lastSet = sets[sets.length - 1]
+  if (!lastSet) return 1
+  if (lastSet.set_type === 'drop') {
+    return lastSet.drop_from_set_number ?? lastSet.set_number
+  }
+  return lastSet.set_number
+}
+
+function normalizeSetNumbers<T extends Pick<WorkoutSet, 'set_number' | 'set_type' | 'drop_from_set_number' | 'drop_set_index'>>(sets: T[]): T[] {
+  let standardSetNumber = 0
+  const dropCounts = new Map<number, number>()
+
+  return sets.map((set) => {
+    if (set.set_type === 'drop') {
+      const sourceSetNumber = (set.drop_from_set_number ?? standardSetNumber) || 1
+      const nextDropIndex = (dropCounts.get(sourceSetNumber) ?? 0) + 1
+      dropCounts.set(sourceSetNumber, nextDropIndex)
+      return {
+        ...set,
+        set_number: sourceSetNumber,
+        drop_from_set_number: sourceSetNumber,
+        drop_set_index: nextDropIndex,
+      }
+    }
+
+    standardSetNumber += 1
+    return {
+      ...set,
+      set_number: standardSetNumber,
+      set_type: set.set_type || 'standard',
+      drop_from_set_number: undefined,
+      drop_set_index: undefined,
+    }
+  })
+}
+
 function isDropSet(set: Pick<WorkoutSet, 'set_type'>) {
   return set.set_type === 'drop'
 }
@@ -434,8 +475,8 @@ function createActiveExercisesFromWorkout(workout: Workout): ActiveExercise[] {
 function normalizeActiveExercisesForWorkout(exercises: ActiveExercise[]): WorkoutExercise[] {
   return exercises.map((exercise) => ({
     exercise: exercise.exercise,
-    sets: exercise.sets.map((set, index) => ({
-      set_number: index + 1,
+    sets: normalizeSetNumbers(exercise.sets).map((set) => ({
+      set_number: set.set_number,
       set_type: set.set_type || 'standard',
       drop_from_set_number: set.drop_from_set_number,
       drop_set_index: set.drop_set_index,
@@ -963,7 +1004,7 @@ function WorkoutBuilderModal({
           sets: [
             ...exercise.sets,
             {
-              set_number: exercise.sets.length + 1,
+              set_number: getNextStandardSetNumber(exercise.sets),
               set_type: 'standard',
               reps: lastSet?.reps ?? 10,
               weight_kg: lastSet?.weight_kg ?? 0,
@@ -983,15 +1024,16 @@ function WorkoutBuilderModal({
       current.map((exercise) => {
         if (exercise.instanceId !== instanceId) return exercise
         const lastSet = exercise.sets[exercise.sets.length - 1]
+        const sourceSetNumber = getDropSetSourceNumber(exercise.sets)
         return {
           ...exercise,
           sets: [
             ...exercise.sets,
             {
-              set_number: exercise.sets.length + 1,
+              set_number: sourceSetNumber,
               set_type: 'drop',
-              drop_from_set_number: lastSet?.set_number ?? exercise.sets.length,
-              drop_set_index: exercise.sets.filter((set) => set.set_type === 'drop' && set.drop_from_set_number === (lastSet?.set_number ?? exercise.sets.length)).length + 1,
+              drop_from_set_number: sourceSetNumber,
+              drop_set_index: exercise.sets.filter((set) => set.set_type === 'drop' && set.drop_from_set_number === sourceSetNumber).length + 1,
               reps: lastSet?.reps ?? 10,
               weight_kg: getDropSetWeight(lastSet?.weight_kg),
               speed_mph: lastSet?.speed_mph,
@@ -1046,8 +1088,8 @@ function WorkoutBuilderModal({
 
     const normalizedExercises: WorkoutExercise[] = exercises.map((exercise) => ({
       exercise: exercise.exercise,
-      sets: exercise.sets.map((set, index) => ({
-        set_number: index + 1,
+      sets: normalizeSetNumbers(exercise.sets).map((set) => ({
+        set_number: set.set_number,
         set_type: set.set_type || 'standard',
         drop_from_set_number: set.drop_from_set_number,
         drop_set_index: set.drop_set_index,
@@ -1367,7 +1409,7 @@ function WorkoutBuilderModal({
                             placeholder="e.g. 10"
                           />
                         )}
-                        <Button variant="ghost" size="icon-sm" onClick={() => setExercises((current) => current.map((item) => item.instanceId === exercise.instanceId ? { ...item, sets: item.sets.filter((_, index) => index !== setIndex).map((s, i) => ({ ...s, set_number: i + 1 })) } : item))} disabled={exercise.sets.length <= 1}><X className="h-3.5 w-3.5" /></Button>
+                        <Button variant="ghost" size="icon-sm" onClick={() => setExercises((current) => current.map((item) => item.instanceId === exercise.instanceId ? { ...item, sets: normalizeSetNumbers(item.sets.filter((_, index) => index !== setIndex)) } : item))} disabled={exercise.sets.length <= 1}><X className="h-3.5 w-3.5" /></Button>
                             </>
                           )
                         })()}
@@ -1401,7 +1443,7 @@ function WorkoutBuilderModal({
                           onChange={(e) => updateSetField(exercise.instanceId, setIndex, 'rest_seconds', e.target.value === '' ? 0 : Number(e.target.value))}
                           placeholder="Rest sec"
                         />
-                        <Button variant="ghost" size="icon-sm" onClick={() => setExercises((current) => current.map((item) => item.instanceId === exercise.instanceId ? { ...item, sets: item.sets.filter((_, index) => index !== setIndex).map((nextSet, index) => ({ ...nextSet, set_number: index + 1 })) || item.sets } : item))} disabled={exercise.sets.length <= 1}>
+                        <Button variant="ghost" size="icon-sm" onClick={() => setExercises((current) => current.map((item) => item.instanceId === exercise.instanceId ? { ...item, sets: normalizeSetNumbers(item.sets.filter((_, index) => index !== setIndex)) || item.sets } : item))} disabled={exercise.sets.length <= 1}>
                           <X className="h-3.5 w-3.5" />
                         </Button>
                       </div>
@@ -1411,7 +1453,7 @@ function WorkoutBuilderModal({
                         <Input type="number" value={formatNumericInput(set.reps)} onChange={(e) => updateSetField(exercise.instanceId, setIndex, 'reps', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Minutes" />
                         <Input type="number" value={formatNumericInput(set.speed_mph)} onChange={(e) => updateSetField(exercise.instanceId, setIndex, 'speed_mph', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Speed MPH" />
                         <Input type="number" value={formatNumericInput(set.rest_seconds)} onChange={(e) => updateSetField(exercise.instanceId, setIndex, 'rest_seconds', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Rest sec" />
-                        <Button variant="ghost" size="icon-sm" onClick={() => setExercises((current) => current.map((item) => item.instanceId === exercise.instanceId ? { ...item, sets: item.sets.filter((_, index) => index !== setIndex).map((nextSet, index) => ({ ...nextSet, set_number: index + 1 })) || item.sets } : item))} disabled={exercise.sets.length <= 1}><X className="h-3.5 w-3.5" /></Button>
+                        <Button variant="ghost" size="icon-sm" onClick={() => setExercises((current) => current.map((item) => item.instanceId === exercise.instanceId ? { ...item, sets: normalizeSetNumbers(item.sets.filter((_, index) => index !== setIndex)) || item.sets } : item))} disabled={exercise.sets.length <= 1}><X className="h-3.5 w-3.5" /></Button>
                       </div>
                     ) : inputMode === 'bike' || inputMode === 'rower' ? (
                       <div key={`${exercise.instanceId}-${setIndex}`} className="grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2">
@@ -1419,7 +1461,7 @@ function WorkoutBuilderModal({
                         <Input type="number" value={formatNumericInput(set.reps)} onChange={(e) => updateSetField(exercise.instanceId, setIndex, 'reps', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Minutes" />
                         <Input type="number" value={formatNumericInput(set.watts)} onChange={(e) => updateSetField(exercise.instanceId, setIndex, 'watts', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Watts" />
                         <Input type="number" value={formatNumericInput(set.rest_seconds)} onChange={(e) => updateSetField(exercise.instanceId, setIndex, 'rest_seconds', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Rest sec" />
-                        <Button variant="ghost" size="icon-sm" onClick={() => setExercises((current) => current.map((item) => item.instanceId === exercise.instanceId ? { ...item, sets: item.sets.filter((_, index) => index !== setIndex).map((nextSet, index) => ({ ...nextSet, set_number: index + 1 })) || item.sets } : item))} disabled={exercise.sets.length <= 1}><X className="h-3.5 w-3.5" /></Button>
+                        <Button variant="ghost" size="icon-sm" onClick={() => setExercises((current) => current.map((item) => item.instanceId === exercise.instanceId ? { ...item, sets: normalizeSetNumbers(item.sets.filter((_, index) => index !== setIndex)) || item.sets } : item))} disabled={exercise.sets.length <= 1}><X className="h-3.5 w-3.5" /></Button>
                       </div>
                     ) : inputMode === 'time_only' ? (
                       <div key={`${exercise.instanceId}-${setIndex}`} className="grid grid-cols-[80px_1fr_1fr_auto] gap-2">
@@ -1438,7 +1480,7 @@ function WorkoutBuilderModal({
                           onChange={(e) => updateSetField(exercise.instanceId, setIndex, 'rest_seconds', e.target.value === '' ? 0 : Number(e.target.value))}
                           placeholder="Rest sec"
                         />
-                        <Button variant="ghost" size="icon-sm" onClick={() => setExercises((current) => current.map((item) => item.instanceId === exercise.instanceId ? { ...item, sets: item.sets.filter((_, index) => index !== setIndex).map((nextSet, index) => ({ ...nextSet, set_number: index + 1 })) || item.sets } : item))} disabled={exercise.sets.length <= 1}><X className="h-3.5 w-3.5" /></Button>
+                        <Button variant="ghost" size="icon-sm" onClick={() => setExercises((current) => current.map((item) => item.instanceId === exercise.instanceId ? { ...item, sets: normalizeSetNumbers(item.sets.filter((_, index) => index !== setIndex)) || item.sets } : item))} disabled={exercise.sets.length <= 1}><X className="h-3.5 w-3.5" /></Button>
                       </div>
                     ) : inputMode === 'level_cardio' || inputMode === 'basic_cardio' ? (
                       <div key={`${exercise.instanceId}-${setIndex}`} className="grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2">
@@ -1446,7 +1488,7 @@ function WorkoutBuilderModal({
                         <Input type="number" value={formatNumericInput(set.reps)} onChange={(e) => updateSetField(exercise.instanceId, setIndex, 'reps', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Minutes" />
                         <Input type="number" value={formatNumericInput(set.machine_level)} onChange={(e) => updateSetField(exercise.instanceId, setIndex, 'machine_level', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Level" />
                         <Input type="number" value={formatNumericInput(set.rest_seconds)} onChange={(e) => updateSetField(exercise.instanceId, setIndex, 'rest_seconds', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Rest sec" />
-                        <Button variant="ghost" size="icon-sm" onClick={() => setExercises((current) => current.map((item) => item.instanceId === exercise.instanceId ? { ...item, sets: item.sets.filter((_, index) => index !== setIndex).map((nextSet, index) => ({ ...nextSet, set_number: index + 1 })) || item.sets } : item))} disabled={exercise.sets.length <= 1}><X className="h-3.5 w-3.5" /></Button>
+                        <Button variant="ghost" size="icon-sm" onClick={() => setExercises((current) => current.map((item) => item.instanceId === exercise.instanceId ? { ...item, sets: normalizeSetNumbers(item.sets.filter((_, index) => index !== setIndex)) || item.sets } : item))} disabled={exercise.sets.length <= 1}><X className="h-3.5 w-3.5" /></Button>
                       </div>
                     ) : (
                       <div
@@ -1474,7 +1516,7 @@ function WorkoutBuilderModal({
                           onChange={(e) => updateSetField(exercise.instanceId, setIndex, 'rest_seconds', e.target.value === '' ? 0 : Number(e.target.value))}
                           placeholder="Rest sec"
                         />
-                        <Button variant="ghost" size="icon-sm" onClick={() => setExercises((current) => current.map((item) => item.instanceId === exercise.instanceId ? { ...item, sets: item.sets.filter((_, index) => index !== setIndex).map((nextSet, index) => ({ ...nextSet, set_number: index + 1 })) || item.sets } : item))} disabled={exercise.sets.length <= 1}>
+                        <Button variant="ghost" size="icon-sm" onClick={() => setExercises((current) => current.map((item) => item.instanceId === exercise.instanceId ? { ...item, sets: normalizeSetNumbers(item.sets.filter((_, index) => index !== setIndex)) || item.sets } : item))} disabled={exercise.sets.length <= 1}>
                           <X className="h-3.5 w-3.5" />
                         </Button>
                       </div>
@@ -1635,8 +1677,11 @@ function ActiveWorkoutModal({
   const summary = summarizeExercises(
     exercises.map((exercise) => ({
       exercise: exercise.exercise,
-      sets: exercise.sets.map((set, index) => ({
-        set_number: index + 1,
+      sets: normalizeSetNumbers(exercise.sets).map((set) => ({
+        set_number: set.set_number,
+        set_type: set.set_type || 'standard',
+        drop_from_set_number: set.drop_from_set_number,
+        drop_set_index: set.drop_set_index,
         reps: set.actual_reps ?? set.reps,
         weight_kg: set.actual_weight ?? set.weight_kg ?? 0,
         speed_mph: set.actual_speed_mph,
@@ -1692,7 +1737,7 @@ function ActiveWorkoutModal({
           sets: [
             ...exercise.sets,
             {
-              set_number: exercise.sets.length + 1,
+              set_number: getNextStandardSetNumber(exercise.sets),
               set_type: 'standard',
               reps: lastSet?.reps ?? 10,
               weight_kg: lastSet?.weight_kg ?? 0,
@@ -1724,7 +1769,7 @@ function ActiveWorkoutModal({
       current.map((exercise, currentExerciseIndex) => {
         if (currentExerciseIndex !== exerciseIndex) return exercise
         const lastSet = exercise.sets[exercise.sets.length - 1]
-        const sourceSetNumber = lastSet?.set_number ?? exercise.sets.length
+        const sourceSetNumber = getDropSetSourceNumber(exercise.sets)
         const baseWeight = lastSet?.actual_weight ?? lastSet?.weight_kg ?? 0
         const dropWeight = getDropSetWeight(baseWeight)
         return {
@@ -1732,7 +1777,7 @@ function ActiveWorkoutModal({
           sets: [
             ...exercise.sets,
             {
-              set_number: exercise.sets.length + 1,
+              set_number: sourceSetNumber,
               set_type: 'drop',
               drop_from_set_number: sourceSetNumber,
               drop_set_index: exercise.sets.filter((set) => set.set_type === 'drop' && set.drop_from_set_number === sourceSetNumber).length + 1,
@@ -1779,9 +1824,9 @@ function ActiveWorkoutModal({
         if (currentExerciseIndex !== exerciseIndex || exercise.sets.length <= 1) return exercise
         return {
           ...exercise,
-          sets: exercise.sets
-            .filter((_, currentSetIndex) => currentSetIndex !== setIndex)
-            .map((set, index) => ({ ...set, set_number: index + 1 })),
+          sets: normalizeSetNumbers(
+            exercise.sets.filter((_, currentSetIndex) => currentSetIndex !== setIndex)
+          ),
         }
       })
     )
@@ -2723,7 +2768,7 @@ export default function WorkoutsPage() {
         sets: [
           ...current.sets,
           {
-            set_number: current.sets.length + 1,
+            set_number: getNextStandardSetNumber(current.sets),
             set_type: 'standard',
             reps: lastSet?.reps ?? 10,
             weight_kg: lastSet?.weight_kg ?? 0,
@@ -2744,15 +2789,16 @@ export default function WorkoutsPage() {
     setPendingExercise((current) => {
       if (!current) return current
       const lastSet = current.sets[current.sets.length - 1]
+      const sourceSetNumber = getDropSetSourceNumber(current.sets)
       return {
         ...current,
         sets: [
           ...current.sets,
           {
-            set_number: current.sets.length + 1,
+            set_number: sourceSetNumber,
             set_type: 'drop',
-            drop_from_set_number: lastSet?.set_number ?? current.sets.length,
-            drop_set_index: current.sets.filter((set) => set.set_type === 'drop' && set.drop_from_set_number === (lastSet?.set_number ?? current.sets.length)).length + 1,
+            drop_from_set_number: sourceSetNumber,
+            drop_set_index: current.sets.filter((set) => set.set_type === 'drop' && set.drop_from_set_number === sourceSetNumber).length + 1,
             reps: lastSet?.reps ?? 10,
             weight_kg: getDropSetWeight(lastSet?.weight_kg),
             speed_mph: lastSet?.speed_mph,
@@ -2773,7 +2819,7 @@ export default function WorkoutsPage() {
       if (!current || current.sets.length <= 1) return current
       return {
         ...current,
-        sets: current.sets.filter((_, index) => index !== setIndex).map((set, index) => ({ ...set, set_number: index + 1 })),
+        sets: normalizeSetNumbers(current.sets.filter((_, index) => index !== setIndex)),
       }
     })
   }
@@ -2860,7 +2906,7 @@ export default function WorkoutsPage() {
           sets: [
             ...exercise.sets,
             {
-              set_number: exercise.sets.length + 1,
+              set_number: getNextStandardSetNumber(exercise.sets),
               set_type: 'standard',
               reps: lastSet?.reps ?? 10,
               weight_kg: lastSet?.weight_kg ?? 0,
@@ -2883,15 +2929,16 @@ export default function WorkoutsPage() {
       current.map((exercise) => {
         if (exercise.instanceId !== instanceId) return exercise
         const lastSet = exercise.sets[exercise.sets.length - 1]
+        const sourceSetNumber = getDropSetSourceNumber(exercise.sets)
         return {
           ...exercise,
           sets: [
             ...exercise.sets,
             {
-              set_number: exercise.sets.length + 1,
+              set_number: sourceSetNumber,
               set_type: 'drop',
-              drop_from_set_number: lastSet?.set_number ?? exercise.sets.length,
-              drop_set_index: exercise.sets.filter((set) => set.set_type === 'drop' && set.drop_from_set_number === (lastSet?.set_number ?? exercise.sets.length)).length + 1,
+              drop_from_set_number: sourceSetNumber,
+              drop_set_index: exercise.sets.filter((set) => set.set_type === 'drop' && set.drop_from_set_number === sourceSetNumber).length + 1,
               reps: lastSet?.reps ?? 10,
               weight_kg: getDropSetWeight(lastSet?.weight_kg),
               speed_mph: lastSet?.speed_mph,
@@ -2915,7 +2962,7 @@ export default function WorkoutsPage() {
         if (exercise.sets.length <= 1) return exercise
         return {
           ...exercise,
-          sets: exercise.sets.filter((_, index) => index !== setIndex).map((set, index) => ({ ...set, set_number: index + 1 })),
+          sets: normalizeSetNumbers(exercise.sets.filter((_, index) => index !== setIndex)),
         }
       })
     )
@@ -2924,8 +2971,11 @@ export default function WorkoutsPage() {
   const buildWorkoutFromManual = () => {
     const normalizedExercises: WorkoutExercise[] = manualExercises.map((exercise) => ({
       exercise: exercise.exercise,
-      sets: exercise.sets.map((set, index) => ({
-        set_number: index + 1,
+      sets: normalizeSetNumbers(exercise.sets).map((set) => ({
+        set_number: set.set_number,
+        set_type: set.set_type || 'standard',
+        drop_from_set_number: set.drop_from_set_number,
+        drop_set_index: set.drop_set_index,
         reps: Math.max(1, Number(set.reps) || 1),
         weight_kg: Math.max(0, Number(set.weight_kg) || 0),
         speed_mph: set.speed_mph !== undefined ? Math.max(0, Number(set.speed_mph) || 0) : undefined,

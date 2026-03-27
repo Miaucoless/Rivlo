@@ -24,7 +24,7 @@ import { Label } from '@/components/ui/label'
 import { useAppStore } from '@/store/useAppStore'
 import { WaterIntakeCard } from '@/components/dashboard/WaterIntakeCard'
 import { DailyQuoteCard } from '@/components/dashboard/DailyQuoteCard'
-import { percentage, getTodayISO, formatCalories, formatWeightDelta, formatWeightValue, getWeightUnitLabel } from '@/lib/utils'
+import { cn, percentage, getTodayISO, formatCalories, formatWeightDelta, formatWeightValue, getWeightUnitLabel } from '@/lib/utils'
 import { toast } from 'sonner'
 
 const stagger = {
@@ -46,6 +46,20 @@ function CustomTooltip({ active, payload, label, unitSystem }: any) {
         </p>
       ))}
     </div>
+  )
+}
+
+function getWorkoutSetDisplayName(set: { set_number: number; set_type?: 'standard' | 'drop'; drop_set_index?: number }) {
+  if (set.set_type === 'drop') {
+    return `Drop Set ${set.drop_set_index ?? 1}`
+  }
+  return `Set ${set.set_number}`
+}
+
+function getWorkoutSetRowClass(set: { set_type?: 'standard' | 'drop' }) {
+  return cn(
+    'grid grid-cols-3 items-center text-xs rounded px-2 py-1 bg-background/40',
+    set.set_type === 'drop' && 'ml-4 w-[calc(100%-1rem)] border border-dashed border-primary/25 bg-primary/[0.05]'
   )
 }
 
@@ -553,9 +567,9 @@ export default function DashboardPage() {
                                         <div className="grid grid-cols-3 text-[10px] text-muted-foreground uppercase tracking-wider mb-1 px-1">
                                           <span>Set</span><span className="text-center">Reps</span><span className="text-right">Weight</span>
                                         </div>
-                                        {exercise.sets.map((set) => (
-                                          <div key={set.set_number} className="grid grid-cols-3 items-center text-xs rounded px-2 py-1 bg-background/40">
-                                            <span className="text-muted-foreground font-medium">{set.set_number}</span>
+                                        {exercise.sets.map((set, setIndex) => (
+                                          <div key={`${exercise.exercise_id}-${set.set_number}-${set.drop_set_index ?? 'main'}-${setIndex}`} className={getWorkoutSetRowClass(set)}>
+                                            <span className={cn('font-medium text-muted-foreground', set.set_type === 'drop' && 'text-primary')}>{getWorkoutSetDisplayName(set)}</span>
                                             <span className="text-center font-data font-semibold tabular-nums">{set.actual_reps ?? set.target_reps}</span>
                                             <span className="text-right font-data tabular-nums text-muted-foreground">
                                               {(set.weight_kg || 0) > 0

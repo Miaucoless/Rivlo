@@ -189,6 +189,51 @@ type NotificationInputs = Pick<
   'user' | 'notifications' | 'notificationPreferences' | 'weightHistory' | 'journalEntries' | 'workoutLogs' | 'mealEntries' | 'streak' | 'supplements'
 >
 
+function calculateActivityStreak(state: Pick<AppStore, 'weightHistory' | 'journalEntries' | 'workoutLogs' | 'mealEntries' | 'supplements'>) {
+  const activeDates = new Set<string>()
+
+  state.workoutLogs.forEach((log) => {
+    if (log.date) activeDates.add(log.date)
+  })
+
+  Object.entries(state.mealEntries).forEach(([date, meals]) => {
+    if (meals.length > 0) activeDates.add(date)
+  })
+
+  state.journalEntries.forEach((entry) => {
+    if (entry.date) activeDates.add(entry.date)
+  })
+
+  state.weightHistory.forEach((entry) => {
+    if (entry.date) activeDates.add(entry.date)
+  })
+
+  state.supplements.forEach((supplement) => {
+    supplement.taken_dates.forEach((date) => {
+      if (date) activeDates.add(date)
+    })
+  })
+
+  if (activeDates.size === 0) return 0
+
+  const sortedDates = Array.from(activeDates).sort()
+  const todayIso = getTodayISO()
+  const yesterdayIso = format(subDays(new Date(), 1), 'yyyy-MM-dd')
+  const latestDate = sortedDates[sortedDates.length - 1]
+
+  if (latestDate !== todayIso && latestDate !== yesterdayIso) return 0
+
+  let streak = 0
+  let cursor = latestDate
+
+  while (activeDates.has(cursor)) {
+    streak += 1
+    cursor = format(subDays(new Date(`${cursor}T12:00:00`), 1), 'yyyy-MM-dd')
+  }
+
+  return streak
+}
+
 // Realistic exercise sets for each PPL day in demo mode
 const DEMO_PUSH_EXERCISES: WorkoutLog['exercises'] = [
   { exercise_id: 'e1', exercise_name: 'Barbell Bench Press', sets: [
@@ -501,9 +546,12 @@ function withRefreshedNotifications(current: NotificationInputs, updates: Partia
     ...current,
     ...updates,
   } as NotificationInputs
+  const nextStreak = calculateActivityStreak(nextState)
+  nextState.streak = nextStreak
 
   return {
     ...updates,
+    streak: nextStreak,
     notifications: buildNotifications(nextState),
   }
 }

@@ -20,7 +20,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useAppStore } from '@/store/useAppStore'
-import { formatWeightValue } from '@/lib/utils'
+import { cn, formatWeightValue } from '@/lib/utils'
 import type { CalendarReminder } from '@/types'
 
 const EVENT_COLORS = {
@@ -39,6 +39,20 @@ const REMINDER_DOT_COLORS: Record<CalendarReminder['color'], string> = {
   green: 'bg-emerald-400',
   yellow: 'bg-yellow-400',
   purple: 'bg-purple-400',
+}
+
+function getWorkoutSetDisplayName(set: { set_number: number; set_type?: 'standard' | 'drop'; drop_set_index?: number }) {
+  if (set.set_type === 'drop') {
+    return `Drop Set ${set.drop_set_index ?? 1}`
+  }
+  return `Set ${set.set_number}`
+}
+
+function getWorkoutSetRowClass(set: { set_type?: 'standard' | 'drop' }) {
+  return cn(
+    'grid grid-cols-3 items-center text-xs rounded-lg px-2 py-1.5 bg-background/50',
+    set.set_type === 'drop' && 'ml-4 w-[calc(100%-1rem)] border border-dashed border-primary/25 bg-primary/[0.05]'
+  )
 }
 
 export default function CalendarPage() {
@@ -364,9 +378,9 @@ export default function CalendarPage() {
                                             <span className="text-right">Weight</span>
                                           </div>
                                           <div className="space-y-1">
-                                            {exercise.sets.map((set) => (
-                                              <div key={set.set_number} className="grid grid-cols-3 items-center text-xs rounded-lg px-2 py-1.5 bg-background/50">
-                                                <span className="text-muted-foreground font-medium">{set.set_number}</span>
+                                            {exercise.sets.map((set, setIndex) => (
+                                              <div key={`${exercise.exercise_id}-${set.set_number}-${set.drop_set_index ?? 'main'}-${setIndex}`} className={getWorkoutSetRowClass(set)}>
+                                                <span className={cn('font-medium text-muted-foreground', set.set_type === 'drop' && 'text-primary')}>{getWorkoutSetDisplayName(set)}</span>
                                                 <span className="text-center font-data font-semibold tabular-nums">
                                                   {set.actual_reps ?? set.target_reps}
                                                 </span>
