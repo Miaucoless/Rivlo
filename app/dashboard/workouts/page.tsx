@@ -502,8 +502,11 @@ function formatWorkoutWeightInput(weightKg: number | undefined, unitSystem: Unit
   if (unitSystem === 'metric') return formatNumericInput(weightKg)
 
   const weightLbs = kgToLbs(weightKg)
-  const rounded = Number.isInteger(weightLbs) ? weightLbs.toFixed(0) : weightLbs.toFixed(1)
-  return rounded
+  const roundedToTenth = Math.round(weightLbs * 10) / 10
+  if (Math.abs(roundedToTenth - Math.round(roundedToTenth)) < 0.001) {
+    return String(Math.round(roundedToTenth))
+  }
+  return String(roundedToTenth)
 }
 
 function parseWorkoutWeightInput(value: string, unitSystem: UnitSystem) {
@@ -666,10 +669,9 @@ function estimateAdjustedMet(args: {
 }) {
   const correctedMetBase = getCorrectedMet(args.metBase, args.metProfile)
   const loadRatio = args.metProfile.weightKg > 0 ? args.actualWeight / args.metProfile.weightKg : 0
-  const densityFactor = Math.min(1.35, Math.max(0.85, 40 / Math.max(args.activeSeconds, 20)))
-  const repFactor = Math.min(1.25, Math.max(0.9, args.actualReps / 10))
-  // Higher coefficient (0.8 vs 0.3) and cap (3.0 vs 1.4) so heavier lifts visibly increase calories
-  const loadFactor = Math.min(3.0, 1.0 + loadRatio * 0.8)
+  const densityFactor = Math.min(1.2, Math.max(0.9, 36 / Math.max(args.activeSeconds, 20)))
+  const repFactor = Math.min(1.15, Math.max(0.92, args.actualReps / 10))
+  const loadFactor = Math.min(1.9, 1.0 + loadRatio * 0.35)
 
   if (args.metType === 'cardio') return Math.min(14, correctedMetBase * Math.max(0.95, densityFactor))
   if (args.metType === 'bodyweight_vigorous') return Math.min(11, correctedMetBase * Math.max(0.95, repFactor))
@@ -746,10 +748,10 @@ function estimateSetCalories(args: {
   })
 
   const activeCalories = adjustedMet * args.metProfile.weightKg * (activeSeconds / 3600)
-  const restMetBase = (libraryMatch?.met_type ?? 'resistance') === 'cardio' ? 1.8 : 1.3
+  const restMetBase = (libraryMatch?.met_type ?? 'resistance') === 'cardio' ? 1.5 : 1.05
   const restCalories =
     getCorrectedMet(restMetBase, args.metProfile) * args.metProfile.weightKg * (Math.max(args.restSeconds, 0) / 3600)
-  return Math.max(1, activeCalories + restCalories)
+  return Math.max(0, activeCalories + restCalories)
 }
 
 function summarizeExercises(exercises: WorkoutExercise[], metProfile: MetProfile) {
@@ -1938,15 +1940,40 @@ function ActiveWorkoutModal({
     const weightKg = metProfile.weightKg
 
     try {
-      // Group exercises by activity type and accumulate duration
+      let strengthCalories = 0
+      let cardioMetCalories = 0
       const activityMap: Record<string, number> = {}
+
       for (const ex of exercises) {
-        const activity = getApiActivity(ex.exercise)
-        const exDurationMin = ex.sets.reduce((s, set) => {
-          const isCardio = ex.exercise.muscle_groups.includes('cardio')
-          return s + (isCardio ? (set.actual_reps || set.reps || 0) : (set.rest_seconds || 60) / 60 + 0.5)
-        }, 0)
-        activityMap[activity] = (activityMap[activity] || 0) + exDurationMin
+        const exSummary = summarizeExercises([
+          {
+            exercise: ex.exercise,
+            sets: ex.sets.map((set) => ({
+              set_number: set.set_number,
+              set_type: set.set_type,
+              drop_from_set_number: set.drop_from_set_number,
+              drop_set_index: set.drop_set_index,
+              reps: set.actual_reps ?? set.reps,
+              weight_kg: set.actual_weight ?? set.weight_kg ?? 0,
+              speed_mph: set.actual_speed_mph ?? set.speed_mph,
+              incline_pct: set.actual_incline_pct ?? set.incline_pct,
+              machine_level: set.actual_machine_level ?? set.machine_level,
+              resistance_level: set.actual_resistance_level ?? set.resistance_level,
+              watts: set.actual_watts ?? set.watts,
+              cadence_rpm: set.actual_cadence_rpm ?? set.cadence_rpm,
+              interval_duration_sec: set.interval_duration_sec,
+              rest_seconds: set.rest_seconds,
+            })),
+          },
+        ], metProfile)
+
+        if (isCardioExercise(ex.exercise)) {
+          cardioMetCalories += exSummary.caloriesBurned
+          const activity = getApiActivity(ex.exercise)
+          activityMap[activity] = (activityMap[activity] || 0) + exSummary.durationMin
+        } else {
+          strengthCalories += exSummary.caloriesBurned
+        }
       }
 
       let apiTotal = 0
@@ -1961,10 +1988,14 @@ function ActiveWorkoutModal({
         })
       )
 
-      // If API returned something meaningful, blend: 70% API + 30% MET
-      const finalCalories = apiTotal > 0
-        ? Math.round(apiTotal * 0.7 + metCalories * 0.3)
-        : metCalories
+      const blendedCardioCalories = apiTotal > 0
+        ? Math.round(apiTotal * 0.65 + cardioMetCalories * 0.35)
+        : cardioMetCalories
+
+      const finalCalories = Math.max(
+        0,
+        Math.round(strengthCalories + blendedCardioCalories)
+      )
 
       onComplete({ exercises, caloriesBurned: finalCalories, totalVolumeKg: summary.totalVolumeKg, durationMin }, options)
     } catch {
@@ -1973,6 +2004,71 @@ function ActiveWorkoutModal({
       setIsCompleting(false)
     }
   }
+
+  const renderExerciseAdder = (title: string, description: string) => (
+    <div className="rounded-2xl border border-border/60 bg-muted/10 p-4">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold">{title}</p>
+          <p className="text-xs text-muted-foreground">{description}</p>
+        </div>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+        <div className="space-y-2">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={exerciseSearch}
+              onChange={(e) => setExerciseSearch(e.target.value)}
+              placeholder="Search exercise variations"
+              type="search"
+              inputMode="search"
+              enterKeyHint="search"
+              autoCapitalize="none"
+              autoCorrect="off"
+              className="pl-9 pr-8"
+            />
+            {exerciseSearch && (
+              <button type="button" onClick={() => setExerciseSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+          {exerciseSearch.trim().length >= 1 && (liveSuggestions.length > 0 || apiLiveSuggestions.length > 0) && (
+            <div className="max-h-56 overflow-y-auto rounded-xl border border-border/60 bg-background">
+              {liveSuggestions.map((item) => (
+                <button key={item.id} type="button" onClick={() => addExerciseToLiveWorkout(item)} className="flex w-full items-center gap-3 border-b border-border/40 px-3 py-2.5 text-left transition-colors last:border-b-0 hover:bg-muted/20">
+                  {item.gif_url && <img src={item.gif_url} alt="" className="h-11 w-11 flex-shrink-0 rounded-lg object-cover" />}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium">{item.name}</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">{item.equipment}</p>
+                  </div>
+                  <span className="flex-shrink-0 text-[10px] text-muted-foreground">{item.default_sets} × {item.default_reps}</span>
+                </button>
+              ))}
+              {apiLiveSuggestions.length > 0 && (
+                <>
+                  {liveSuggestions.length > 0 && <div className="px-3 py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground/50 bg-muted/20">More exercises</div>}
+                  {apiLiveSuggestions.map((item) => (
+                    <button key={item.id} type="button" onClick={() => addExerciseToLiveWorkout(item)} className="flex w-full items-center gap-3 border-b border-border/40 px-3 py-2.5 text-left transition-colors last:border-b-0 hover:bg-muted/20">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium">{item.name}</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">{item.equipment}</p>
+                      </div>
+                      <span className="flex-shrink-0 text-[10px] text-muted-foreground">{item.default_sets} × {item.default_reps}</span>
+                    </button>
+                  ))}
+                </>
+              )}
+            </div>
+          )}
+        </div>
+        <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={addCustomExerciseToLiveWorkout}>
+          Add Custom
+        </Button>
+      </div>
+    </div>
+  )
 
   return (
     <DialogContent className="max-h-[92vh] w-[calc(100vw-1rem)] max-w-3xl overflow-x-hidden overflow-y-auto p-3 sm:p-6">
@@ -2007,69 +2103,7 @@ function ActiveWorkoutModal({
           </Button>
         </div>
 
-        <div className="rounded-2xl border border-border/60 bg-muted/10 p-4">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold">Add another exercise</p>
-              <p className="text-xs text-muted-foreground">Search and drop a movement into this live workout.</p>
-            </div>
-          </div>
-          <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
-            <div className="space-y-2">
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  value={exerciseSearch}
-                  onChange={(e) => setExerciseSearch(e.target.value)}
-                  placeholder="Search exercise variations"
-                  type="search"
-                  inputMode="search"
-                  enterKeyHint="search"
-                  autoCapitalize="none"
-                  autoCorrect="off"
-                  className="pl-9 pr-8"
-                />
-                {exerciseSearch && (
-                  <button type="button" onClick={() => setExerciseSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
-              {exerciseSearch.trim().length >= 1 && (liveSuggestions.length > 0 || apiLiveSuggestions.length > 0) && (
-                <div className="max-h-56 overflow-y-auto rounded-xl border border-border/60 bg-background">
-                  {liveSuggestions.map((item) => (
-                    <button key={item.id} type="button" onClick={() => addExerciseToLiveWorkout(item)} className="flex w-full items-center gap-3 border-b border-border/40 px-3 py-2.5 text-left transition-colors last:border-b-0 hover:bg-muted/20">
-                      {item.gif_url && <img src={item.gif_url} alt="" className="h-11 w-11 flex-shrink-0 rounded-lg object-cover" />}
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium">{item.name}</p>
-                        <p className="mt-0.5 text-xs text-muted-foreground">{item.equipment}</p>
-                      </div>
-                      <span className="flex-shrink-0 text-[10px] text-muted-foreground">{item.default_sets} × {item.default_reps}</span>
-                    </button>
-                  ))}
-                  {apiLiveSuggestions.length > 0 && (
-                    <>
-                      {liveSuggestions.length > 0 && <div className="px-3 py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground/50 bg-muted/20">More exercises</div>}
-                      {apiLiveSuggestions.map((item) => (
-                        <button key={item.id} type="button" onClick={() => addExerciseToLiveWorkout(item)} className="flex w-full items-center gap-3 border-b border-border/40 px-3 py-2.5 text-left transition-colors last:border-b-0 hover:bg-muted/20">
-  
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium">{item.name}</p>
-                            <p className="mt-0.5 text-xs text-muted-foreground">{item.equipment}</p>
-                          </div>
-                          <span className="flex-shrink-0 text-[10px] text-muted-foreground">{item.default_sets} × {item.default_reps}</span>
-                        </button>
-                      ))}
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-            <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={addCustomExerciseToLiveWorkout}>
-              Add Custom
-            </Button>
-          </div>
-        </div>
+        {renderExerciseAdder('Add another exercise', 'Search and drop a movement into this live workout.')}
 
         <div className="space-y-4">
           {exercises.map((exercise, exerciseIndex) => {
@@ -2297,6 +2331,8 @@ function ActiveWorkoutModal({
             </div>
           })}
         </div>
+
+        {renderExerciseAdder('Need one more?', 'Add another exercise here without scrolling back to the top.')}
 
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
           <Button variant="outline" className="w-full sm:min-w-[80px] sm:flex-1" onClick={onPause}>Pause</Button>

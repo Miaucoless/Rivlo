@@ -3768,7 +3768,7 @@ export default function MealsPage() {
   const [addMealMode, setAddMealMode] = useState<'recipe' | 'saved' | 'custom'>('saved')
   const [expandedMeals, setExpandedMeals] = useState<Record<string, boolean>>({})
   const [expandedMealSections, setExpandedMealSections] = useState<Record<MealType, boolean>>({
-    breakfast: true,
+    breakfast: false,
     lunch: false,
     dinner: false,
     snack: false,
