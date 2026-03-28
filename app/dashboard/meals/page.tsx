@@ -98,6 +98,34 @@ function scaleMealLogEntry(entry: MealLogEntry, multiplier: number): MealLogEntr
   }
 }
 
+function scaleSavedMealTemplate(meal: SavedMealTemplate, multiplier: number): SavedMealTemplate {
+  const clamp = Number.isFinite(multiplier) ? Math.max(0, multiplier) : 0
+  const round1 = (n: number) => Math.round((Number(n) || 0) * 10) / 10
+
+  return {
+    ...meal,
+    macros: {
+      calories: Math.round((meal.macros?.calories || 0) * clamp),
+      protein_g: round1((meal.macros?.protein_g || 0) * clamp),
+      carbs_g: round1((meal.macros?.carbs_g || 0) * clamp),
+      fat_g: round1((meal.macros?.fat_g || 0) * clamp),
+    },
+    items: meal.items.map((item) => ({
+      ...item,
+      amount: item.amount != null ? round1(item.amount * clamp) : item.amount,
+      servings: item.servings != null ? round1(item.servings * clamp) : item.servings,
+      macros: item.macros
+        ? {
+            calories: Math.round((item.macros.calories || 0) * clamp),
+            protein_g: round1((item.macros.protein_g || 0) * clamp),
+            carbs_g: round1((item.macros.carbs_g || 0) * clamp),
+            fat_g: round1((item.macros.fat_g || 0) * clamp),
+          }
+        : item.macros,
+    })),
+  }
+}
+
 function isDishCombination(itemName: string) {
   const combinationKeywords = [' and ', ' with ', ' & ', ' or ', ' plus ', ' mixed with ', ' blend ', ' combo ']
   const lowerName = itemName.toLowerCase()
@@ -908,6 +936,7 @@ function MealEditorModal({
   const [recentMultipliers, setRecentMultipliers] = useState<Record<string, string>>({})
   const [selectedRecentMealKeys, setSelectedRecentMealKeys] = useState<Record<string, boolean>>({})
   const [selectedSavedMealId, setSelectedSavedMealId] = useState<string>('')
+  const [savedMealMultiplier, setSavedMealMultiplier] = useState('1')
   const [expandedSavedMealIds, setExpandedSavedMealIds] = useState<Record<string, boolean>>({})
   const [savedMealModalSearch, setSavedMealModalSearch] = useState('')
   const [savedMealModalFilterType, setSavedMealModalFilterType] = useState<string>('all')
@@ -962,6 +991,21 @@ function MealEditorModal({
   const [catalogSuggestions, setCatalogSuggestions] = useState<FoodCatalogItem[]>([])
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [searchLoading, setSearchLoading] = useState(false)
+
+  const selectedSavedMeal = useMemo(
+    () => savedMeals.find((meal) => meal.id === selectedSavedMealId) ?? null,
+    [savedMeals, selectedSavedMealId]
+  )
+
+  const savedMealMultiplierValue = useMemo(() => {
+    const parsed = Number(savedMealMultiplier)
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
+  }, [savedMealMultiplier])
+
+  const scaledSelectedSavedMeal = useMemo(
+    () => selectedSavedMeal ? scaleSavedMealTemplate(selectedSavedMeal, savedMealMultiplierValue) : null,
+    [selectedSavedMeal, savedMealMultiplierValue]
+  )
 
   // Initialize catalog with full catalog including user history
   useEffect(() => {
@@ -1534,6 +1578,8 @@ function MealEditorModal({
       )
     } else {
       setSource('search')
+      setSelectedSavedMealId('')
+      setSavedMealMultiplier('1')
       setMealType(initialMealType ?? 'breakfast')
       setRecipeId('')
       setRecipeMealName('')
@@ -1567,6 +1613,10 @@ function MealEditorModal({
       setManualItems([])
     }
   }, [editingMeal, editingSavedMeal, initialMealType, open])
+
+  useEffect(() => {
+    setSavedMealMultiplier('1')
+  }, [selectedSavedMealId])
 
   useEffect(() => {
     if (source !== 'recipe' || !recipeId) return
@@ -1848,12 +1898,15 @@ function MealEditorModal({
     }
 
     if (source === 'saved') {
-      if (!selectedSavedMealId) {
+      if (!selectedSavedMealId || !selectedSavedMeal) {
         toast.error('Select a saved meal first.')
         return
       }
-      const template = savedMeals.find(m => m.id === selectedSavedMealId)
-      if (!template) return
+      if (savedMealMultiplierValue <= 0) {
+        toast.error('Enter a serving size greater than 0.')
+        return
+      }
+      const template = scaledSelectedSavedMeal ?? selectedSavedMeal
       onSave({
         meal_type: mealType,
         name: template.name,
@@ -2276,6 +2329,7 @@ function MealEditorModal({
                 filteredModalSavedMeals.map((meal) => {
                   const isSelected = selectedSavedMealId === meal.id
                   const isExpanded = expandedSavedMealIds[meal.id] || false
+                  const displayMeal = isSelected && scaledSelectedSavedMeal ? scaledSelectedSavedMeal : meal
                   return (
                     <div
                       key={meal.id}
@@ -2294,7 +2348,7 @@ function MealEditorModal({
                           <div className="min-w-0 flex-1">
                             <p className="text-sm font-medium truncate">{meal.name}</p>
                             <p className="font-data text-[11px] text-muted-foreground/60 mt-0.5 tabular-nums">
-                              {meal.macros.calories} kcal · <span className="text-emerald-500/70">{meal.macros.protein_g}g P</span> · {meal.macros.carbs_g}g C · {meal.macros.fat_g}g F
+                              {displayMeal.macros.calories} kcal · <span className="text-emerald-500/70">{displayMeal.macros.protein_g}g P</span> · {displayMeal.macros.carbs_g}g C · {displayMeal.macros.fat_g}g F
                             </p>
                           </div>
                           {isSelected && <CheckCircle className="w-4 h-4 text-primary shrink-0" />}
@@ -2312,7 +2366,7 @@ function MealEditorModal({
                           </button>
                           {isExpanded && (
                             <div className="mt-1.5 rounded-lg border border-border/40 divide-y divide-border/30">
-                              {meal.items.map((item, idx) => (
+                              {displayMeal.items.map((item, idx) => (
                                 <div key={idx} className="px-2.5 py-1.5">
                                   <div className="flex items-center justify-between gap-2">
                                     <span className="text-xs font-medium text-foreground/80 truncate">{item.matched_name}</span>
@@ -2336,6 +2390,26 @@ function MealEditorModal({
                 })
               )}
               </div>
+              {selectedSavedMeal && (
+                <div className="rounded-xl border border-border/50 bg-muted/20 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Serving size</p>
+                      <p className="text-[11px] text-muted-foreground mt-1">Macros update instantly as you change this.</p>
+                    </div>
+                    <div className="w-24">
+                      <Input
+                        type="number"
+                        min={0.1}
+                        step={0.1}
+                        value={savedMealMultiplier}
+                        onChange={(e) => setSavedMealMultiplier(e.target.value)}
+                        className="h-9 text-center font-data"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
             </TabsContent>
 
             <TabsContent value="recent" className="mt-0 space-y-3">
