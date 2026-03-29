@@ -8,9 +8,8 @@ import { format, startOfWeek, subDays } from 'date-fns'
 import {
   ChefHat, ShoppingCart, Clock, Users, Flame,
   CheckCircle, Circle, Download, Plus, Zap, Pencil, Trash2, X, CalendarDays,
-  Coffee, Soup, Moon, Cookie, GlassWater, Search, BookOpen, ChevronDown, Share2,
+  Coffee, Soup, Moon, Cookie, GlassWater, Search, BookOpen, ChevronDown,
 } from 'lucide-react'
-import { ShareModal } from '@/components/sharing/ShareModal'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -47,9 +46,9 @@ type ManualItemRow = {
   unit?: string
   macros: {
     calories: number
-    protein_g?: number
-    carbs_g?: number
-    fat_g?: number
+    protein_g: number
+    carbs_g: number
+    fat_g: number
   }
 }
 
@@ -66,53 +65,6 @@ function fmtMacro(n: number): string {
   if (!Number.isFinite(n) || n <= 0) return '0'
   if (n >= 1) return String(Math.round(n))
   return parseFloat(n.toFixed(2)).toString()
-}
-
-function parseOptionalMacroInput(value: string) {
-  if (value.trim() === '') return undefined
-  const parsed = Number(value)
-  return Number.isFinite(parsed) ? parsed : NaN
-}
-
-function renderMacroSummary(macros?: { calories?: number; protein_g?: number; carbs_g?: number; fat_g?: number }) {
-  if (!macros) return null
-
-  const parts: React.ReactNode[] = []
-
-  if (typeof macros.calories === 'number') {
-    parts.push(<span key="cal" className="font-data text-xs text-muted-foreground">{fmtMacro(macros.calories)} kcal</span>)
-  }
-  if ('protein_g' in macros && typeof macros.protein_g === 'number') {
-    parts.push(<span key="protein" className="font-data text-xs text-emerald-500/80">{fmtMacro(macros.protein_g)}g P</span>)
-  }
-  if ('carbs_g' in macros && typeof macros.carbs_g === 'number') {
-    parts.push(<span key="carbs" className="font-data text-xs text-muted-foreground">{fmtMacro(macros.carbs_g)}g C</span>)
-  }
-  if ('fat_g' in macros && typeof macros.fat_g === 'number') {
-    parts.push(<span key="fat" className="font-data text-xs text-muted-foreground">{fmtMacro(macros.fat_g)}g F</span>)
-  }
-
-  if (parts.length === 0) return null
-
-  return (
-    <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-      {parts.map((part, index) => (
-        <React.Fragment key={index}>
-          {index > 0 && <span className="text-[10px] text-border/50">·</span>}
-          {part}
-        </React.Fragment>
-      ))}
-    </div>
-  )
-}
-
-function buildItemMacros(calories: number, extras?: { protein_g?: number; carbs_g?: number; fat_g?: number }) {
-  return {
-    calories: Math.round(calories),
-    ...(extras?.protein_g !== undefined ? { protein_g: Math.round(extras.protein_g * 10) / 10 } : {}),
-    ...(extras?.carbs_g !== undefined ? { carbs_g: Math.round(extras.carbs_g * 10) / 10 } : {}),
-    ...(extras?.fat_g !== undefined ? { fat_g: Math.round(extras.fat_g * 10) / 10 } : {}),
-  }
 }
 
 function scaleMealLogEntry(entry: MealLogEntry, multiplier: number): MealLogEntry {
@@ -142,34 +94,6 @@ function scaleMealLogEntry(entry: MealLogEntry, multiplier: number): MealLogEntr
       },
       amount: item.amount != null ? round1(item.amount * clamp) : item.amount,
       servings: item.servings != null ? round1(item.servings * clamp) : item.servings,
-    })),
-  }
-}
-
-function scaleSavedMealTemplate(meal: SavedMealTemplate, multiplier: number): SavedMealTemplate {
-  const clamp = Number.isFinite(multiplier) ? Math.max(0, multiplier) : 0
-  const round1 = (n: number) => Math.round((Number(n) || 0) * 10) / 10
-
-  return {
-    ...meal,
-    macros: {
-      calories: Math.round((meal.macros?.calories || 0) * clamp),
-      protein_g: round1((meal.macros?.protein_g || 0) * clamp),
-      carbs_g: round1((meal.macros?.carbs_g || 0) * clamp),
-      fat_g: round1((meal.macros?.fat_g || 0) * clamp),
-    },
-    items: meal.items.map((item) => ({
-      ...item,
-      amount: item.amount != null ? round1(item.amount * clamp) : item.amount,
-      servings: item.servings != null ? round1(item.servings * clamp) : item.servings,
-      macros: item.macros
-        ? {
-            calories: Math.round((item.macros.calories || 0) * clamp),
-            protein_g: round1((item.macros.protein_g || 0) * clamp),
-            carbs_g: round1((item.macros.carbs_g || 0) * clamp),
-            fat_g: round1((item.macros.fat_g || 0) * clamp),
-          }
-        : item.macros,
     })),
   }
 }
@@ -382,391 +306,6 @@ function mealTypeTheme(type: MealType) {
     text: 'text-rose-300',
     hint: 'Track shakes, coffees, and drinks.',
   }
-}
-
-function progressValue(consumed: number, target?: number) {
-  if (!target || target <= 0) return 0
-  return Math.max(0, Math.min(100, Math.round((consumed / target) * 100)))
-}
-
-function remainingValue(consumed: number, target?: number) {
-  if (!target || target <= 0) return 0
-  return Math.max(0, Math.round(target - consumed))
-}
-
-function DailyNutritionSummary({
-  totals,
-  user,
-}: {
-  totals: { calories: number; protein_g: number; carbs_g: number; fat_g: number }
-  user: {
-    calorie_target?: number
-    protein_target_g?: number
-    carb_target_g?: number
-    fat_target_g?: number
-  }
-}) {
-  const calorieTarget = user.calorie_target || 0
-  const caloriePct = progressValue(totals.calories, calorieTarget)
-  const calorieRemaining = remainingValue(totals.calories, calorieTarget)
-  const ringStyle = {
-    background: `conic-gradient(hsl(var(--primary)) ${caloriePct * 3.6}deg, rgba(255,255,255,0.08) 0deg)`,
-  }
-
-  const macroCards = [
-    {
-      label: 'Protein',
-      consumed: Math.round(totals.protein_g),
-      target: user.protein_target_g || 0,
-      suffix: 'g',
-    },
-    {
-      label: 'Carbs',
-      consumed: Math.round(totals.carbs_g),
-      target: user.carb_target_g || 0,
-      suffix: 'g',
-    },
-    {
-      label: 'Fat',
-      consumed: Math.round(totals.fat_g),
-      target: user.fat_target_g || 0,
-      suffix: 'g',
-    },
-  ].filter((macro) => macro.target > 0)
-  const macroGridClass = macroCards.length >= 3 ? 'grid-cols-3' : macroCards.length === 2 ? 'grid-cols-2' : 'grid-cols-1'
-
-  return (
-    <div className="grid gap-2.5 xl:grid-cols-[1.05fr_0.78fr_0.78fr_0.78fr]">
-      <div className="rounded-[1.1rem] border border-border/60 bg-[linear-gradient(135deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02))] p-3 shadow-[0_16px_44px_-38px_rgba(0,0,0,0.65)] xl:rounded-[1.35rem] xl:p-3.5">
-        <div className="flex items-center justify-between gap-3">
-          <div className="space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-muted-foreground">Daily calories</p>
-            <div className="flex flex-wrap items-end gap-1.5 sm:gap-2.5">
-              <span className="font-data text-[1.4rem] font-semibold tracking-tight text-foreground sm:text-[1.7rem]">{todayNumber(totals.calories)}</span>
-              <span className="pb-0.5 text-xs text-muted-foreground">
-                / {calorieTarget > 0 ? todayNumber(calorieTarget) : 'No target'}
-              </span>
-            </div>
-            <p className="text-[11px] text-muted-foreground sm:text-xs">
-              {calorieTarget > 0 ? `${todayNumber(calorieRemaining)} remaining today` : 'Set a calorie target to track progress'}
-            </p>
-          </div>
-
-          <div className="flex flex-col items-center">
-            <div className="relative flex h-16 w-16 items-center justify-center sm:h-20 sm:w-20">
-            <div className="absolute inset-0 rounded-full" style={ringStyle} />
-            <div className="absolute inset-[7px] rounded-full bg-background sm:inset-[8px]" />
-            <div className="relative flex h-full w-full items-center justify-center text-center leading-none">
-              <p className="font-data text-sm font-semibold text-foreground sm:text-lg">{caloriePct}%</p>
-            </div>
-            </div>
-            <p className="mt-1.5 text-[9px] uppercase tracking-[0.16em] text-muted-foreground">Consumed</p>
-          </div>
-        </div>
-      </div>
-
-      <div className={`grid gap-2 ${macroGridClass} xl:contents`}>
-        {macroCards.map((macro) => {
-          const pct = progressValue(macro.consumed, macro.target)
-          const remaining = remainingValue(macro.consumed, macro.target)
-          return (
-            <div
-              key={macro.label}
-              className="rounded-[1rem] border border-border/60 bg-card/80 p-2.5 shadow-[0_14px_32px_-32px_rgba(0,0,0,0.55)] xl:rounded-[1.2rem] xl:p-3.5"
-            >
-              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground xl:text-[11px] xl:tracking-[0.24em]">{macro.label}</p>
-              <div className="mt-1.5 flex flex-col gap-0.5 xl:mt-2.5 xl:flex-row xl:items-end xl:justify-between xl:gap-2">
-                <span className="font-data text-sm font-semibold text-foreground xl:text-lg">
-                  {macro.consumed}
-                  {' '}
-                  {macro.suffix}
-                </span>
-                <span className="text-[10px] text-muted-foreground xl:text-[11px]">
-                  / {macro.target > 0 ? `${macro.target} ${macro.suffix}` : 'No target'}
-                </span>
-              </div>
-              <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted/70 xl:mt-2.5">
-                <motion.div
-                  className="h-full rounded-full bg-primary"
-                  initial={{ width: 0 }}
-                  animate={{ width: `${pct}%` }}
-                  transition={{ duration: 0.5, ease: [0.22, 0.61, 0.36, 1] }}
-                />
-              </div>
-              <p className="mt-1 text-[10px] text-muted-foreground xl:mt-1.5 xl:text-[11px]">
-                {macro.target > 0 ? `${remaining} ${macro.suffix} remaining` : `${pct}% of goal`}
-              </p>
-            </div>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
-function todayNumber(value: number) {
-  return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(value)
-}
-
-function MealTimelineSection({
-  mealType,
-  meals,
-  expandedMeals,
-  setExpandedMeals,
-  sectionExpanded,
-  toggleSectionExpanded,
-  openAdd,
-  openEdit,
-  handleDeleteMeal,
-  user,
-}: {
-  mealType: MealType
-  meals: MealLogEntry[]
-  expandedMeals: Record<string, boolean>
-  setExpandedMeals: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
-  sectionExpanded: boolean
-  toggleSectionExpanded: () => void
-  openAdd: (mealType?: MealType) => void
-  openEdit: (meal: MealLogEntry) => void
-  handleDeleteMeal: (mealId: string) => void
-  user: {
-    calorie_target?: number
-    protein_target_g?: number
-    carb_target_g?: number
-    fat_target_g?: number
-  }
-}) {
-  const theme = mealTypeTheme(mealType)
-  const totals = meals.reduce(
-    (acc, meal) => ({
-      calories: acc.calories + meal.macros.calories,
-      protein_g: acc.protein_g + meal.macros.protein_g,
-      carbs_g: acc.carbs_g + meal.macros.carbs_g,
-      fat_g: acc.fat_g + meal.macros.fat_g,
-    }),
-    { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 }
-  )
-
-  return (
-    <section className="space-y-2.5">
-      <div className={`rounded-[1.25rem] border bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.02))] p-3.5 shadow-[0_14px_34px_-32px_rgba(0,0,0,0.6)] ${theme.border}`}>
-        <button
-          type="button"
-          onClick={toggleSectionExpanded}
-          className="flex w-full items-center justify-between gap-3 pb-2 text-left sm:hidden"
-        >
-          <div className="min-w-0">
-            <h3 className="text-lg font-semibold tracking-tight text-foreground">{mealTypeLabel(mealType)}</h3>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {meals.length > 0
-                ? `${totals.calories} kcal · ${fmtMacro(totals.protein_g)} g protein · ${meals.length} ${meals.length === 1 ? 'entry' : 'entries'}`
-                : theme.hint}
-            </p>
-          </div>
-          <ChevronDown className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${sectionExpanded ? 'rotate-180' : ''}`} />
-        </button>
-
-        <div className={sectionExpanded ? 'block' : 'hidden sm:block'}>
-        <div className="flex flex-col gap-2.5 sm:flex-row sm:items-start sm:justify-between">
-          <div className="space-y-2">
-              <div className="hidden sm:block">
-                <h3 className="text-lg font-semibold tracking-tight text-foreground">{mealTypeLabel(mealType)}</h3>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <div className="rounded-full border border-border/60 bg-background/70 px-2.5 py-1 text-[11px] text-foreground">
-                  {totals.calories} kcal
-                </div>
-                <div className="rounded-full border border-border/60 bg-background/70 px-2.5 py-1 text-[11px] text-foreground">
-                  {fmtMacro(totals.protein_g)} g protein
-                </div>
-                <div className="rounded-full border border-border/60 bg-background/70 px-2.5 py-1 text-[11px] text-muted-foreground">
-                  {meals.length} {meals.length === 1 ? 'entry' : 'entries'}
-                </div>
-              </div>
-            </div>
-
-            <Button variant="brand" size="sm" className="h-8 gap-1.5 self-start rounded-full px-3" onClick={() => openAdd(mealType)}>
-              <Plus className="h-3.5 w-3.5" />
-              Add Food
-            </Button>
-          </div>
-
-          {meals.length === 0 ? (
-            <div className="mt-3 rounded-[1rem] border border-dashed border-border/70 bg-background/40 px-4 py-4">
-              <p className="text-xs text-muted-foreground">{theme.hint}</p>
-            </div>
-          ) : (
-            <div className="mt-3 space-y-2">
-              {meals.map((meal, mealIndex) => {
-                const expanded = expandedMeals[meal.id] || false
-                const isExpandable = !!meal.recipe || meal.entry_source === 'saved'
-                const macroBars = [
-                  {
-                    label: 'Protein',
-                    value: meal.macros.protein_g,
-                    target: user.protein_target_g || 0,
-                  },
-                  {
-                    label: 'Carbs',
-                    value: meal.macros.carbs_g,
-                    target: user.carb_target_g || 0,
-                  },
-                  {
-                    label: 'Fat',
-                    value: meal.macros.fat_g,
-                    target: user.fat_target_g || 0,
-                  },
-                ].filter((macro) => macro.target > 0)
-
-                const mealItems = meal.recipe
-                  ? meal.recipe.ingredients.map((ingredient, index) => ({
-                      key: `${meal.id}-recipe-${index}`,
-                      name: ingredient.name,
-                      meta: ingredient.amount != null ? `${ingredient.amount} ${ingredient.unit}` : '',
-                      macros: null as null | typeof meal.meal_items[number]['macros'],
-                    }))
-                  : (meal.meal_items || []).map((item, index) => ({
-                      key: `${meal.id}-item-${index}`,
-                      name: item.name,
-                      meta: item.amount != null ? `${item.amount}${item.unit}` : '',
-                      macros: item.macros,
-                    }))
-
-                return (
-                  <motion.div
-                    key={meal.id}
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.22, delay: mealIndex * 0.03 }}
-                    className="overflow-hidden rounded-[1rem] border border-border/60 bg-background/90 shadow-[0_10px_24px_-24px_rgba(0,0,0,0.7)]"
-                  >
-                    <div className="p-3 sm:p-3.5">
-                      <div className="flex flex-col gap-2.5 sm:flex-row sm:items-start sm:justify-between">
-                        <div className="space-y-2">
-                          <div className="space-y-1">
-                            {isExpandable ? (
-                              <button
-                                type="button"
-                                onClick={() => setExpandedMeals((prev) => ({ ...prev, [meal.id]: !prev[meal.id] }))}
-                                className="flex items-center gap-2 text-left"
-                              >
-                                <span className="text-base font-semibold tracking-tight text-foreground">{meal.name}</span>
-                                <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${expanded ? 'rotate-180' : ''}`} />
-                              </button>
-                            ) : (
-                              <h4 className="text-base font-semibold tracking-tight text-foreground">{meal.name}</h4>
-                            )}
-                            <div className="flex flex-wrap gap-2.5 text-xs">
-                              <span className="font-data text-foreground">{meal.macros.calories} kcal</span>
-                              <span className="font-data text-muted-foreground">{fmtMacro(meal.macros.protein_g)} g protein</span>
-                            </div>
-                          </div>
-
-                          <div className="grid gap-2 sm:grid-cols-3">
-                            {macroBars.map((macro) => (
-                              <div key={`${meal.id}-${macro.label}`} className="rounded-[0.9rem] border border-border/50 bg-muted/20 px-2.5 py-2">
-                                <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-                                  {macro.label} {fmtMacro(macro.value)}g
-                                </p>
-                                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-border/60">
-                                  <motion.div
-                                    className="h-full rounded-full bg-primary"
-                                    initial={{ width: 0 }}
-                                    animate={{ width: `${progressValue(macro.value, macro.target)}%` }}
-                                    transition={{ duration: 0.35 }}
-                                  />
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-2 self-start">
-                          <Button variant="ghost" size="icon-sm" className="h-7 w-7 rounded-full" onClick={() => openEdit(meal)}>
-                            <Pencil className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            className="h-7 w-7 rounded-full text-destructive/70 hover:text-destructive"
-                            onClick={() => handleDeleteMeal(meal.id)}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-
-                    <AnimatePresence initial={false}>
-                      {expanded && isExpandable && (
-                        <motion.div
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: 'auto', opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }}
-                          transition={{ duration: 0.24, ease: [0.22, 0.61, 0.36, 1] }}
-                          className="overflow-hidden border-t border-border/50 bg-muted/15"
-                        >
-                          <div className="space-y-2 p-3 sm:p-3.5">
-                            {mealItems.length > 0 ? (
-                              mealItems.map((item) => (
-                                <div
-                                  key={item.key}
-                                  className="group rounded-[0.9rem] border border-border/60 bg-background/85 px-3 py-2.5 transition-all duration-200 hover:-translate-y-0.5 hover:border-border hover:shadow-sm"
-                                >
-                                  <div className="flex items-start justify-between gap-4">
-                                    <div className="min-w-0">
-                                      <p className="truncate text-[13px] font-medium text-foreground">{item.name}</p>
-                                      <div className="mt-1.5 flex flex-wrap gap-1.5">
-                                        {item.meta ? (
-                                          <span className="rounded-full bg-muted px-2.5 py-1 text-[11px] text-muted-foreground">
-                                            {item.meta}
-                                          </span>
-                                        ) : null}
-                                        {item.macros ? (
-                                          <>
-                                            <span className="rounded-full bg-muted px-2.5 py-1 text-[11px] text-foreground">
-                                              {item.macros.calories} kcal
-                                            </span>
-                                            {'protein_g' in item.macros && typeof item.macros.protein_g === 'number' && (
-                                              <span className="rounded-full bg-muted px-2.5 py-1 text-[11px] text-muted-foreground">
-                                                {fmtMacro(item.macros.protein_g)} P
-                                              </span>
-                                            )}
-                                            {'carbs_g' in item.macros && typeof item.macros.carbs_g === 'number' && (
-                                              <span className="rounded-full bg-muted px-2.5 py-1 text-[11px] text-muted-foreground">
-                                                {fmtMacro(item.macros.carbs_g)} C
-                                              </span>
-                                            )}
-                                            {'fat_g' in item.macros && typeof item.macros.fat_g === 'number' && (
-                                              <span className="rounded-full bg-muted px-2.5 py-1 text-[11px] text-muted-foreground">
-                                                {fmtMacro(item.macros.fat_g)} F
-                                              </span>
-                                            )}
-                                          </>
-                                        ) : null}
-                                      </div>
-                                    </div>
-                                  </div>
-                                </div>
-                              ))
-                            ) : (
-                              <div className="rounded-[1rem] border border-dashed border-border/70 bg-background/60 px-4 py-4 text-sm text-muted-foreground">
-                                No individual food items were saved for this entry.
-                              </div>
-                            )}
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </motion.div>
-                )
-              })}
-            </div>
-          )}
-        </div>
-        </div>
-    </section>
-  )
 }
 
 function RecipeCard({ recipe, compact = false, onClick }: { recipe: Recipe; compact?: boolean; onClick?: () => void }) {
@@ -990,7 +529,6 @@ function MealEditorModal({
   const [recentMultipliers, setRecentMultipliers] = useState<Record<string, string>>({})
   const [selectedRecentMealKeys, setSelectedRecentMealKeys] = useState<Record<string, boolean>>({})
   const [selectedSavedMealId, setSelectedSavedMealId] = useState<string>('')
-  const [savedMealMultiplier, setSavedMealMultiplier] = useState('1')
   const [expandedSavedMealIds, setExpandedSavedMealIds] = useState<Record<string, boolean>>({})
   const [savedMealModalSearch, setSavedMealModalSearch] = useState('')
   const [savedMealModalFilterType, setSavedMealModalFilterType] = useState<string>('all')
@@ -1045,21 +583,6 @@ function MealEditorModal({
   const [catalogSuggestions, setCatalogSuggestions] = useState<FoodCatalogItem[]>([])
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [searchLoading, setSearchLoading] = useState(false)
-
-  const selectedSavedMeal = useMemo(
-    () => savedMeals.find((meal) => meal.id === selectedSavedMealId) ?? null,
-    [savedMeals, selectedSavedMealId]
-  )
-
-  const savedMealMultiplierValue = useMemo(() => {
-    const parsed = Number(savedMealMultiplier)
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
-  }, [savedMealMultiplier])
-
-  const scaledSelectedSavedMeal = useMemo(
-    () => selectedSavedMeal ? scaleSavedMealTemplate(selectedSavedMeal, savedMealMultiplierValue) : null,
-    [selectedSavedMeal, savedMealMultiplierValue]
-  )
 
   // Initialize catalog with full catalog including user history
   useEffect(() => {
@@ -1400,21 +923,12 @@ function MealEditorModal({
     }
 
     const caloriesNum = Number(manualCalories)
-    const proteinNum = parseOptionalMacroInput(manualProtein)
-    const carbsNum = parseOptionalMacroInput(manualCarbs)
-    const fatNum = parseOptionalMacroInput(manualFat)
+    const proteinNum = Number(manualProtein || 0)
+    const carbsNum = Number(manualCarbs || 0)
+    const fatNum = Number(manualFat || 0)
 
     if (!Number.isFinite(caloriesNum) || caloriesNum <= 0) {
       toast.error('Calories must be a valid number greater than 0.')
-      return
-    }
-
-    if (
-      Number.isNaN(proteinNum) ||
-      Number.isNaN(carbsNum) ||
-      Number.isNaN(fatNum)
-    ) {
-      toast.error('Macros must be valid numbers when provided.')
       return
     }
 
@@ -1424,11 +938,12 @@ function MealEditorModal({
       ...rows,
       createManualItemRow(
         itemName,
-        buildItemMacros(caloriesNum, {
-          protein_g: proteinNum,
-          carbs_g: carbsNum,
-          fat_g: fatNum,
-        }),
+        {
+          calories: Math.round(caloriesNum),
+          protein_g: Math.round(proteinNum),
+          carbs_g: Math.round(carbsNum),
+          fat_g: Math.round(fatNum),
+        },
         amountNum && Number.isFinite(amountNum) && amountNum > 0 ? amountNum : undefined,
         manualItemUnit || undefined,
       ),
@@ -1640,8 +1155,6 @@ function MealEditorModal({
       )
     } else {
       setSource('search')
-      setSelectedSavedMealId('')
-      setSavedMealMultiplier('1')
       setMealType(initialMealType ?? 'breakfast')
       setRecipeId('')
       setRecipeMealName('')
@@ -1675,10 +1188,6 @@ function MealEditorModal({
       setManualItems([])
     }
   }, [editingMeal, editingSavedMeal, initialMealType, open])
-
-  useEffect(() => {
-    setSavedMealMultiplier('1')
-  }, [selectedSavedMealId])
 
   useEffect(() => {
     if (source !== 'recipe' || !recipeId) return
@@ -1797,16 +1306,22 @@ function MealEditorModal({
       const mealItems = usingList
         ? searchItems.map((item) => ({
             name: item.name,
-            macros: item.macros,
+            macros: {
+              calories: item.macros.calories,
+              protein_g: item.macros.protein_g,
+              carbs_g: item.macros.carbs_g,
+              fat_g: item.macros.fat_g,
+            },
           }))
         : [
             {
               name: singleName,
-              macros: buildItemMacros(singleCalories, {
-                protein_g: singleProtein,
-                carbs_g: singleCarbs,
-                fat_g: singleFat,
-              }),
+              macros: {
+                calories: Math.round(singleCalories),
+                protein_g: Math.round(singleProtein),
+                carbs_g: Math.round(singleCarbs),
+                fat_g: Math.round(singleFat),
+              },
             },
           ];
 
@@ -1928,16 +1443,22 @@ function MealEditorModal({
         meal_items: usingList
           ? manualItems.map((item) => ({
               name: item.name,
-              macros: item.macros,
+              macros: {
+                calories: item.macros.calories,
+                protein_g: item.macros.protein_g,
+                carbs_g: item.macros.carbs_g,
+                fat_g: item.macros.fat_g,
+              },
             }))
           : [
               {
                 name: singleName,
-                macros: buildItemMacros(singleCalories, {
-                  protein_g: singleProtein,
-                  carbs_g: singleCarbs,
-                  fat_g: singleFat,
-                }),
+                macros: {
+                  calories: Math.round(singleCalories),
+                  protein_g: Math.round(singleProtein),
+                  carbs_g: Math.round(singleCarbs),
+                  fat_g: Math.round(singleFat),
+                },
               },
             ],
         entry_source: 'manual',
@@ -1948,15 +1469,12 @@ function MealEditorModal({
     }
 
     if (source === 'saved') {
-      if (!selectedSavedMealId || !selectedSavedMeal) {
+      if (!selectedSavedMealId) {
         toast.error('Select a saved meal first.')
         return
       }
-      if (savedMealMultiplierValue <= 0) {
-        toast.error('Enter a serving size greater than 0.')
-        return
-      }
-      const template = scaledSelectedSavedMeal ?? selectedSavedMeal
+      const template = savedMeals.find(m => m.id === selectedSavedMealId)
+      if (!template) return
       onSave({
         meal_type: mealType,
         name: template.name,
@@ -1965,7 +1483,7 @@ function MealEditorModal({
         recipe: null,
         meal_items: template.items.map(item => ({
           name: item.matched_name,
-          macros: item.macros ?? { calories: 0 },
+          macros: item.macros ?? { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 },
           amount: item.amount,
           unit: item.unit,
         })),
@@ -2379,7 +1897,6 @@ function MealEditorModal({
                 filteredModalSavedMeals.map((meal) => {
                   const isSelected = selectedSavedMealId === meal.id
                   const isExpanded = expandedSavedMealIds[meal.id] || false
-                  const displayMeal = isSelected && scaledSelectedSavedMeal ? scaledSelectedSavedMeal : meal
                   return (
                     <div
                       key={meal.id}
@@ -2398,7 +1915,7 @@ function MealEditorModal({
                           <div className="min-w-0 flex-1">
                             <p className="text-sm font-medium truncate">{meal.name}</p>
                             <p className="font-data text-[11px] text-muted-foreground/60 mt-0.5 tabular-nums">
-                              {displayMeal.macros.calories} kcal · <span className="text-emerald-500/70">{displayMeal.macros.protein_g}g P</span> · {displayMeal.macros.carbs_g}g C · {displayMeal.macros.fat_g}g F
+                              {meal.macros.calories} kcal · <span className="text-emerald-500/70">{meal.macros.protein_g}g P</span> · {meal.macros.carbs_g}g C · {meal.macros.fat_g}g F
                             </p>
                           </div>
                           {isSelected && <CheckCircle className="w-4 h-4 text-primary shrink-0" />}
@@ -2416,7 +1933,7 @@ function MealEditorModal({
                           </button>
                           {isExpanded && (
                             <div className="mt-1.5 rounded-lg border border-border/40 divide-y divide-border/30">
-                              {displayMeal.items.map((item, idx) => (
+                              {meal.items.map((item, idx) => (
                                 <div key={idx} className="px-2.5 py-1.5">
                                   <div className="flex items-center justify-between gap-2">
                                     <span className="text-xs font-medium text-foreground/80 truncate">{item.matched_name}</span>
@@ -2425,7 +1942,9 @@ function MealEditorModal({
                                     )}
                                   </div>
                                   {item.macros && (
-                                    renderMacroSummary(item.macros)
+                                    <p className="font-data text-[10px] tabular-nums text-muted-foreground/55 mt-0.5">
+                                      {item.macros.calories} kcal · <span className="text-emerald-500/70">{item.macros.protein_g}g P</span> · {item.macros.carbs_g}g C · {item.macros.fat_g}g F
+                                    </p>
                                   )}
                                 </div>
                               ))}
@@ -2438,26 +1957,6 @@ function MealEditorModal({
                 })
               )}
               </div>
-              {selectedSavedMeal && (
-                <div className="rounded-xl border border-border/50 bg-muted/20 p-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Serving size</p>
-                      <p className="text-[11px] text-muted-foreground mt-1">Macros update instantly as you change this.</p>
-                    </div>
-                    <div className="w-24">
-                      <Input
-                        type="number"
-                        min={0.1}
-                        step={0.1}
-                        value={savedMealMultiplier}
-                        onChange={(e) => setSavedMealMultiplier(e.target.value)}
-                        className="h-9 text-center font-data"
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
             </TabsContent>
 
             <TabsContent value="recent" className="mt-0 space-y-3">
@@ -2747,7 +2246,15 @@ function MealEditorModal({
                               <span className="ml-1.5 text-xs font-normal text-muted-foreground">({item.amount}{item.unit})</span>
                             )}
                           </p>
-                          {renderMacroSummary(item.macros)}
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className="font-data text-xs text-muted-foreground">{item.macros.calories} kcal</span>
+                            <span className="text-[10px] text-border/40">·</span>
+                            <span className="font-data text-xs text-muted-foreground">{item.macros.protein_g}g P</span>
+                            <span className="text-[10px] text-border/40">·</span>
+                            <span className="font-data text-xs text-muted-foreground">{item.macros.carbs_g}g C</span>
+                            <span className="text-[10px] text-border/40">·</span>
+                            <span className="font-data text-xs text-muted-foreground">{item.macros.fat_g}g F</span>
+                          </div>
                         </div>
                         <Button
                           type="button"
@@ -3365,21 +2872,12 @@ function EditSavedMealModal({
     }
 
     const calories = Number(manualIngCalories)
-    const protein = parseOptionalMacroInput(manualIngProtein)
-    const carbs = parseOptionalMacroInput(manualIngCarbs)
-    const fat = parseOptionalMacroInput(manualIngFat)
+    const protein = Number(manualIngProtein || 0)
+    const carbs = Number(manualIngCarbs || 0)
+    const fat = Number(manualIngFat || 0)
 
     if (!Number.isFinite(calories) || calories <= 0) {
       toast.error('Calories must be a valid number greater than 0.')
-      return
-    }
-
-    if (
-      Number.isNaN(protein) ||
-      Number.isNaN(carbs) ||
-      Number.isNaN(fat)
-    ) {
-      toast.error('Macros must be valid numbers when provided.')
       return
     }
 
@@ -3394,11 +2892,12 @@ function EditSavedMealModal({
       name,
       amount,
       unit: manualIngUnit || 'serving',
-      macros: buildItemMacros(calories, {
-        protein_g: protein,
-        carbs_g: carbs,
-        fat_g: fat,
-      }),
+      macros: {
+        calories: Math.round(calories),
+        protein_g: Math.round(protein * 10) / 10,
+        carbs_g: Math.round(carbs * 10) / 10,
+        fat_g: Math.round(fat * 10) / 10,
+      },
     }])
 
     // Clear manual form
@@ -3488,7 +2987,15 @@ function EditSavedMealModal({
                         <span className="text-xs text-muted-foreground/55 font-data">{item.amount}{item.unit}</span>
                       </div>
                       {item.macros ? (
-                        renderMacroSummary(item.macros)
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span className="font-data text-xs text-muted-foreground">{fmtMacro(item.macros.calories)} kcal</span>
+                          <span className="text-[10px] text-border/50">·</span>
+                          <span className="font-data text-xs text-emerald-500/80">{fmtMacro(item.macros.protein_g)}g P</span>
+                          <span className="text-[10px] text-border/50">·</span>
+                          <span className="font-data text-xs text-muted-foreground">{fmtMacro(item.macros.carbs_g)}g C</span>
+                          <span className="text-[10px] text-border/50">·</span>
+                          <span className="font-data text-xs text-muted-foreground">{fmtMacro(item.macros.fat_g)}g F</span>
+                        </div>
                       ) : (
                         <span className="text-xs text-muted-foreground/40">No macro data</span>
                       )}
@@ -3740,43 +3247,6 @@ function EditSavedMealModal({
   )
 }
 
-function ShareMealButton({ meal }: { meal: SavedMealTemplate }) {
-  const [open, setOpen] = useState(false)
-  return (
-    <>
-      <Button variant="ghost" size="icon-sm" className="h-8 w-8 text-muted-foreground hover:text-foreground" onClick={() => setOpen(true)} title="Share meal">
-        <Share2 className="w-3.5 h-3.5" />
-      </Button>
-      <ShareModal
-        open={open}
-        onOpenChange={setOpen}
-        itemType="saved_meal"
-        itemName={meal.name}
-        itemData={meal as unknown as Record<string, unknown>}
-      />
-    </>
-  )
-}
-
-function ShareRecipeButton({ recipe }: { recipe: Recipe }) {
-  const [open, setOpen] = useState(false)
-  return (
-    <>
-      <Button size="sm" variant="ghost" className="flex-1 text-xs text-muted-foreground hover:text-foreground gap-1" onClick={() => setOpen(true)}>
-        <Share2 className="w-3.5 h-3.5" />
-        Share
-      </Button>
-      <ShareModal
-        open={open}
-        onOpenChange={setOpen}
-        itemType="recipe"
-        itemName={recipe.name}
-        itemData={recipe as unknown as Record<string, unknown>}
-      />
-    </>
-  )
-}
-
 export default function MealsPage() {
   const {
     user,
@@ -3844,13 +3314,6 @@ export default function MealsPage() {
   const [customIngUnit, setCustomIngUnit] = useState('g')
   const [addMealMode, setAddMealMode] = useState<'recipe' | 'saved' | 'custom'>('saved')
   const [expandedMeals, setExpandedMeals] = useState<Record<string, boolean>>({})
-  const [expandedMealSections, setExpandedMealSections] = useState<Record<MealType, boolean>>({
-    breakfast: false,
-    lunch: false,
-    dinner: false,
-    snack: false,
-    drink: false,
-  })
   // Planner filter state
   const [plannerFiltersOpen, setPlannerFiltersOpen] = useState(false)
   const [plannerMealTypeFilter, setPlannerMealTypeFilter] = useState<string>('all')
@@ -4183,39 +3646,48 @@ export default function MealsPage() {
   if (!user) return null
 
   return (
-    <div className="space-y-8">
-      <div className="space-y-6">
-        <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
-          <div className="space-y-3">
-            <div className="inline-flex rounded-full border border-border/70 bg-muted/40 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.26em] text-muted-foreground">
-              Daily Nutrition Dashboard
-            </div>
-            <div>
-              <h2 className="font-display text-4xl font-black tracking-tight text-foreground sm:text-5xl">Meals</h2>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-                See today&apos;s intake at a glance, move through meals in order, and expand each entry only when you need the item-level detail.
-              </p>
-            </div>
+    <div className="space-y-7">
+      {/* Header */}
+      <div className="space-y-5">
+        <div className="flex items-start justify-between">
+          <div>
+            <h2 className="font-display font-bold text-3xl tracking-tight">Meals</h2>
+            <p className="text-sm text-muted-foreground mt-1 hidden sm:block">Track today&apos;s intake · Save meals for reuse · Browse recipes</p>
           </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <Button variant="outline" size="sm" className="h-10 gap-2 rounded-full px-4" onClick={handleExport}>
-              <Download className="h-4 w-4" />
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" className="gap-1.5" onClick={handleExport}>
+              <Download className="w-3.5 h-3.5" />
               Export
             </Button>
-            <Button variant="brand" size="sm" className="h-10 gap-2 rounded-full px-4" onClick={() => openAdd()}>
-              <Plus className="h-4 w-4" />
+            <Button variant="brand" size="sm" className="gap-1.5" onClick={() => openAdd()}>
+              <Plus className="w-3.5 h-3.5" />
               Add Meal
             </Button>
           </div>
         </div>
 
-        <DailyNutritionSummary totals={todayTotals} user={user} />
+        {/* Macro snapshot bar - simplified */}
+        <div className="flex gap-4 sm:gap-6">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">Calories</span>
+            <span className="font-data text-lg font-semibold tabular-nums">{todayTotals.calories}</span>
+            {user.calorie_target > 0 && (
+              <span className="text-xs text-muted-foreground">/ {user.calorie_target}</span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">Protein</span>
+            <span className="font-data text-lg font-semibold text-emerald-500 tabular-nums">{todayTotals.protein_g}g</span>
+            {user.protein_target_g > 0 && (
+              <span className="text-xs text-muted-foreground">/ {user.protein_target_g}g</span>
+            )}
+          </div>
+        </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <div className="overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          <TabsList className="inline-flex h-auto min-w-max items-center gap-2 rounded-full border border-border/60 bg-muted/30 p-1">
+        <div className="border-b border-border/60 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <TabsList className="inline-flex h-auto min-w-max items-center bg-transparent p-0 gap-0">
             {[
               { value: 'today', label: "Today's Meals", count: todayMeals.length },
               { value: 'saved', label: 'Saved Meals', count: null },
@@ -4226,11 +3698,11 @@ export default function MealsPage() {
               <TabsTrigger
                 key={tab.value}
                 value={tab.value}
-                className="rounded-full px-4 py-2.5 text-sm font-medium text-muted-foreground shadow-none transition-all duration-200 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
+                className="relative px-4 py-2.5 rounded-none border-0 bg-transparent text-sm font-medium text-muted-foreground shadow-none transition-none data-[state=active]:text-foreground data-[state=active]:shadow-none data-[state=active]:after:absolute data-[state=active]:after:bottom-0 data-[state=active]:after:left-0 data-[state=active]:after:right-0 data-[state=active]:after:h-0.5 data-[state=active]:after:bg-primary after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-transparent after:transition-colors"
               >
                 {tab.label}
                 {tab.count !== null && tab.count > 0 && (
-                  <span className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 font-data text-[10px] text-muted-foreground">{tab.count}</span>
+                  <span className="ml-1.5 font-data text-[10px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full">{tab.count}</span>
                 )}
               </TabsTrigger>
             ))}
@@ -4393,7 +3865,9 @@ export default function MealsPage() {
                                       )}
                                     </div>
                                     {item.macros && (
-                                      renderMacroSummary(item.macros)
+                                      <p className="font-data text-[10px] tabular-nums text-muted-foreground/55 mt-0.5">
+                                        {item.macros.calories} kcal · <span className="text-emerald-500/70">{item.macros.protein_g}g P</span> · {item.macros.carbs_g}g C · {item.macros.fat_g}g F
+                                      </p>
                                     )}
                                   </div>
                                 ))}
@@ -4421,7 +3895,6 @@ export default function MealsPage() {
                           <Plus className="w-3 h-3" />
                           Add
                         </Button>
-                        <ShareMealButton meal={meal} />
                         <Button variant="ghost" size="icon-sm" className="h-8 w-8 text-muted-foreground hover:text-foreground" onClick={() => openEditSavedMeal(meal)}>
                           <Pencil className="w-3.5 h-3.5" />
                         </Button>
@@ -4439,22 +3912,176 @@ export default function MealsPage() {
         </TabsContent>
 
         {/* Today log tab */}
-        <TabsContent value="today" className="mt-8 space-y-8">
-          {MEAL_TYPES.map((mealType) => (
-            <MealTimelineSection
-              key={mealType}
-              mealType={mealType}
-              meals={todayMealsByType[mealType]}
-              expandedMeals={expandedMeals}
-              setExpandedMeals={setExpandedMeals}
-              sectionExpanded={expandedMealSections[mealType]}
-              toggleSectionExpanded={() => setExpandedMealSections((prev) => ({ ...prev, [mealType]: !prev[mealType] }))}
-              openAdd={openAdd}
-              openEdit={openEdit}
-              handleDeleteMeal={handleDeleteMeal}
-              user={user}
-            />
-          ))}
+        <TabsContent value="today" className="mt-6 space-y-3">
+          {MEAL_TYPES.map((mealType) => {
+            const meals = todayMealsByType[mealType]
+            const theme = mealTypeTheme(mealType)
+            const presentation = mealTypePresentation(mealType)
+            const MealTypeIcon = presentation.icon
+            const totalMacros = meals.reduce(
+              (acc, m) => ({
+                calories: acc.calories + m.macros.calories,
+                protein_g: acc.protein_g + m.macros.protein_g,
+                carbs_g: acc.carbs_g + m.macros.carbs_g,
+                fat_g: acc.fat_g + m.macros.fat_g,
+              }),
+              { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 }
+            )
+
+            const rows = meals.map((meal) => ({
+              meal,
+              isExpandable: !!meal.recipe || meal.entry_source === 'saved',
+            }))
+
+            return (
+              <div key={mealType} className="bg-card border border-border/20 rounded-xl overflow-hidden">
+                {/* Section header */}
+                <div className="flex items-center justify-between px-4 py-3 border-b border-border/20">
+                  <div className="flex items-center gap-3">
+                    <div>
+                      <h3 className="font-display font-black text-2xl sm:text-3xl tracking-tight leading-none text-foreground underline decoration-primary decoration-[3px] underline-offset-[5px]">
+                        {mealTypeLabel(mealType)}
+                      </h3>
+                      {meals.length > 0 && (
+                        <p className="font-data text-[11px] tabular-nums text-muted-foreground/70 mt-2">
+                          {totalMacros.calories} kcal · {totalMacros.protein_g}g P · {totalMacros.carbs_g}g C · {totalMacros.fat_g}g F
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <Button variant="ghost" size="sm" className="h-7 gap-1.5 text-xs text-muted-foreground hover:text-foreground" onClick={() => openAdd(mealType)}>
+                    <Plus className="w-3.5 h-3.5" />
+                    Add
+                  </Button>
+                </div>
+
+                {/* Meals list */}
+                {meals.length === 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => openAdd(mealType)}
+                    className="w-full px-4 py-5 text-left transition-colors hover:bg-muted/30 group"
+                  >
+                    <p className="text-xs text-muted-foreground group-hover:text-muted-foreground/80">{theme.hint}</p>
+                  </button>
+                ) : (
+                  <div className="space-y-3 px-3 py-3 sm:px-4">
+                    {rows.map(({ meal, isExpandable }) => {
+                      const expanded = expandedMeals[meal.id] || false
+                      const macroItems = [
+                        { label: 'Calories', value: `${meal.macros.calories} kcal`, className: 'text-foreground' },
+                        { label: 'Protein', value: `${meal.macros.protein_g}g P`, className: 'text-emerald-600 dark:text-emerald-400' },
+                        { label: 'Carbs', value: `${meal.macros.carbs_g}g C`, className: 'text-foreground' },
+                        { label: 'Fat', value: `${meal.macros.fat_g}g F`, className: 'text-foreground' },
+                      ]
+
+                      return (
+                        <div
+                          key={meal.id}
+                          className="group overflow-hidden rounded-xl border border-border/60 bg-gradient-to-r from-background via-background to-muted/20 shadow-sm transition-all duration-150 hover:border-border hover:shadow-md"
+                        >
+                          <div className="p-3">
+                            <div className="flex items-start gap-2.5">
+                              <div className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg border border-border/60 bg-muted/60">
+                                <MealTypeIcon className="h-3.5 w-3.5 text-foreground/75" />
+                              </div>
+
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-start justify-between gap-2">
+                                  <div className="min-w-0">
+                                    {isExpandable ? (
+                                      <button
+                                        className="flex items-center gap-1.5 text-left"
+                                        onClick={() => setExpandedMeals(prev => ({ ...prev, [meal.id]: !prev[meal.id] }))}
+                                      >
+                                        <span className="font-semibold text-sm text-foreground leading-snug sm:text-[15px]">{meal.name}</span>
+                                        <ChevronDown className={`h-3.5 w-3.5 flex-shrink-0 text-muted-foreground/50 transition-transform duration-150 ${expanded ? 'rotate-180' : ''}`} />
+                                      </button>
+                                    ) : (
+                                      <p className="font-semibold text-sm text-foreground leading-snug sm:text-[15px]">{meal.name}</p>
+                                    )}
+                                  </div>
+
+                                  <div className="flex items-center gap-1 self-start opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
+                                    <Button size="icon-sm" variant="ghost" className="h-7 w-7 rounded-lg" onClick={() => openEdit(meal)}>
+                                      <Pencil className="w-3.5 h-3.5" />
+                                    </Button>
+                                    <Button size="icon-sm" variant="ghost" className="h-7 w-7 rounded-lg text-destructive/60 hover:text-destructive" onClick={() => handleDeleteMeal(meal.id)}>
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </Button>
+                                  </div>
+                                </div>
+
+                                <div className="mt-2 flex flex-wrap gap-1.5">
+                                  {macroItems.map((macro) => (
+                                    <div
+                                      key={`${meal.id}-${macro.label}`}
+                                      className="rounded-full border border-border/50 bg-background/90 px-2.5 py-1"
+                                    >
+                                      <span className="text-[9px] font-medium uppercase tracking-[0.14em] text-muted-foreground/60">
+                                        {macro.label}
+                                      </span>
+                                      <span className={`ml-1.5 font-data text-[11px] font-semibold tabular-nums ${macro.className}`}>
+                                        {macro.value}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {isExpandable && expanded && (
+                            <div className="border-t border-border/50 bg-muted/20 px-3 py-2.5">
+                              <div className="mb-2 flex items-center gap-2">
+                                <span className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] ${presentation.chip}`}>
+                                  Included items
+                                </span>
+                              </div>
+                              <div className="space-y-2">
+                              {meal.recipe ? (
+                                // Show recipe ingredients
+                                meal.recipe.ingredients.map((ingredient, ingredientIndex) => (
+                                  <div
+                                    key={`${meal.id}-recipe-ingredient-${ingredientIndex}`}
+                                    className="flex items-center justify-between gap-3 rounded-xl border border-border/40 bg-background/90 px-3 py-2"
+                                  >
+                                    <span className="text-xs text-foreground/85 leading-tight">{ingredient.name}</span>
+                                    <span className="font-data text-[10px] text-muted-foreground/60">{ingredient.amount} {ingredient.unit}</span>
+                                  </div>
+                                ))
+                              ) : meal.meal_items && meal.meal_items.length > 0 ? (
+                                // Show meal items (for saved meals)
+                                meal.meal_items.map((item, itemIndex) => (
+                                  <div
+                                    key={`${meal.id}-item-${itemIndex}`}
+                                    className="rounded-xl border border-border/40 bg-background/90 px-3 py-2"
+                                  >
+                                    <div className="flex items-center justify-between gap-3">
+                                      <span className="text-xs text-foreground/85 leading-tight">{item.name}</span>
+                                      {item.amount != null && (
+                                        <span className="font-data text-[10px] text-muted-foreground/60">{item.amount}{item.unit}</span>
+                                      )}
+                                    </div>
+                                    {item.macros.calories > 0 && (
+                                      <p className="mt-1 font-data text-[10px] tabular-nums text-muted-foreground/60">
+                                        {item.macros.calories} kcal · {item.macros.protein_g}g P · {item.macros.carbs_g}g C · {item.macros.fat_g}g F
+                                      </p>
+                                    )}
+                                  </div>
+                                ))
+                              ) : null}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </TabsContent>
 
         {/* Recipe Library Tab */}
@@ -4552,18 +4179,15 @@ export default function MealsPage() {
                       </div>
                       <div className="px-4 pb-4 space-y-1.5">
                         <AddToTodayButton recipe={recipe} />
-                        <div className="flex gap-1.5">
-                          <ShareRecipeButton recipe={recipe} />
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="flex-1 text-xs text-destructive/60 hover:text-destructive"
-                            onClick={() => removeCustomRecipe(recipe.id)}
-                          >
-                            <Trash2 className="w-3.5 h-3.5 mr-1" />
-                            Delete
-                          </Button>
-                        </div>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="w-full text-xs text-destructive/60 hover:text-destructive"
+                          onClick={() => removeCustomRecipe(recipe.id)}
+                        >
+                          <Trash2 className="w-3.5 h-3.5 mr-1" />
+                          Delete
+                        </Button>
                       </div>
                     </motion.div>
                   ))}

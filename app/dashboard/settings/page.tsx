@@ -8,6 +8,7 @@ import { motion } from 'framer-motion'
 import {
   User, Target, BarChart3, Bell, Shield, Download,
   Save, Trash2, Moon, Sun, Monitor, Zap, Check,
+  Users, UserPlus, UserCheck, UserX, X, Loader2, Search,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -432,18 +433,21 @@ export default function SettingsPage() {
       </div>
 
       <Tabs defaultValue="profile">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="profile" className="gap-1.5">
+        <TabsList className="flex gap-1 h-auto bg-transparent p-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <TabsTrigger value="profile" className="shrink-0 gap-1.5 text-xs rounded-lg border border-border/60 bg-muted/30 px-3 py-2 data-[state=active]:border-border data-[state=active]:bg-background data-[state=active]:text-foreground">
             <User className="w-3.5 h-3.5" /> Profile
           </TabsTrigger>
-          <TabsTrigger value="goals" className="gap-1.5">
+          <TabsTrigger value="goals" className="shrink-0 gap-1.5 text-xs rounded-lg border border-border/60 bg-muted/30 px-3 py-2 data-[state=active]:border-border data-[state=active]:bg-background data-[state=active]:text-foreground">
             <Target className="w-3.5 h-3.5" /> Goals
           </TabsTrigger>
-          <TabsTrigger value="appearance" className="gap-1.5">
+          <TabsTrigger value="appearance" className="shrink-0 gap-1.5 text-xs rounded-lg border border-border/60 bg-muted/30 px-3 py-2 data-[state=active]:border-border data-[state=active]:bg-background data-[state=active]:text-foreground">
             <Monitor className="w-3.5 h-3.5" /> Display
           </TabsTrigger>
-          <TabsTrigger value="data" className="gap-1.5">
+          <TabsTrigger value="data" className="shrink-0 gap-1.5 text-xs rounded-lg border border-border/60 bg-muted/30 px-3 py-2 data-[state=active]:border-border data-[state=active]:bg-background data-[state=active]:text-foreground">
             <Download className="w-3.5 h-3.5" /> Data
+          </TabsTrigger>
+          <TabsTrigger value="friends" className="shrink-0 gap-1.5 text-xs rounded-lg border border-border/60 bg-muted/30 px-3 py-2 data-[state=active]:border-border data-[state=active]:bg-background data-[state=active]:text-foreground">
+            <Users className="w-3.5 h-3.5" /> Friends
           </TabsTrigger>
         </TabsList>
 
@@ -962,7 +966,230 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* Friends tab */}
+        <TabsContent value="friends" className="mt-4 space-y-4">
+          <FriendsTab />
+        </TabsContent>
       </Tabs>
+    </div>
+  )
+}
+
+// ── Friends Tab ──────────────────────────────────────────────────────────────
+
+type FriendRow = {
+  id: string
+  requester_id: string
+  addressee_id: string
+  invited_email?: string
+  status: 'pending' | 'accepted' | 'declined' | 'invited'
+  other_user: { id: string; name: string; username?: string } | null
+}
+
+import { createClient } from '@/lib/supabase'
+
+async function getAuthToken(): Promise<string | null> {
+  const supabase = createClient()
+  const { data: { session } } = await supabase.auth.getSession()
+  return session?.access_token ?? null
+}
+
+function FriendsTab() {
+  const user = useAppStore((s) => s.user)
+  const [friends, setFriends] = useState<FriendRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [addQuery, setAddQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<{ id: string; name: string; username?: string }[]>([])
+  const [searching, setSearching] = useState(false)
+  const [sending, setSending] = useState(false)
+
+  const loadFriends = React.useCallback(async () => {
+    const token = await getAuthToken()
+    if (!token) { setLoading(false); return }
+    const res = await fetch('/api/friends', { headers: { Authorization: `Bearer ${token}` } })
+    if (res.ok) setFriends(await res.json())
+    setLoading(false)
+  }, [])
+
+  useEffect(() => { loadFriends() }, [loadFriends])
+
+  useEffect(() => {
+    if (!addQuery.trim()) { setSearchResults([]); return }
+    const id = setTimeout(async () => {
+      setSearching(true)
+      const token = await getAuthToken()
+      if (!token) { setSearching(false); return }
+      const res = await fetch(`/api/friends/search?q=${encodeURIComponent(addQuery.trim())}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (res.ok) setSearchResults(await res.json())
+      setSearching(false)
+    }, 350)
+    return () => clearTimeout(id)
+  }, [addQuery])
+
+  async function sendRequest(addresseeId?: string, email?: string) {
+    setSending(true)
+    const token = await getAuthToken()
+    if (!token) { setSending(false); return }
+    const body = addresseeId ? { addressee_id: addresseeId } : { email }
+    const res = await fetch('/api/friends/request', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(body),
+    })
+    const data = await res.json()
+    if (!res.ok) {
+      toast.error(data.error === 'Request already exists' ? 'Request already sent.' : data.error ?? 'Could not send request.')
+    } else {
+      toast.success(data.type === 'invite_sent' ? `Invite sent to ${email}!` : 'Friend request sent!')
+      setAddQuery('')
+      setSearchResults([])
+      loadFriends()
+    }
+    setSending(false)
+  }
+
+  async function respond(friendshipId: string, action: 'accept' | 'decline') {
+    const token = await getAuthToken()
+    if (!token) return
+    await fetch('/api/friends/respond', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ friendship_id: friendshipId, action }),
+    })
+    toast.success(action === 'accept' ? 'Friend request accepted!' : 'Request declined.')
+    loadFriends()
+  }
+
+  async function removeFriend(friendshipId: string) {
+    const token = await getAuthToken()
+    if (!token) return
+    await fetch(`/api/friends/${friendshipId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    toast.success('Removed.')
+    loadFriends()
+  }
+
+  const accepted = friends.filter((f) => f.status === 'accepted')
+  const incomingPending = friends.filter((f) => f.status === 'pending' && f.addressee_id === user?.id)
+  const outgoing = friends.filter((f) => (f.status === 'pending' || f.status === 'invited') && f.requester_id === user?.id)
+
+  return (
+    <div className="space-y-4">
+      {/* Add friend */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2"><UserPlus className="w-4 h-4" />Add Friend</CardTitle>
+          <CardDescription>Search by username (@handle) or email address</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+              <Input
+                placeholder="@username or email"
+                value={addQuery}
+                onChange={(e) => setAddQuery(e.target.value)}
+                className="pl-8"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && addQuery.includes('@') && searchResults.length === 0 && !searching) {
+                    sendRequest(undefined, addQuery.trim())
+                  }
+                }}
+              />
+            </div>
+            {addQuery.includes('@') && !addQuery.startsWith('@') && searchResults.length === 0 && !searching && (
+              <Button size="sm" disabled={sending} onClick={() => sendRequest(undefined, addQuery.trim())}>
+                {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Invite'}
+              </Button>
+            )}
+          </div>
+          {searching && <p className="text-xs text-muted-foreground">Searching…</p>}
+          {searchResults.length > 0 && (
+            <div className="space-y-1">
+              {searchResults.map((r) => (
+                <div key={r.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg border border-border/50 bg-muted/20">
+                  <span className="flex-1 text-sm font-medium truncate">{r.name}</span>
+                  {r.username && <span className="text-xs text-muted-foreground">@{r.username}</span>}
+                  <Button size="sm" className="h-7 px-2.5 text-xs" disabled={sending} onClick={() => sendRequest(r.id)}>
+                    {sending ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Add'}
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Pending received */}
+      {incomingPending.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2"><UserCheck className="w-4 h-4" />Pending Requests</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {incomingPending.map((f) => (
+              <div key={f.id} className="flex items-center gap-2">
+                <span className="flex-1 text-sm truncate">{f.other_user?.name ?? 'Someone'}</span>
+                <Button size="sm" className="h-7 px-2.5 text-xs" onClick={() => respond(f.id, 'accept')}>Accept</Button>
+                <Button size="sm" variant="outline" className="h-7 px-2.5 text-xs" onClick={() => respond(f.id, 'decline')}>Decline</Button>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Accepted friends */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2"><Users className="w-4 h-4" />Friends {accepted.length > 0 && <Badge variant="secondary">{accepted.length}</Badge>}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="flex justify-center py-4"><Loader2 className="w-4 h-4 animate-spin text-muted-foreground" /></div>
+          ) : accepted.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-4">No friends yet. Add someone above!</p>
+          ) : (
+            <div className="space-y-2">
+              {accepted.map((f) => (
+                <div key={f.id} className="flex items-center gap-2">
+                  <span className="flex-1 text-sm font-medium truncate">{f.other_user?.name}</span>
+                  {f.other_user?.username && <span className="text-xs text-muted-foreground">@{f.other_user.username}</span>}
+                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive" onClick={() => removeFriend(f.id)}>
+                    <X className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Outgoing */}
+      {outgoing.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2"><UserX className="w-4 h-4" />Sent Requests</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {outgoing.map((f) => (
+              <div key={f.id} className="flex items-center gap-2">
+                <span className="flex-1 text-sm truncate">
+                  {f.other_user?.name ?? f.invited_email ?? 'Pending'}
+                </span>
+                <Badge variant="outline" className="text-[10px]">{f.status === 'invited' ? 'Invited' : 'Pending'}</Badge>
+                <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive" onClick={() => removeFriend(f.id)}>
+                  <X className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }

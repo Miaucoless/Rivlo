@@ -19,6 +19,7 @@ type CloudHydrationData = {
   customRecipes: Recipe[]
   customWorkouts: Workout[]
   waterLogs: Record<string, WaterEntry[]>
+  dbNotifications: import('@/types').Notification[]
 }
 
 export type CloudSeedPayload = {
@@ -320,6 +321,7 @@ export async function fetchCloudState(userId: string): Promise<CloudHydrationDat
     customWorkoutsResp,
     waterLogsResp,
     metadataState,
+    notificationsResp,
   ] = await Promise.all([
     supabase.from('meal_entries').select('*').eq('user_id', userId).order('logged_at', { ascending: false }),
     supabase.from('workout_logs').select('*').eq('user_id', userId).order('date', { ascending: false }),
@@ -334,6 +336,10 @@ export async function fetchCloudState(userId: string): Promise<CloudHydrationDat
       [] as any[]
     ),
     fetchMetadataAppState(userId),
+    selectOrEmpty(
+      supabase.from('notifications').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(50) as any,
+      [] as any[]
+    ),
   ])
 
   if (mealsResp.error || workoutsResp.error || weightsResp.error || journalsResp.error || recipesResp.error || customWorkoutsResp.error || waterLogsResp.error) {
@@ -443,6 +449,15 @@ export async function fetchCloudState(userId: string): Promise<CloudHydrationDat
     customRecipes,
     customWorkouts,
     waterLogs,
+    dbNotifications: (notificationsResp.data ?? []).map((n: Record<string, unknown>) => ({
+      id: n.id as string,
+      type: n.type as 'info' | 'success' | 'warning' | 'error' | 'share_received',
+      title: n.title as string,
+      message: n.message as string,
+      read: n.read as boolean,
+      action_url: n.action_url as string | undefined,
+      created_at: n.created_at as string,
+    })),
   }
 }
 

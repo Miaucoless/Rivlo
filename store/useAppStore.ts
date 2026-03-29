@@ -729,21 +729,29 @@ export const useAppStore = create<AppStore>()(
           if (refreshedCloud) finalCloud = refreshedCloud
         }
 
-        set((state) => withRefreshedNotifications(state, {
-          mealEntries: finalCloud.mealEntries,
-          workoutLogs: finalCloud.workoutLogs,
-          weightHistory: finalCloud.weightHistory,
-          journalEntries: finalCloud.journalEntries,
-          savedMeals: finalCloud.savedMeals,
-          supplements: finalCloud.supplements,
-          calendarReminders: finalCloud.calendarReminders,
-          weeklyMealPlan: finalCloud.weeklyMealPlan,
-          groceryList: finalCloud.groceryList,
-          customRecipes: finalCloud.customRecipes,
-          customWorkouts: finalCloud.customWorkouts,
-          waterLogs: finalCloud.waterLogs,
-          cloudHydratedUserId: userId,
-        }))
+        set((state) => {
+          const updates = {
+            mealEntries: finalCloud.mealEntries,
+            workoutLogs: finalCloud.workoutLogs,
+            weightHistory: finalCloud.weightHistory,
+            journalEntries: finalCloud.journalEntries,
+            savedMeals: finalCloud.savedMeals,
+            supplements: finalCloud.supplements,
+            calendarReminders: finalCloud.calendarReminders,
+            weeklyMealPlan: finalCloud.weeklyMealPlan,
+            groceryList: finalCloud.groceryList,
+            customRecipes: finalCloud.customRecipes,
+            customWorkouts: finalCloud.customWorkouts,
+            waterLogs: finalCloud.waterLogs,
+            cloudHydratedUserId: userId,
+          }
+          const refreshed = withRefreshedNotifications(state, updates)
+          const computed = refreshed.notifications as import('@/types').Notification[]
+          const dbNotes = (finalCloud.dbNotifications ?? []) as import('@/types').Notification[]
+          const existingIds = new Set(computed.map((n) => n.id))
+          const merged = [...dbNotes.filter((n) => !existingIds.has(n.id)), ...computed]
+          return { ...refreshed, notifications: merged }
+        })
       },
 
       syncNow: async () => {

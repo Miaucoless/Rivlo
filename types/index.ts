@@ -14,6 +14,7 @@ export interface UserProfile {
   email: string
   name: string
   avatar_url?: string
+  username?: string
   height_cm: number
   weight_kg: number
   age: number
@@ -386,7 +387,7 @@ export interface NotificationPreferences {
 
 export interface Notification {
   id: string
-  type: 'info' | 'success' | 'warning' | 'error'
+  type: 'info' | 'success' | 'warning' | 'error' | 'share_received'
   title: string
   message: string
   read: boolean

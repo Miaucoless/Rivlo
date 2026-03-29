@@ -7,8 +7,9 @@ import { useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   BookOpen, CheckCircle, ChevronDown, ChevronUp, Circle, Copy, Dumbbell, Pencil, Play, PlayCircle, Plus, Search,
-  SlidersHorizontal, Sparkles, Trash2, Trophy, X,
+  SlidersHorizontal, Sparkles, Trash2, Trophy, X, Share2,
 } from 'lucide-react'
+import { ShareModal } from '@/components/sharing/ShareModal'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -802,6 +803,7 @@ function SavedWorkoutCard({
   onDelete?: (workout: Workout) => void
 }) {
   const [showConfirm, setShowConfirm] = useState(false)
+  const [showShare, setShowShare] = useState(false)
   const handleDeleteClick = () => setShowConfirm(true)
   const handleConfirm = () => {
     setShowConfirm(false)
@@ -856,6 +858,9 @@ function SavedWorkoutCard({
           <Play className="h-4 w-4 fill-current" />
           Start Workout
         </Button>
+        <Button variant="outline" size="icon" onClick={() => setShowShare(true)} title="Share workout">
+          <Share2 className="h-4 w-4" />
+        </Button>
         <Button variant="outline" size="icon" onClick={() => onEdit(workout)}>
           <Pencil className="h-4 w-4" />
         </Button>
@@ -878,6 +883,14 @@ function SavedWorkoutCard({
           </Button>
         )}
       </div>
+
+      <ShareModal
+        open={showShare}
+        onOpenChange={setShowShare}
+        itemType="workout"
+        itemName={workout.name}
+        itemData={workout as unknown as Record<string, unknown>}
+      />
     </div>
   )
 }

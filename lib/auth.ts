@@ -121,15 +121,39 @@ export async function requestPasswordReset(email: string): Promise<AuthResponse>
   }
 }
 
-export async function finalizePasswordRecoverySession(code?: string | null): Promise<AuthResponse> {
+export async function finalizePasswordRecoverySession(args?: {
+  code?: string | null
+  tokenHash?: string | null
+  type?: string | null
+}): Promise<AuthResponse> {
   try {
     const supabase = createClient()
+    const code = args?.code
+    const tokenHash = args?.tokenHash
+    const type = args?.type
 
     if (code) {
       const { error } = await supabase.auth.exchangeCodeForSession(code)
       if (error) {
         return { success: false, error: error.message }
       }
+      return { success: true }
+    }
+
+    if (tokenHash && type === 'recovery') {
+      const { error } = await supabase.auth.verifyOtp({
+        token_hash: tokenHash,
+        type: 'recovery',
+      })
+
+      if (error) {
+        return { success: false, error: error.message }
+      }
+
+      if (typeof window !== 'undefined') {
+        window.history.replaceState({}, document.title, window.location.pathname)
+      }
+
       return { success: true }
     }
 
