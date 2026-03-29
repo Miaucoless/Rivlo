@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useAppStore } from '@/store/useAppStore'
 import LandingPage from '@/components/landing/LandingPage'
 import { useAuthInit } from '@/hooks/useAuthInit'
@@ -9,14 +9,46 @@ import { useAuthInit } from '@/hooks/useAuthInit'
 export default function HomePage() {
   const { isAuthenticated, isDemoMode } = useAppStore()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { loading } = useAuthInit()
 
   useEffect(() => {
+    const hasRecoveryQuery =
+      Boolean(searchParams.get('code')) ||
+      Boolean(searchParams.get('token_hash')) ||
+      searchParams.get('type') === 'recovery'
+
+    if (typeof window !== 'undefined') {
+      const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+      const hasRecoveryHash =
+        hashParams.get('type') === 'recovery' &&
+        Boolean(hashParams.get('access_token')) &&
+        Boolean(hashParams.get('refresh_token'))
+
+      if (hasRecoveryQuery || hasRecoveryHash) {
+        const nextUrl = new URL('/reset-password', window.location.origin)
+
+        if (hasRecoveryQuery) {
+          ;['code', 'token_hash', 'type'].forEach((key) => {
+            const value = searchParams.get(key)
+            if (value) nextUrl.searchParams.set(key, value)
+          })
+        }
+
+        if (hasRecoveryHash) {
+          nextUrl.hash = window.location.hash
+        }
+
+        router.replace(`${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`)
+        return
+      }
+    }
+
     // If authenticated (either demo or real auth), redirect to dashboard
     if (isAuthenticated && !loading) {
       router.push('/dashboard')
     }
-  }, [isAuthenticated, loading, router])
+  }, [isAuthenticated, loading, router, searchParams])
 
   // Show loading state while checking authentication
   if (loading) {

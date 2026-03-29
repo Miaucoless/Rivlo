@@ -3776,6 +3776,321 @@ const CUSTOM_FOOD_CATALOG: FoodCatalogItem[] = [
     carbs_g: 15,
     fat_g: 10
   },
+},
+/*****************************/
+/* 22g BOTTLED COFFEE & PROTEIN (U.S. 2026) */
+/*****************************/
+{
+  id: 'starbucks-coffee-protein-classic-caffe',
+  name: 'Starbucks Coffee & Protein – Classic Caffè (22g)',
+  aliases: ['starbucks 22g classic', 'coffee & protein classic caffe'],
+  default_serving_amount: 355,
+  default_serving_unit: 'ml',
+  default_serving_label: '12 fl oz bottle',
+  grams_per_serving: 355,
+  macros_per_serving: {
+    calories: 190,
+    protein_g: 22,
+    carbs_g: 8,     // 5g fiber, 2g sugar
+    fat_g: 2
+  }
+},
+{
+  id: 'starbucks-coffee-protein-caffe-mocha',
+  name: 'Starbucks Coffee & Protein – Caffè Mocha (22g)',
+  aliases: ['starbucks 22g mocha', 'coffee & protein mocha'],
+  default_serving_amount: 355,
+  default_serving_unit: 'ml',
+  default_serving_label: '12 fl oz bottle',
+  grams_per_serving: 355,
+  macros_per_serving: {
+    calories: 200,
+    protein_g: 22,
+    carbs_g: 10,
+    fat_g: 3
+  }
+},
+
+/*****************************/
+/* 20g BOTTLED PROTEIN DRINKS WITH COFFEE (UK/EU) */
+/*****************************/
+{
+  id: 'starbucks-protein-drink-caffe-latte',
+  name: 'Starbucks Protein Drink with Coffee – Caffè Latte (20g)',
+  aliases: ['starbucks 20g latte', 'protein latte bottle'],
+  default_serving_amount: 330,
+  default_serving_unit: 'ml',
+  default_serving_label: '330 ml bottle',
+  grams_per_serving: 330,
+  macros_per_serving: {
+    calories: 150,
+    protein_g: 20,
+    carbs_g: 6,
+    fat_g: 2
+  }
+},
+{
+  id: 'starbucks-protein-drink-chocolate-mocha',
+  name: 'Starbucks Protein Drink with Coffee – Chocolate Mocha (20g)',
+  aliases: ['starbucks mocha 20g', 'protein mocha bottle'],
+  default_serving_amount: 330,
+  default_serving_unit: 'ml',
+  default_serving_label: '330 ml bottle',
+  grams_per_serving: 330,
+  macros_per_serving: {
+    calories: 160,
+    protein_g: 20,
+    carbs_g: 8,
+    fat_g: 2
+  }
+},
+{
+  id: 'starbucks-protein-drink-caramel-hazelnut',
+  name: 'Starbucks Protein Drink with Coffee – Caramel Hazelnut (20g)',
+  aliases: ['starbucks caramel hazelnut protein', '20g caramel hazelnut'],
+  default_serving_amount: 330,
+  default_serving_unit: 'ml',
+  default_serving_label: '330 ml bottle',
+  grams_per_serving: 330,
+  macros_per_serving: {
+    calories: 155,
+    protein_g: 20,
+    carbs_g: 7,
+    fat_g: 2
+  }
+},
+
+/*****************************/
+/* STARBUCKS PROTEIN LATTES (HOT) */
+/* Based on protein-boosted 2% milk */
+/* Verified range: 15–36g protein depending on size */
+/*****************************/
+{
+  id: 'starbucks-protein-latte-hot-tall',
+  name: 'Starbucks Protein Latte – Hot (Tall)',
+  aliases: ['hot protein latte tall'],
+  default_serving_amount: 355,
+  default_serving_unit: 'ml',
+  default_serving_label: 'Tall 12 oz',
+  grams_per_serving: 355,
+  macros_per_serving: {
+    calories: 140,
+    protein_g: 18,
+    carbs_g: 10,
+    fat_g: 4
+  }
+},
+{
+  id: 'starbucks-protein-latte-hot-grande',
+  name: 'Starbucks Protein Latte – Hot (Grande)',
+  aliases: ['hot protein latte grande'],
+  default_serving_amount: 473,
+  default_serving_unit: 'ml',
+  default_serving_label: 'Grande 16 oz',
+  grams_per_serving: 473,
+  macros_per_serving: {
+    calories: 180,
+    protein_g: 26,
+    carbs_g: 12,
+    fat_g: 5
+  }
+},
+{
+  id: 'starbucks-protein-latte-hot-venti',
+  name: 'Starbucks Protein Latte – Hot (Venti)',
+  aliases: ['hot protein latte venti'],
+  default_serving_amount: 591,
+  default_serving_unit: 'ml',
+  default_serving_label: 'Venti 20 oz',
+  grams_per_serving: 591,
+  macros_per_serving: {
+    calories: 230,
+    protein_g: 32,
+    carbs_g: 15,
+    fat_g: 7
+  }
+},
+
+/*****************************/
+/* PROTEIN LATTES (ICED) */
+/*****************************/
+{
+  id: 'starbucks-protein-latte-iced-tall',
+  name: 'Starbucks Protein Latte – Iced (Tall)',
+  aliases: ['iced protein latte tall'],
+  default_serving_amount: 355,
+  default_serving_unit: 'ml',
+  default_serving_label: 'Tall 12 oz',
+  grams_per_serving: 355,
+  macros_per_serving: {
+    calories: 120,
+    protein_g: 17,
+    carbs_g: 9,
+    fat_g: 3
+  }
+},
+{
+  id: 'starbucks-protein-latte-iced-grande',
+  name: 'Starbucks Protein Latte – Iced (Grande)',
+  aliases: ['iced protein latte grande'],
+  default_serving_amount: 473,
+  default_serving_unit: 'ml',
+  default_serving_label: 'Grande 16 oz',
+  grams_per_serving: 473,
+  macros_per_serving: {
+    calories: 160,
+    protein_g: 24,
+    carbs_g: 10,
+    fat_g: 4
+  }
+},
+{
+  id: 'starbucks-protein-latte-iced-venti',
+  name: 'Starbucks Protein Latte – Iced (Venti)',
+  aliases: ['iced protein latte venti'],
+  default_serving_amount: 709,
+  default_serving_unit: 'ml',
+  default_serving_label: 'Venti 24 oz',
+  grams_per_serving: 709,
+  macros_per_serving: {
+    calories: 200,
+    protein_g: 30,
+    carbs_g: 12,
+    fat_g: 5
+  }
+},
+
+/*****************************/
+/* STARBUCKS PROTEIN MATCHA (HOT) */
+/*****************************/
+{
+  id: 'starbucks-protein-matcha-hot-tall',
+  name: 'Starbucks Protein Matcha – Hot (Tall)',
+  aliases: ['hot protein matcha tall'],
+  default_serving_amount: 355,
+  default_serving_unit: 'ml',
+  default_serving_label: 'Tall 12 oz',
+  grams_per_serving: 355,
+  macros_per_serving: {
+    calories: 150,
+    protein_g: 17,
+    carbs_g: 13,
+    fat_g: 4
+  }
+},
+{
+  id: 'starbucks-protein-matcha-hot-grande',
+  name: 'Starbucks Protein Matcha – Hot (Grande)',
+  aliases: ['hot protein matcha grande'],
+  default_serving_amount: 473,
+  default_serving_unit: 'ml',
+  default_serving_label: 'Grande 16 oz',
+  grams_per_serving: 473,
+  macros_per_serving: {
+    calories: 190,
+    protein_g: 25,
+    carbs_g: 15,
+    fat_g: 4
+  }
+},
+{
+  id: 'starbucks-protein-matcha-hot-venti',
+  name: 'Starbucks Protein Matcha – Hot (Venti)',
+  aliases: ['hot protein matcha venti'],
+  default_serving_amount: 591,
+  default_serving_unit: 'ml',
+  default_serving_label: 'Venti 20 oz',
+  grams_per_serving: 591,
+  macros_per_serving: {
+    calories: 230,
+    protein_g: 31,
+    carbs_g: 18,
+    fat_g: 5
+  }
+},
+
+/*****************************/
+/* STARBUCKS PROTEIN MATCHA (ICED) */
+/*****************************/
+{
+  id: 'starbucks-protein-matcha-iced-tall',
+  name: 'Starbucks Protein Matcha – Iced (Tall)',
+  aliases: ['iced protein matcha tall'],
+  default_serving_amount: 355,
+  default_serving_unit: 'ml',
+  default_serving_label: 'Tall 12 oz',
+  grams_per_serving: 355,
+  macros_per_serving: {
+    calories: 130,
+    protein_g: 16,
+    carbs_g: 11,
+    fat_g: 3
+  }
+},
+{
+  id: 'starbucks-protein-matcha-iced-grande',
+  name: 'Starbucks Protein Matcha – Iced (Grande)',
+  aliases: ['iced protein matcha grande'],
+  default_serving_amount: 473,
+  default_serving_unit: 'ml',
+  default_serving_label: 'Grande 16 oz',
+  grams_per_serving: 473,
+  macros_per_serving: {
+    calories: 170,
+    protein_g: 23,
+    carbs_g: 13,
+    fat_g: 4
+  }
+},
+{
+  id: 'starbucks-protein-matcha-iced-venti',
+  name: 'Starbucks Protein Matcha – Iced (Venti)',
+  aliases: ['iced protein matcha venti'],
+  default_serving_amount: 709,
+  default_serving_unit: 'ml',
+  default_serving_label: 'Venti 24 oz',
+  grams_per_serving: 709,
+  macros_per_serving: {
+    calories: 210,
+    protein_g: 28,
+    carbs_g: 15,
+    fat_g: 5
+  }
+},
+
+/*****************************/
+/* STARBUCKS PROTEIN COLD FOAM (ADD‑ONS) */
+/* Sugar-Free vs Sweetened */
+/*****************************/
+{
+  id: 'starbucks-protein-cold-foam-sugar-free',
+  name: 'Starbucks Protein Cold Foam – Sugar Free',
+  aliases: ['protein cold foam sf'],
+  default_serving_amount: 60,
+  default_serving_unit: 'ml',
+  default_serving_label: '2 oz topping',
+  grams_per_serving: 60,
+  macros_per_serving: {
+    calories: 35,
+    protein_g: 6,
+    carbs_g: 1,
+    fat_g: 1
+  }
+},
+{
+  id: 'starbucks-protein-cold-foam-sweetened',
+  name: 'Starbucks Protein Cold Foam – Sweetened',
+  aliases: ['protein cold foam sweetened'],
+  default_serving_amount: 60,
+  default_serving_unit: 'ml',
+  default_serving_label: '2 oz topping',
+  grams_per_serving: 60,
+  macros_per_serving: {
+    calories: 50,
+    protein_g: 6,
+    carbs_g: 5,
+    fat_g: 1
+  }
 }
 
   // 👆 PASTE YOUR FOODS HERE 👆

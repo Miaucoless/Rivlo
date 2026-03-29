@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import type { FoodCatalogItem } from '@/lib/food-search'
+import { getRedisClient, getRedisJson, setRedisJson } from '@/lib/redis'
 
 type OpenFoodFactsProduct = {
   code?: string
@@ -56,6 +57,8 @@ const UNIT_ALIASES: Record<string, string[]> = {
 
 let fatSecretAccessToken: string | null = null
 let fatSecretTokenExpiresAt = 0
+const FOOD_SEARCH_CACHE_TTL_SECONDS = 60 * 60 * 24
+const FOOD_SEARCH_CACHE_VERSION = 'v1'
 
 function normalize(text: string) {
   return text
@@ -550,6 +553,20 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ items: [] })
   }
 
+  const normalizedQuery = normalize(query)
+  const cacheKey = `food-search:${FOOD_SEARCH_CACHE_VERSION}:${normalizedQuery}`
+  const hasRedis = Boolean(getRedisClient())
+
+  if (hasRedis) {
+    const cachedItems = await getRedisJson<FoodCatalogItem[]>(cacheKey)
+    if (cachedItems) {
+      return NextResponse.json(
+        { items: cachedItems, cached: true },
+        { headers: { 'x-rivora-cache': 'hit' } }
+      )
+    }
+  }
+
   const results = await Promise.allSettled([
     fetchFatSecretFoods(query),
     fetchUsdaFoods(query),
@@ -559,5 +576,12 @@ export async function GET(request: NextRequest) {
   const allItems = results.flatMap((result) => (result.status === 'fulfilled' ? result.value : []))
   const items = filterAndRankItems(dedupeItems(allItems, query), query)
 
-  return NextResponse.json({ items })
+  if (hasRedis) {
+    await setRedisJson(cacheKey, items, FOOD_SEARCH_CACHE_TTL_SECONDS)
+  }
+
+  return NextResponse.json(
+    { items, cached: false },
+    { headers: { 'x-rivora-cache': hasRedis ? 'miss' : 'skip' } }
+  )
 }
