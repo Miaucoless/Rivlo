@@ -139,13 +139,13 @@ export function SharedInbox() {
   return (
     <div className="space-y-3">
       {/* Filter pills */}
-      <div className="flex gap-1.5 flex-wrap">
+      <div className="flex gap-1.5 overflow-x-auto whitespace-nowrap pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {TYPE_FILTERS.map((f) => (
           <button
             key={f}
             type="button"
             onClick={() => setFilter(f)}
-            className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+            className={`shrink-0 px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
               filter === f
                 ? 'bg-primary text-primary-foreground'
                 : 'bg-muted/50 text-muted-foreground hover:bg-muted'

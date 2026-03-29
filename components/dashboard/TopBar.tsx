@@ -104,7 +104,7 @@ export function TopBar() {
     setFriendsLoading(true)
     const token = await getToken()
     if (!token) { setFriendsLoading(false); return }
-    const res = await fetch('/api/friends', { headers: { Authorization: `Bearer ${token}` } })
+    const res = await fetch('/api/friends', { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' })
     if (res.ok) {
       setFriends(await res.json())
       setFriendsLoaded(true)
@@ -118,9 +118,7 @@ export function TopBar() {
       setFriendsTab('friends')
       setAddQuery('')
       setSearchResults([])
-      if (!friendsLoaded && !friendsLoading) {
-        void loadFriends()
-      }
+      void loadFriends()
     }
   }
 
@@ -157,7 +155,7 @@ export function TopBar() {
       toast.success(data.message ?? 'Friend request sent!')
       setAddQuery('')
       setSearchResults([])
-      loadFriends()
+      await loadFriends()
     } else {
       toast.error(data.error ?? 'Could not send request.')
     }
@@ -173,7 +171,7 @@ export function TopBar() {
       body: JSON.stringify({ friendship_id: friendshipId, action }),
     })
     toast.success(action === 'accept' ? 'Friend request accepted!' : 'Request declined.')
-    loadFriends()
+    await loadFriends()
   }
 
   async function removeFriend(friendshipId: string) {
@@ -184,6 +182,7 @@ export function TopBar() {
       headers: { Authorization: `Bearer ${token}` },
     })
     setFriends((prev) => prev.filter((f) => f.id !== friendshipId))
+    await loadFriends()
   }
 
   // Share import state
@@ -430,7 +429,7 @@ export function TopBar() {
 
       {/* Friends dialog */}
       <Dialog open={isFriendsOpen} onOpenChange={openFriends}>
-        <DialogContent className="max-w-sm border-border/60 bg-card/95 p-0 backdrop-blur">
+        <DialogContent className="w-[calc(100vw-1.5rem)] max-w-sm max-h-[85dvh] overflow-hidden border-border/60 bg-card/95 p-0 backdrop-blur">
           <DialogHeader className="border-b border-border/60 px-5 py-4">
             <DialogTitle className="text-base flex items-center gap-2">
               <Users className="w-4 h-4" />
@@ -457,7 +456,7 @@ export function TopBar() {
             </TabsList>
 
             {/* Friends list */}
-            <TabsContent value="friends" className="px-5 pb-5 pt-4 mt-0 min-h-[160px]">
+            <TabsContent value="friends" className="px-5 pb-5 pt-4 mt-0 min-h-[160px] overflow-y-auto">
               {friendsLoading ? (
                 <div className="flex justify-center py-6"><Loader2 className="w-4 h-4 animate-spin text-muted-foreground" /></div>
               ) : acceptedFriends.length === 0 ? (
@@ -487,8 +486,8 @@ export function TopBar() {
             </TabsContent>
 
             {/* Add friend */}
-            <TabsContent value="add" className="px-5 pb-5 pt-4 mt-0 min-h-[160px] space-y-3">
-              <div className="flex gap-2">
+            <TabsContent value="add" className="px-5 pb-5 pt-4 mt-0 min-h-[160px] space-y-3 overflow-y-auto">
+              <div className="flex flex-col gap-2 sm:flex-row">
                 <Input
                   placeholder="@username or email"
                   value={addQuery}
@@ -501,7 +500,7 @@ export function TopBar() {
                   className="h-9 text-sm flex-1"
                 />
                 {addQuery.includes('@') && !addQuery.startsWith('@') && searchResults.length === 0 && !friendSearching && (
-                  <Button size="sm" disabled={friendSending} onClick={() => sendFriendRequest(undefined, addQuery.trim())} className="h-9">
+                  <Button size="sm" disabled={friendSending} onClick={() => sendFriendRequest(undefined, addQuery.trim())} className="h-9 sm:w-auto">
                     Invite
                   </Button>
                 )}
@@ -531,7 +530,7 @@ export function TopBar() {
             </TabsContent>
 
             {/* Requests */}
-            <TabsContent value="requests" className="px-5 pb-5 pt-4 mt-0 min-h-[160px] space-y-4">
+            <TabsContent value="requests" className="px-5 pb-5 pt-4 mt-0 min-h-[160px] space-y-4 overflow-y-auto">
               {incomingRequests.length > 0 && (
                 <div className="space-y-2">
                   <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Incoming</p>

@@ -56,11 +56,13 @@ export async function POST(req: NextRequest) {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
     // Notify the addressee
+    const { data: senderProfile } = await db.from('profiles').select('name').eq('id', user.id).single()
+    const senderName = senderProfile?.name ?? 'Someone'
     await db.from('notifications').insert({
       user_id: targetId,
       type: 'info',
       title: 'New friend request',
-      message: 'Someone wants to connect with you.',
+      message: `${senderName} wants to connect with you.`,
       read: false,
       action_url: '/dashboard/settings?tab=friends',
       created_at: new Date().toISOString(),

@@ -12,7 +12,7 @@ create table if not exists shared_items (
   id          uuid primary key default gen_random_uuid(),
   owner_id    uuid not null references auth.users(id) on delete cascade,
   item_type   text not null
-                check (item_type in ('workout','workout_log','saved_meal','recipe')),
+                check (item_type in ('workout','workout_log','saved_meal','recipe','grocery_list')),
   item_name   text not null,
   item_data   jsonb not null,
   share_token text not null unique default substr(gen_random_uuid()::text, 1, 12),

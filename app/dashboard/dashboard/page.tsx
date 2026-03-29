@@ -13,7 +13,7 @@ import {
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell,
 } from 'recharts'
-import { format, subDays } from 'date-fns'
+import { format, parseISO, subDays } from 'date-fns'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -175,12 +175,25 @@ export default function DashboardPage() {
   const weightChartData = sortedWeightHistory
     .slice(-14)
     .map((entry) => ({
-      date: format(new Date(entry.date), 'MM/dd'),
+      date: format(parseISO(entry.date), 'MM/dd'),
       weight: entry.weight_kg,
     }))
+  const recentWeightChartData = weightChartData.slice(-7)
+  const recentWeightValues = recentWeightChartData.map((entry) => entry.weight)
+  const weightTrendDomain = recentWeightValues.length > 1
+    ? (() => {
+        const minWeight = Math.min(...recentWeightValues)
+        const maxWeight = Math.max(...recentWeightValues)
+        const spread = maxWeight - minWeight
+        const padding = Math.max(spread * 0.35, unitSystem === 'metric' ? 0.3 : 0.14)
+
+        return [Math.max(0, minWeight - padding), maxWeight + padding] as [number, number]
+      })()
+    : undefined
 
   const recentMealDays = Array.from({ length: 7 }, (_, i) => {
-    const date = format(subDays(new Date(), 6 - i), 'yyyy-MM-dd')
+    const dayDate = subDays(new Date(), 6 - i)
+    const date = format(dayDate, 'yyyy-MM-dd')
     const meals = mealEntries[date] || []
     const totals = meals.reduce(
       (acc, meal) => ({
@@ -192,7 +205,7 @@ export default function DashboardPage() {
 
     return {
       date,
-      day: format(new Date(date), 'EEE'),
+      day: format(dayDate, 'EEE'),
       meals,
       calories: totals.calories,
       protein_g: totals.protein_g,
@@ -833,15 +846,24 @@ export default function DashboardPage() {
                     {weightChange < 0 ? '↓' : '↑'} {formatWeightValue(Math.abs(weightChange), unitSystem).replace(/\s(?:kg|lbs)$/, ` ${getWeightUnitLabel(unitSystem)}`)}
                   </span>
                 </div>
-                <ResponsiveContainer width="100%" height={60}>
-                  <AreaChart data={weightChartData.slice(-7)} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
+                <ResponsiveContainer width="100%" height={72}>
+                  <AreaChart data={recentWeightChartData} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
                     <defs>
                       <linearGradient id="wt-area" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor="#10b981" stopOpacity={0.2} />
                         <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
                       </linearGradient>
                     </defs>
-                    <Area type="monotone" dataKey="weight" stroke="#10b981" strokeWidth={1.5} fill="url(#wt-area)" dot={false} />
+                    {weightTrendDomain ? <YAxis domain={weightTrendDomain} hide /> : null}
+                    <Area
+                      type="monotone"
+                      dataKey="weight"
+                      stroke="#10b981"
+                      strokeWidth={2.5}
+                      fill="url(#wt-area)"
+                      dot={{ r: 2.5, fill: '#10b981', strokeWidth: 0 }}
+                      activeDot={{ r: 4, fill: '#10b981', strokeWidth: 0 }}
+                    />
                   </AreaChart>
                 </ResponsiveContainer>
                 <div className="flex justify-between text-xs text-muted-foreground mt-1">

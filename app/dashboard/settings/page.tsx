@@ -3,7 +3,7 @@
 import React from 'react'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { motion } from 'framer-motion'
 import {
   User, Target, BarChart3, Bell, Shield, Download,
@@ -29,6 +29,13 @@ import { toast } from 'sonner'
 
 export default function SettingsPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const [activeTab, setActiveTab] = useState(searchParams.get('tab') ?? 'profile')
+
+  useEffect(() => {
+    const tab = searchParams.get('tab')
+    if (tab) setActiveTab(tab)
+  }, [searchParams])
   const {
     user,
     updateProfile: updateLocalProfile,
@@ -45,6 +52,7 @@ export default function SettingsPage() {
   const [profile, setProfile] = useState({
     name: user?.name || '',
     email: user?.email || '',
+    username: user?.username || '',
     height_input: formatHeightForInput(user?.height_cm || 175, user?.unit_system || 'imperial'),
     weight_input: formatWeightForInput(user?.weight_kg || 75, user?.unit_system || 'imperial'),
     age: user?.age || 25,
@@ -131,6 +139,31 @@ export default function SettingsPage() {
     if (!height_cm || !weight_kg) {
       toast.error('Enter a valid height and weight.')
       return
+    }
+
+    // If username changed, save it via the profile API (updates profiles table)
+    const trimmedUsername = profile.username.trim()
+    if (trimmedUsername && trimmedUsername !== (user?.username ?? '')) {
+      if (trimmedUsername.length < 3) {
+        toast.error('Username must be at least 3 characters.')
+        return
+      }
+      const { createClient } = await import('@/lib/supabase')
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session?.access_token) {
+        const res = await fetch('/api/profile', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+          body: JSON.stringify({ username: trimmedUsername }),
+        })
+        if (!res.ok) {
+          const err = await res.json()
+          toast.error(err.error ?? 'Could not save username.')
+          return
+        }
+        updateLocalProfile({ username: trimmedUsername })
+      }
     }
 
     await saveUserProfile({
@@ -432,7 +465,7 @@ export default function SettingsPage() {
         )}
       </div>
 
-      <Tabs defaultValue="profile">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="flex gap-1 h-auto bg-transparent p-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <TabsTrigger value="profile" className="shrink-0 gap-1.5 text-xs rounded-lg border border-border/60 bg-muted/30 px-3 py-2 data-[state=active]:border-border data-[state=active]:bg-background data-[state=active]:text-foreground">
             <User className="w-3.5 h-3.5" /> Profile
@@ -459,13 +492,27 @@ export default function SettingsPage() {
               <CardDescription>Update your basic profile details</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label>Full Name</Label>
                   <Input
                     value={profile.name}
                     onChange={(e) => setProfile((p) => ({ ...p, name: e.target.value }))}
                   />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Username</Label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm select-none">@</span>
+                    <Input
+                      value={profile.username}
+                      onChange={(e) => setProfile((p) => ({ ...p, username: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') }))}
+                      placeholder="yourname"
+                      maxLength={20}
+                      className="pl-7"
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">3–20 characters: letters, numbers, underscores. Used by friends to find you.</p>
                 </div>
                 <div className="space-y-1.5">
                   <Label>Preferred Units</Label>
@@ -488,7 +535,7 @@ export default function SettingsPage() {
                   />
                 </div>
               </div>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <div className="space-y-1.5">
                   <Label>Height ({getHeightUnitLabel(profile.unit_system)})</Label>
                   <Input
@@ -517,7 +564,7 @@ export default function SettingsPage() {
               </div>
 
               {/* Stats summary */}
-              <div className="bg-muted/40 rounded-xl p-4 grid grid-cols-3 gap-4 text-center">
+              <div className="bg-muted/40 rounded-xl p-4 grid grid-cols-1 gap-4 text-center sm:grid-cols-3">
                 <div>
                   <p className="text-lg font-bold tabular-nums">{user.bmr}</p>
                   <p className="text-xs text-muted-foreground">BMR (kcal)</p>
@@ -548,7 +595,7 @@ export default function SettingsPage() {
               <CardDescription>Adjust your targets and program preferences</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label>Primary Goal</Label>
                   <Select value={goals.fitness_goal} onValueChange={(v) => setGoals((g) => ({ ...g, fitness_goal: v as FitnessGoal }))}>
@@ -1007,7 +1054,7 @@ function FriendsTab() {
   const loadFriends = React.useCallback(async () => {
     const token = await getAuthToken()
     if (!token) { setLoading(false); return }
-    const res = await fetch('/api/friends', { headers: { Authorization: `Bearer ${token}` } })
+    const res = await fetch('/api/friends', { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' })
     if (res.ok) setFriends(await res.json())
     setLoading(false)
   }, [])
@@ -1046,7 +1093,7 @@ function FriendsTab() {
       toast.success(data.type === 'invite_sent' ? `Invite sent to ${email}!` : 'Friend request sent!')
       setAddQuery('')
       setSearchResults([])
-      loadFriends()
+      await loadFriends()
     }
     setSending(false)
   }
@@ -1060,7 +1107,7 @@ function FriendsTab() {
       body: JSON.stringify({ friendship_id: friendshipId, action }),
     })
     toast.success(action === 'accept' ? 'Friend request accepted!' : 'Request declined.')
-    loadFriends()
+    await loadFriends()
   }
 
   async function removeFriend(friendshipId: string) {
@@ -1071,7 +1118,7 @@ function FriendsTab() {
       headers: { Authorization: `Bearer ${token}` },
     })
     toast.success('Removed.')
-    loadFriends()
+    await loadFriends()
   }
 
   const accepted = friends.filter((f) => f.status === 'accepted')
@@ -1087,7 +1134,7 @@ function FriendsTab() {
           <CardDescription>Search by username (@handle) or email address</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="flex gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row">
             <div className="relative flex-1">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
               <Input
@@ -1103,7 +1150,7 @@ function FriendsTab() {
               />
             </div>
             {addQuery.includes('@') && !addQuery.startsWith('@') && searchResults.length === 0 && !searching && (
-              <Button size="sm" disabled={sending} onClick={() => sendRequest(undefined, addQuery.trim())}>
+              <Button size="sm" className="self-stretch sm:self-auto" disabled={sending} onClick={() => sendRequest(undefined, addQuery.trim())}>
                 {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Invite'}
               </Button>
             )}

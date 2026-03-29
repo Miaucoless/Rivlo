@@ -60,6 +60,32 @@ export function ShareModal({ open, onOpenChange, itemType, itemName, itemData }:
   const [sentTo, setSentTo] = useState<Set<string>>(new Set())
   const [friendsLoaded, setFriendsLoaded] = useState(false)
 
+  const loadFriends = useCallback(async () => {
+    if (friendsLoading) return
+
+    setFriendsLoading(true)
+    try {
+      const token = await getToken()
+      if (!token) return
+
+      const res = await fetch('/api/friends', {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: 'no-store',
+      })
+      if (!res.ok) return
+
+      const rows: FriendshipRow[] = await res.json()
+      const accepted = rows
+        .filter((r) => r.status === 'accepted' && r.other_user)
+        .map((r) => r.other_user!)
+
+      setFriends(accepted)
+      setFriendsLoaded(true)
+    } finally {
+      setFriendsLoading(false)
+    }
+  }, [friendsLoading])
+
   // Reset state when modal opens
   useEffect(() => {
     if (open) {
@@ -75,25 +101,12 @@ export function ShareModal({ open, onOpenChange, itemType, itemName, itemData }:
     }
   }, [open])
 
-  // Load accepted friends when friends tab is active
+  // Prime the list as soon as the modal opens so mobile users do not need a
+  // second interaction before the friends tab is usable.
   useEffect(() => {
-    if (!open || tab !== 'friends' || friendsLoaded || friendsLoading) return
-    setFriendsLoading(true)
-    getToken().then((token) => {
-      if (!token) { setFriendsLoading(false); return }
-      fetch('/api/friends', { headers: { Authorization: `Bearer ${token}` } })
-        .then((r) => r.json())
-        .then((rows: FriendshipRow[]) => {
-          const accepted = rows
-            .filter((r) => r.status === 'accepted' && r.other_user)
-            .map((r) => r.other_user!)
-          setFriends(accepted)
-          setFriendsLoaded(true)
-        })
-        .catch(() => {})
-        .finally(() => setFriendsLoading(false))
-    })
-  }, [open, tab, friendsLoaded, friendsLoading])
+    if (!open || friendsLoaded || friendsLoading) return
+    void loadFriends()
+  }, [open, friendsLoaded, friendsLoading, loadFriends])
 
   const createShare = useCallback(async (): Promise<{ share_id: string; url: string } | null> => {
     if (shareId && shareUrl) return { share_id: shareId, url: shareUrl }
@@ -169,12 +182,12 @@ export function ShareModal({ open, onOpenChange, itemType, itemName, itemData }:
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="w-[calc(100vw-1.5rem)] max-w-sm max-h-[85dvh] overflow-hidden">
         <DialogHeader>
           <DialogTitle className="text-base">Share &ldquo;{itemName}&rdquo;</DialogTitle>
         </DialogHeader>
 
-        <Tabs value={tab} onValueChange={(v) => setTab(v as 'link' | 'friends')}>
+        <Tabs value={tab} onValueChange={(v) => setTab(v as 'link' | 'friends')} className="flex flex-col overflow-hidden">
           <TabsList className="w-full">
             <TabsTrigger value="link" className="flex-1 gap-1.5"><Link className="w-3.5 h-3.5" />Link</TabsTrigger>
             <TabsTrigger value="friends" className="flex-1 gap-1.5"><Users className="w-3.5 h-3.5" />Friends</TabsTrigger>
@@ -198,7 +211,7 @@ export function ShareModal({ open, onOpenChange, itemType, itemName, itemData }:
           </TabsContent>
 
           {/* ── Friends tab ── */}
-          <TabsContent value="friends" className="mt-4 space-y-3">
+          <TabsContent value="friends" className="mt-4 space-y-3 overflow-y-auto pr-1">
             {friendsLoading ? (
               <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
             ) : friends.length === 0 ? (

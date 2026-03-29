@@ -55,7 +55,7 @@ interface ActiveExercise {
 interface PersistedActiveWorkoutSession {
   workout: Workout
   exercises: ActiveExercise[]
-  startedAt: string
+  startedAt: string | null
 }
 
 const ACTIVE_WORKOUT_SESSION_KEY = 'rivora-active-workout-session'
@@ -99,6 +99,17 @@ function formatWorkoutDuration(startedAt?: string, completedAt?: string, duratio
   const diffMin = Math.round((end - start) / 60000)
   const hours = Math.floor(diffMin / 60)
   const minutes = diffMin % 60
+  if (hours > 0) return `${hours}h ${minutes}m`
+  return `${minutes} min`
+}
+
+function formatAverageWorkoutTime(durationMin?: number) {
+  if (typeof durationMin !== 'number' || durationMin <= 0) return '—'
+
+  const rounded = Math.round(durationMin)
+  const hours = Math.floor(rounded / 60)
+  const minutes = rounded % 60
+
   if (hours > 0) return `${hours}h ${minutes}m`
   return `${minutes} min`
 }
@@ -820,11 +831,13 @@ function summarizeExercises(exercises: WorkoutExercise[], metProfile: MetProfile
 
 function SavedWorkoutCard({
   workout,
+  averageDurationMin,
   onStart,
   onEdit,
   onDelete,
 }: {
   workout: Workout
+  averageDurationMin?: number
   onStart: (workout: Workout) => void
   onEdit: (workout: Workout) => void
   onDelete?: (workout: Workout) => void
@@ -858,8 +871,8 @@ function SavedWorkoutCard({
           <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Exercises</p>
         </div>
         <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5">
-          <p className="font-data text-lg font-semibold">~{workout.estimated_duration_min}</p>
-          <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Minutes</p>
+          <p className="font-data text-lg font-semibold">{formatAverageWorkoutTime(averageDurationMin)}</p>
+          <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Time</p>
         </div>
         <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5">
           <p className="font-data text-lg font-semibold">{workout.muscle_groups.length}</p>
@@ -1598,6 +1611,7 @@ function ActiveWorkoutModal({
   unitSystem,
   workoutLogs,
   initialExercises,
+  initialStartedAt,
   onClose,
   onPause,
   onSessionChange,
@@ -1608,9 +1622,10 @@ function ActiveWorkoutModal({
   unitSystem: UnitSystem
   workoutLogs: import('@/types').WorkoutLog[]
   initialExercises?: ActiveExercise[]
+  initialStartedAt?: string | null
   onClose: () => void
   onPause: () => void
-  onSessionChange: (exercises: ActiveExercise[]) => void
+  onSessionChange: (exercises: ActiveExercise[], startedAt?: string | null) => void
   onComplete: (payload: { exercises: ActiveExercise[]; caloriesBurned: number; totalVolumeKg: number; durationMin: number }, options?: { saveAsTemplate?: boolean }) => void
 }) {
   // Build a lookup of most recent performance per exercise id
@@ -1640,6 +1655,7 @@ function ActiveWorkoutModal({
   const [apiLiveSuggestions, setApiLiveSuggestions] = useState<ExerciseLibraryItem[]>([])
   const [timeUnits, setTimeUnits] = useState<Record<string, 'sec' | 'min'>>({})
   const [previewExercise, setPreviewExercise] = useState<Exercise | null>(null)
+  const [startedAt, setStartedAt] = useState<string | null>(initialStartedAt ?? null)
 
   const getTimeUnit = (key: string, defaultUnit: 'sec' | 'min') => timeUnits[key] ?? defaultUnit
   const toggleTimeUnit = (key: string, defaultUnit: 'sec' | 'min') =>
@@ -1676,14 +1692,23 @@ function ActiveWorkoutModal({
   useEffect(() => {
     if (initialExercises && initialExercises.length > 0) {
       setExercises(initialExercises)
+      setStartedAt(initialStartedAt ?? null)
       return
     }
     setExercises(createActiveExercisesFromWorkout(workout))
-  }, [initialExercises, workout])
+    setStartedAt(initialStartedAt ?? null)
+  }, [initialExercises, initialStartedAt, workout])
 
   useEffect(() => {
-    onSessionChange(exercises)
-  }, [exercises, onSessionChange])
+    const hasCompletedSet = exercises.some((exercise) => exercise.sets.some((set) => set.completed))
+    if (!hasCompletedSet) {
+      setStartedAt(null)
+    }
+  }, [exercises])
+
+  useEffect(() => {
+    onSessionChange(exercises, startedAt)
+  }, [exercises, startedAt, onSessionChange])
 
   const completedSets = exercises.flatMap((exercise) => exercise.sets).filter((set) => set.completed).length
   const totalSets = exercises.flatMap((exercise) => exercise.sets).length
@@ -1879,16 +1904,32 @@ function ActiveWorkoutModal({
   }
 
   const toggleSet = (exerciseIndex: number, setIndex: number) => {
-    setExercises((current) =>
-      current.map((exercise, currentExerciseIndex) =>
+    let toggledToCompleted = false
+    let remainingCompletedSets = 0
+
+    setExercises((current) => {
+      const next = current.map((exercise, currentExerciseIndex) =>
         currentExerciseIndex === exerciseIndex
           ? {
               ...exercise,
-              sets: exercise.sets.map((set, currentSetIndex) => currentSetIndex === setIndex ? { ...set, completed: !set.completed } : set),
+              sets: exercise.sets.map((set, currentSetIndex) => {
+                if (currentSetIndex !== setIndex) return set
+                const nextCompleted = !set.completed
+                toggledToCompleted = nextCompleted
+                return { ...set, completed: nextCompleted }
+              }),
             }
           : exercise
       )
-    )
+      remainingCompletedSets = next.flatMap((exercise) => exercise.sets).filter((set) => set.completed).length
+      return next
+    })
+
+    if (toggledToCompleted && !startedAt) {
+      setStartedAt(new Date().toISOString())
+    } else if (!toggledToCompleted && remainingCompletedSets === 0) {
+      setStartedAt(null)
+    }
   }
 
   const addExerciseToLiveWorkout = (item: ExerciseLibraryItem) => {
@@ -2643,6 +2684,22 @@ export default function WorkoutsPage() {
 
   const totalCaloriesBurned = workoutLogs.reduce((sum, log) => sum + (log.calories_burned_kcal || 0), 0)
   const todayLoggedWorkouts = workoutLogs.filter((log) => log.date === getTodayISO())
+  const averageDurationByWorkoutId = useMemo(() => {
+    const stats = new Map<string, { total: number; count: number }>()
+
+    workoutLogs.forEach((log) => {
+      if (!log.completed_at || typeof log.duration_min !== 'number' || log.duration_min <= 0) return
+
+      const current = stats.get(log.workout_id) ?? { total: 0, count: 0 }
+      current.total += log.duration_min
+      current.count += 1
+      stats.set(log.workout_id, current)
+    })
+
+    return new Map(
+      [...stats.entries()].map(([workoutId, value]) => [workoutId, value.total / value.count])
+    )
+  }, [workoutLogs])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -2681,7 +2738,7 @@ export default function WorkoutsPage() {
     const session: PersistedActiveWorkoutSession = {
       workout,
       exercises: createActiveExercisesFromWorkout(workout),
-      startedAt: new Date().toISOString(),
+      startedAt: null,
     }
 
     setActiveWorkoutSession(session)
@@ -2706,10 +2763,14 @@ export default function WorkoutsPage() {
     toast.success('Paused workout cleared.')
   }
 
-  const handleActiveSessionExercisesChange = useCallback((exercises: ActiveExercise[]) => {
+  const handleActiveSessionExercisesChange = useCallback((exercises: ActiveExercise[], startedAt?: string | null) => {
     setActiveWorkoutSession((current) => {
       if (!current || !runningWorkout || current.workout.id !== runningWorkout.id) return current
-      return { ...current, exercises }
+      return {
+        ...current,
+        exercises,
+        startedAt: startedAt === undefined ? current.startedAt : startedAt,
+      }
     })
   }, [runningWorkout])
 
@@ -3573,7 +3634,7 @@ export default function WorkoutsPage() {
                               <div className="min-w-0">
                                 <p className="text-sm font-medium truncate">{w.name}</p>
                                 <p className="text-xs text-muted-foreground mt-0.5">
-                                  {w.exercises.length} exercise{w.exercises.length !== 1 ? 's' : ''} · {w.estimated_duration_min} min · <span className="capitalize">{w.difficulty}</span>
+                                  {w.exercises.length} exercise{w.exercises.length !== 1 ? 's' : ''} · {averageDurationByWorkoutId.has(w.id) ? formatAverageWorkoutTime(averageDurationByWorkoutId.get(w.id)) : 'Complete once to see time'} · <span className="capitalize">{w.difficulty}</span>
                                 </p>
                               </div>
                               <div className="flex flex-wrap gap-1 justify-end max-w-[120px]">
@@ -4346,7 +4407,7 @@ export default function WorkoutsPage() {
               ) : (
                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                   {filteredSavedWorkouts.map((workout) => (
-                    <SavedWorkoutCard key={workout.id} workout={workout} onStart={startWorkout} onEdit={(item) => { setEditingWorkout(item); setBuilderOpen(true) }} onDelete={handleDeleteWorkout} />
+                    <SavedWorkoutCard key={workout.id} workout={workout} averageDurationMin={averageDurationByWorkoutId.get(workout.id)} onStart={startWorkout} onEdit={(item) => { setEditingWorkout(item); setBuilderOpen(true) }} onDelete={handleDeleteWorkout} />
                   ))}
                 </div>
               )}
@@ -4467,7 +4528,7 @@ export default function WorkoutsPage() {
             ) : (
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 {filteredPremadeWorkouts.map((workout) => (
-                  <SavedWorkoutCard key={workout.id} workout={{ ...workout, source: 'premade' }} onStart={startWorkout} onEdit={(item) => { setEditingWorkout(item); setBuilderOpen(true) }} />
+                  <SavedWorkoutCard key={workout.id} workout={{ ...workout, source: 'premade' }} averageDurationMin={averageDurationByWorkoutId.get(workout.id)} onStart={startWorkout} onEdit={(item) => { setEditingWorkout(item); setBuilderOpen(true) }} />
                 ))}
               </div>
             )}
@@ -4492,6 +4553,7 @@ export default function WorkoutsPage() {
             unitSystem={unitSystem}
             workoutLogs={workoutLogs}
             initialExercises={activeWorkoutSession?.workout.id === runningWorkout.id ? activeWorkoutSession.exercises : undefined}
+            initialStartedAt={activeWorkoutSession?.workout.id === runningWorkout.id ? activeWorkoutSession.startedAt : null}
             onClose={pauseRunningWorkout}
             onPause={pauseRunningWorkout}
             onSessionChange={handleActiveSessionExercisesChange}

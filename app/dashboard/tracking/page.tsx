@@ -367,6 +367,7 @@ export default function TrackingPage() {
   const [timeRange, setTimeRange] = useState<'2w' | '1m' | '3m' | 'all'>('1m')
   const [editingEntry, setEditingEntry] = useState<any>(null)
   const [editDialogOpen, setEditDialogOpen] = useState(false)
+  const [nutritionMetric, setNutritionMetric] = useState<'calories' | 'protein'>('calories')
 
   const handleDeleteWeight = (id: string) => {
     if (confirm('Are you sure you want to delete this weight entry?')) {
@@ -781,81 +782,77 @@ export default function TrackingPage() {
 
         {/* Nutrition tab */}
         <TabsContent value="nutrition">
-          <div className="grid lg:grid-cols-2 gap-4">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm">Daily Calories (Last 14 Days)</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {calorieHistory.length === 0 ? (
-                  <TrackingEmptyState
-                    icon={Flame}
-                    title="No nutrition data yet"
-                    body="Log meals for a few days and this chart will turn into a real intake trend against your target."
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <CardTitle className="text-sm">
+                  Daily {nutritionMetric === 'calories' ? 'Calories' : 'Protein'} (Last 14 Days)
+                </CardTitle>
+                <div className="flex gap-1.5 overflow-x-auto whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                  <button
+                    type="button"
+                    onClick={() => setNutritionMetric('calories')}
+                    className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                      nutritionMetric === 'calories'
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+                    }`}
                   >
-                    <Button asChild size="sm" variant="outline" className="gap-1.5 text-xs">
-                      <a href="/dashboard/meals">Open Meals</a>
-                    </Button>
-                  </TrackingEmptyState>
-                ) : (
-                  <div
-                    className="overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden -mx-2 px-2"
-                    style={{ touchAction: 'pan-x' } as React.CSSProperties}
+                    Calories
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNutritionMetric('protein')}
+                    className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                      nutritionMetric === 'protein'
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+                    }`}
                   >
-                    <div style={{ minWidth: 560 }}>
-                      <ResponsiveContainer width="100%" height={220}>
-                        <BarChart data={calorieHistory} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="date" tick={{ fontSize: 10 }} />
-                          <YAxis tick={{ fontSize: 10 }} />
-                          <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(16, 185, 129, 0.08)' }} />
-                          <ReferenceLine y={user.calorie_target} stroke="#f59e0b" strokeDasharray="4 2" label={{ value: 'Target', position: 'right', fontSize: 10 }} />
-                          <Bar dataKey="calories" fill="#10b981" opacity={0.8} radius={[3, 3, 0, 0]} name="calories" maxBarSize={48} />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm">Daily Protein (Last 14 Days)</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {calorieHistory.length === 0 ? (
-                  <TrackingEmptyState
-                    icon={Zap}
-                    title="No protein data yet"
-                    body="Once you start logging meals, Rivora will show how closely your protein intake matches your target."
-                  >
-                    <Button asChild size="sm" variant="outline" className="gap-1.5 text-xs">
-                      <a href="/dashboard/meals">Start Logging Meals</a>
-                    </Button>
-                  </TrackingEmptyState>
-                ) : (
-                  <div
-                    className="overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden -mx-2 px-2"
-                    style={{ touchAction: 'pan-x' } as React.CSSProperties}
-                  >
-                    <div style={{ minWidth: 560 }}>
-                      <ResponsiveContainer width="100%" height={220}>
-                        <BarChart data={calorieHistory} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="date" tick={{ fontSize: 10 }} />
-                          <YAxis tick={{ fontSize: 10 }} />
-                          <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(16, 185, 129, 0.08)' }} />
-                          <ReferenceLine y={user.protein_target_g} stroke="#f59e0b" strokeDasharray="4 2" label={{ value: 'Target', position: 'right', fontSize: 10 }} />
-                          <Bar dataKey="protein" fill="#10b981" opacity={0.8} radius={[3, 3, 0, 0]} name="protein" maxBarSize={48} />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
+                    Protein
+                  </button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {calorieHistory.length === 0 ? (
+                <TrackingEmptyState
+                  icon={nutritionMetric === 'calories' ? Flame : Zap}
+                  title={nutritionMetric === 'calories' ? 'No nutrition data yet' : 'No protein data yet'}
+                  body={nutritionMetric === 'calories'
+                    ? 'Log meals for a few days and this chart will turn into a real intake trend against your target.'
+                    : 'Once you start logging meals, Rivora will show how closely your protein intake matches your target.'}
+                >
+                  <Button asChild size="sm" variant="outline" className="gap-1.5 text-xs">
+                    <a href="/dashboard/meals">{nutritionMetric === 'calories' ? 'Open Meals' : 'Start Logging Meals'}</a>
+                  </Button>
+                </TrackingEmptyState>
+              ) : (
+                <ResponsiveContainer width="100%" height={240}>
+                  <BarChart data={calorieHistory} margin={{ top: 5, right: 8, left: -22, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+                    <YAxis tick={{ fontSize: 10 }} />
+                    <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(16, 185, 129, 0.08)' }} />
+                    <ReferenceLine
+                      y={nutritionMetric === 'calories' ? user.calorie_target : user.protein_target_g}
+                      stroke="#f59e0b"
+                      strokeDasharray="4 2"
+                      label={{ value: 'Target', position: 'right', fontSize: 10 }}
+                    />
+                    <Bar
+                      dataKey={nutritionMetric}
+                      fill={nutritionMetric === 'calories' ? '#10b981' : '#0ea5e9'}
+                      opacity={0.85}
+                      radius={[3, 3, 0, 0]}
+                      name={nutritionMetric}
+                      maxBarSize={32}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* PRs tab */}

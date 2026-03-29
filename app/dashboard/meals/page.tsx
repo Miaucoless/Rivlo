@@ -780,11 +780,13 @@ function RecipeCard({ recipe, compact = false, onClick }: { recipe: Recipe; comp
   const typeConfig = mealTypeConfig[recipe.meal_type] || mealTypeConfig.snack
 
   return (
-    <motion.div
+    <motion.button
+      type="button"
       whileHover={{ y: -2 }}
+      whileTap={{ scale: 0.99 }}
       transition={{ duration: 0.18 }}
       onClick={onClick}
-      className="group bg-card border border-border/50 rounded-xl overflow-hidden cursor-pointer hover:border-border hover:shadow-lg transition-all duration-200"
+      className="group w-full touch-manipulation rounded-xl border border-border/50 bg-card text-left transition-all duration-200 hover:border-border hover:shadow-lg"
     >
       <div className="p-4">
         <div className="flex items-start justify-between gap-3 mb-3">
@@ -813,7 +815,7 @@ function RecipeCard({ recipe, compact = false, onClick }: { recipe: Recipe; comp
           )}
         </div>
       </div>
-    </motion.div>
+    </motion.button>
   )
 }
 
@@ -4552,9 +4554,7 @@ export default function MealsPage() {
                       transition={{ duration: 0.25, delay: idx * 0.04 }}
                       className="bg-card border border-border/50 rounded-xl overflow-hidden hover:border-border transition-all duration-200 group"
                     >
-                      <div onClick={() => setSelectedRecipe(recipe)} className="cursor-pointer">
-                        <RecipeCard recipe={recipe} />
-                      </div>
+                      <RecipeCard recipe={recipe} onClick={() => setSelectedRecipe(recipe)} />
                       <div className="px-4 pb-4 space-y-1.5">
                         <AddToTodayButton recipe={recipe} />
                         <div className="flex gap-1.5">
@@ -4598,9 +4598,7 @@ export default function MealsPage() {
                 transition={{ duration: 0.25, delay: idx * 0.04 }}
                 className="bg-card border border-border/50 rounded-xl overflow-hidden hover:border-border transition-all duration-200 group"
               >
-                <div onClick={() => setSelectedRecipe(recipe)} className="cursor-pointer">
-                  <RecipeCard recipe={recipe} />
-                </div>
+                <RecipeCard recipe={recipe} onClick={() => setSelectedRecipe(recipe)} />
                 <div className="px-4 pb-4">
                   <AddToTodayButton recipe={recipe} />
                 </div>
