@@ -1,4 +1,5 @@
 import { Redis } from '@upstash/redis'
+import { NextResponse } from 'next/server'
 
 let redisClient: Redis | null | undefined
 
@@ -17,6 +18,19 @@ export function getRedisClient() {
   }
 
   return redisClient
+}
+
+export function hasRedisClient() {
+  return Boolean(getRedisClient())
+}
+
+export function normalizeRedisKeyPart(value: string) {
+  return value.trim().toLowerCase().replace(/\s+/g, ' ').slice(0, 256)
+}
+
+export function withRedisCacheHeader(response: NextResponse, status: 'hit' | 'miss' | 'skip') {
+  response.headers.set('x-rivora-cache', status)
+  return response
 }
 
 export async function getRedisJson<T>(key: string): Promise<T | null> {
@@ -39,5 +53,16 @@ export async function setRedisJson(key: string, value: unknown, ttlSeconds: numb
     await redis.set(key, value, { ex: ttlSeconds })
   } catch {
     // Swallow cache write failures so search still works without Redis.
+  }
+}
+
+export async function deleteRedisKeys(keys: string[]) {
+  const redis = getRedisClient()
+  if (!redis || keys.length === 0) return
+
+  try {
+    await redis.del(...keys)
+  } catch {
+    // Swallow cache delete failures so writes still succeed without Redis.
   }
 }

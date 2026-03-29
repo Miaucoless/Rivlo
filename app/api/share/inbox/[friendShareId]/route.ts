@@ -1,5 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { deleteRedisKeys } from '@/lib/redis'
 import { getAuthUser, getServiceClient } from '@/lib/supabase-server'
+
+function inboxCacheKeys(userId: string) {
+  return [
+    `share-inbox:v1:${userId}:all`,
+    `share-inbox:v1:${userId}:recipe`,
+    `share-inbox:v1:${userId}:workout`,
+    `share-inbox:v1:${userId}:saved_meal`,
+    `share-inbox:v1:${userId}:grocery_list`,
+  ]
+}
 
 export async function DELETE(
   req: NextRequest,
@@ -19,6 +30,8 @@ export async function DELETE(
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
+
+  await deleteRedisKeys(inboxCacheKeys(user.id))
 
   return NextResponse.json({ success: true })
 }

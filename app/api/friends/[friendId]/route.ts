@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { deleteRedisKeys } from '@/lib/redis'
 import { getAuthUser, getServiceClient } from '@/lib/supabase-server'
 
 export async function DELETE(
@@ -36,6 +37,10 @@ export async function DELETE(
   }
 
   await db.from('friendships').delete().eq('id', friendshipId)
+  await deleteRedisKeys([
+    `friends:v1:${friendship.requester_id}`,
+    `friends:v1:${friendship.addressee_id}`,
+  ])
 
   return NextResponse.json({ ok: true })
 }

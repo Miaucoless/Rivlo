@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { deleteRedisKeys } from '@/lib/redis'
 import { getAuthUser, getServiceClient } from '@/lib/supabase-server'
 
 export async function POST(req: NextRequest) {
@@ -14,7 +15,7 @@ export async function POST(req: NextRequest) {
 
   const { data: friendship } = await db
     .from('friendships')
-    .select('id, addressee_id, status')
+    .select('id, requester_id, addressee_id, status')
     .eq('id', friendship_id)
     .eq('addressee_id', user.id)
     .eq('status', 'pending')
@@ -26,6 +27,10 @@ export async function POST(req: NextRequest) {
 
   const newStatus = action === 'accept' ? 'accepted' : 'declined'
   await db.from('friendships').update({ status: newStatus }).eq('id', friendship_id)
+  await deleteRedisKeys([
+    `friends:v1:${user.id}`,
+    `friends:v1:${friendship.requester_id}`,
+  ])
 
   return NextResponse.json({ ok: true, status: newStatus })
 }

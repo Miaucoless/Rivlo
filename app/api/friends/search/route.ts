@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getRedisJson, hasRedisClient, normalizeRedisKeyPart, setRedisJson, withRedisCacheHeader } from '@/lib/redis'
 import { getAuthUser, getServiceClient } from '@/lib/supabase-server'
 
 export async function GET(req: NextRequest) {
@@ -7,6 +8,16 @@ export async function GET(req: NextRequest) {
 
   const q = req.nextUrl.searchParams.get('q')?.trim() ?? ''
   if (!q) return NextResponse.json([])
+
+  const cacheEnabled = hasRedisClient()
+  const cacheKey = `friends-search:v1:${user.id}:${normalizeRedisKeyPart(q)}`
+
+  if (cacheEnabled) {
+    const cached = await getRedisJson<unknown[]>(cacheKey)
+    if (cached !== null) {
+      return withRedisCacheHeader(NextResponse.json(cached), 'hit')
+    }
+  }
 
   const db = getServiceClient()
 
@@ -30,7 +41,12 @@ export async function GET(req: NextRequest) {
     results = data ?? []
   }
 
-  if (results.length === 0) return NextResponse.json([])
+  if (results.length === 0) {
+    if (cacheEnabled) {
+      await setRedisJson(cacheKey, [], 60)
+    }
+    return withRedisCacheHeader(NextResponse.json([]), cacheEnabled ? 'miss' : 'skip')
+  }
 
   // Exclude users already in a friendship with current user
   const { data: existing } = await db
@@ -45,5 +61,11 @@ export async function GET(req: NextRequest) {
     if (f.addressee_id) existingIds.add(f.addressee_id)
   }
 
-  return NextResponse.json(results.filter((r) => !existingIds.has(r.id)))
+  const payload = results.filter((r) => !existingIds.has(r.id))
+
+  if (cacheEnabled) {
+    await setRedisJson(cacheKey, payload, 60)
+  }
+
+  return withRedisCacheHeader(NextResponse.json(payload), cacheEnabled ? 'miss' : 'skip')
 }

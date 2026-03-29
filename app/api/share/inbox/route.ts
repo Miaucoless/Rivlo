@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getRedisJson, hasRedisClient, normalizeRedisKeyPart, setRedisJson, withRedisCacheHeader } from '@/lib/redis'
 import { getAuthUser, getServiceClient } from '@/lib/supabase-server'
 
 export async function GET(req: NextRequest) {
@@ -6,6 +7,16 @@ export async function GET(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const typeFilter = req.nextUrl.searchParams.get('type')
+  const cacheEnabled = hasRedisClient()
+  const cacheKey = `share-inbox:v1:${user.id}:${normalizeRedisKeyPart(typeFilter ?? 'all')}`
+
+  if (cacheEnabled) {
+    const cached = await getRedisJson<unknown[]>(cacheKey)
+    if (cached !== null) {
+      return withRedisCacheHeader(NextResponse.json(cached), 'hit')
+    }
+  }
+
   const db = getServiceClient()
 
   const { data, error } = await db
@@ -28,7 +39,7 @@ export async function GET(req: NextRequest) {
     .eq('recipient_id', user.id)
     .order('created_at', { ascending: false })
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return withRedisCacheHeader(NextResponse.json({ error: error.message }, { status: 500 }), cacheEnabled ? 'miss' : 'skip')
 
   // Filter by type if requested
   const rows = (data ?? []).filter((r: Record<string, unknown>) => {
@@ -70,5 +81,9 @@ export async function GET(req: NextRequest) {
     }
   })
 
-  return NextResponse.json(items)
+  if (cacheEnabled) {
+    await setRedisJson(cacheKey, items, 60)
+  }
+
+  return withRedisCacheHeader(NextResponse.json(items), cacheEnabled ? 'miss' : 'skip')
 }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import type { ExerciseLibraryItem, MuscleGroup } from '@/types'
+import { getRedisJson, hasRedisClient, normalizeRedisKeyPart, setRedisJson, withRedisCacheHeader } from '@/lib/redis'
 
 // ── ExerciseDB (RapidAPI) ─────────────────────────────────────────────────────
 
@@ -166,6 +167,16 @@ export async function GET(req: NextRequest) {
   const name = req.nextUrl.searchParams.get('name') ?? ''
   if (!name.trim()) return NextResponse.json([])
 
+  const cacheEnabled = hasRedisClient()
+  const cacheKey = `exercises:v1:${normalizeRedisKeyPart(name)}`
+
+  if (cacheEnabled) {
+    const cached = await getRedisJson<ExerciseLibraryItem[]>(cacheKey)
+    if (cached !== null) {
+      return withRedisCacheHeader(NextResponse.json(cached), 'hit')
+    }
+  }
+
   const edbKey = process.env.EXERCISEDB_API_KEY
 
   // Try ExerciseDB first (1300+ exercises)
@@ -181,7 +192,11 @@ export async function GET(req: NextRequest) {
       })
       if (res.ok) {
         const data: ExerciseDbItem[] = await res.json()
-        return NextResponse.json(data.map(mapExerciseDb))
+        const payload = data.map(mapExerciseDb)
+        if (cacheEnabled) {
+          await setRedisJson(cacheKey, payload, 60 * 60 * 24)
+        }
+        return withRedisCacheHeader(NextResponse.json(payload), cacheEnabled ? 'miss' : 'skip')
       }
     } catch {
       // fall through to API Ninjas
@@ -198,10 +213,14 @@ export async function GET(req: NextRequest) {
       headers: { 'X-Api-Key': apiKey },
       next: { revalidate: 3600 },
     })
-    if (!res.ok) return NextResponse.json([])
+    if (!res.ok) return withRedisCacheHeader(NextResponse.json([]), cacheEnabled ? 'miss' : 'skip')
     const data: ApiNinjasExercise[] = await res.json()
-    return NextResponse.json(data.map(mapApiNinjas))
+    const payload = data.map(mapApiNinjas)
+    if (cacheEnabled) {
+      await setRedisJson(cacheKey, payload, 60 * 60 * 24)
+    }
+    return withRedisCacheHeader(NextResponse.json(payload), cacheEnabled ? 'miss' : 'skip')
   } catch {
-    return NextResponse.json([])
+    return withRedisCacheHeader(NextResponse.json([]), cacheEnabled ? 'miss' : 'skip')
   }
 }

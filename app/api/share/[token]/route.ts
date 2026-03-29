@@ -1,10 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getRedisJson, hasRedisClient, normalizeRedisKeyPart, setRedisJson, withRedisCacheHeader } from '@/lib/redis'
 import { getServiceClient } from '@/lib/supabase-server'
 
 export async function GET(
   _req: NextRequest,
   { params }: { params: { token: string } }
 ) {
+  const cacheEnabled = hasRedisClient()
+  const cacheKey = `share-token:v1:${normalizeRedisKeyPart(params.token)}`
+
+  if (cacheEnabled) {
+    const cached = await getRedisJson<Record<string, unknown>>(cacheKey)
+    if (cached !== null) {
+      return withRedisCacheHeader(NextResponse.json(cached), 'hit')
+    }
+  }
+
   const db = getServiceClient()
 
   const { data: item, error } = await db
@@ -14,10 +25,10 @@ export async function GET(
     .single()
 
   if (error || !item) {
-    return NextResponse.json(
+    return withRedisCacheHeader(NextResponse.json(
       { error: 'This link is invalid or has expired.' },
       { status: 404 }
-    )
+    ), cacheEnabled ? 'miss' : 'skip')
   }
 
   const { data: profile } = await db
@@ -26,7 +37,7 @@ export async function GET(
     .eq('id', item.owner_id)
     .single()
 
-  return NextResponse.json({
+  const payload = {
     share_id: item.id,
     item_type: item.item_type,
     item_name: item.item_name,
@@ -34,5 +45,11 @@ export async function GET(
     owner_name: profile?.name ?? 'Someone',
     message: item.message,
     created_at: item.created_at,
-  })
+  }
+
+  if (cacheEnabled) {
+    await setRedisJson(cacheKey, payload, 60 * 5)
+  }
+
+  return withRedisCacheHeader(NextResponse.json(payload), cacheEnabled ? 'miss' : 'skip')
 }

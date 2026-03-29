@@ -1,5 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { deleteRedisKeys } from '@/lib/redis'
 import { getAuthUser, getServiceClient } from '@/lib/supabase-server'
+
+function inboxCacheKeys(userId: string) {
+  return [
+    `share-inbox:v1:${userId}:all`,
+    `share-inbox:v1:${userId}:recipe`,
+    `share-inbox:v1:${userId}:workout`,
+    `share-inbox:v1:${userId}:saved_meal`,
+    `share-inbox:v1:${userId}:grocery_list`,
+  ]
+}
 
 async function mergeSavedMealIntoUserState(
   db: ReturnType<typeof getServiceClient>,
@@ -95,6 +106,7 @@ export async function POST(
         .update({ imported_at: new Date().toISOString() })
         .eq('id', friend_share_id)
         .eq('recipient_id', user.id)
+      await deleteRedisKeys(inboxCacheKeys(user.id))
     }
     return NextResponse.json({
       result_id: existing.result_id,
@@ -233,6 +245,7 @@ export async function POST(
       .update({ imported_at: new Date().toISOString() })
       .eq('id', friend_share_id)
       .eq('recipient_id', user.id)
+    await deleteRedisKeys(inboxCacheKeys(user.id))
   }
 
   return NextResponse.json({

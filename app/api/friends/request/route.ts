@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { deleteRedisKeys } from '@/lib/redis'
 import { getAuthUser, getServiceClient } from '@/lib/supabase-server'
 
 export async function POST(req: NextRequest) {
@@ -68,6 +69,11 @@ export async function POST(req: NextRequest) {
       created_at: new Date().toISOString(),
     })
 
+    await deleteRedisKeys([
+      `friends:v1:${user.id}`,
+      `friends:v1:${targetId}`,
+    ])
+
     return NextResponse.json({ friendship_id: data.id, type: 'request_sent' })
   }
 
@@ -91,6 +97,8 @@ export async function POST(req: NextRequest) {
       .insert({ requester_id: user.id, invited_email: targetEmail, status: 'invited' })
       .select('id')
       .single()
+
+    await deleteRedisKeys([`friends:v1:${user.id}`])
 
     return NextResponse.json({ friendship_id: data?.id, type: 'invite_sent' })
   }

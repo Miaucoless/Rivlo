@@ -1,5 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { deleteRedisKeys } from '@/lib/redis'
 import { getAuthUser, getServiceClient } from '@/lib/supabase-server'
+
+function inboxCacheKeys(userId: string) {
+  return [
+    `share-inbox:v1:${userId}:all`,
+    `share-inbox:v1:${userId}:recipe`,
+    `share-inbox:v1:${userId}:workout`,
+    `share-inbox:v1:${userId}:saved_meal`,
+    `share-inbox:v1:${userId}:grocery_list`,
+  ]
+}
 
 export async function POST(req: NextRequest) {
   const user = await getAuthUser(req)
@@ -69,6 +80,7 @@ export async function POST(req: NextRequest) {
     created_at: new Date().toISOString(),
   }))
   await db.from('notifications').insert(notifications)
+  await deleteRedisKeys(recipient_ids.flatMap((id: string) => inboxCacheKeys(id)))
 
   return NextResponse.json({ ok: true })
 }

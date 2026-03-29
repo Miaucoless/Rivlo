@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getRedisJson, hasRedisClient, normalizeRedisKeyPart, setRedisJson, withRedisCacheHeader } from '@/lib/redis'
 
 export interface YouTubeVideo {
   id: string
@@ -32,6 +33,16 @@ export async function GET(req: NextRequest) {
   const apiKey = process.env.YOUTUBE_API_KEY
   if (!apiKey) return NextResponse.json({ error: 'YouTube API key not configured' }, { status: 500 })
 
+  const cacheEnabled = hasRedisClient()
+  const cacheKey = `youtube:v1:${normalizeRedisKeyPart(query)}`
+
+  if (cacheEnabled) {
+    const cached = await getRedisJson<YouTubeVideo[]>(cacheKey)
+    if (cached !== null) {
+      return withRedisCacheHeader(NextResponse.json(cached), 'hit')
+    }
+  }
+
   // Step 1: search for short tutorial videos sorted by view count
   const searchUrl = new URL('https://www.googleapis.com/youtube/v3/search')
   searchUrl.searchParams.set('part', 'snippet')
@@ -43,13 +54,17 @@ export async function GET(req: NextRequest) {
   searchUrl.searchParams.set('key', apiKey)
 
   const searchRes = await fetch(searchUrl.toString(), { next: { revalidate: 86400 } })
-  if (!searchRes.ok) return NextResponse.json([], { status: searchRes.status })
+  if (!searchRes.ok) {
+    return withRedisCacheHeader(NextResponse.json([], { status: searchRes.status }), cacheEnabled ? 'miss' : 'skip')
+  }
 
   const searchData = await searchRes.json()
   const items: { id: { videoId: string }; snippet: { title: string; channelTitle: string; thumbnails: { medium: { url: string } } } }[] =
     searchData.items ?? []
 
-  if (items.length === 0) return NextResponse.json([])
+  if (items.length === 0) {
+    return withRedisCacheHeader(NextResponse.json([]), cacheEnabled ? 'miss' : 'skip')
+  }
 
   const videoIds = items.map((item) => item.id.videoId).join(',')
 
@@ -60,7 +75,9 @@ export async function GET(req: NextRequest) {
   detailsUrl.searchParams.set('key', apiKey)
 
   const detailsRes = await fetch(detailsUrl.toString(), { next: { revalidate: 86400 } })
-  if (!detailsRes.ok) return NextResponse.json([], { status: detailsRes.status })
+  if (!detailsRes.ok) {
+    return withRedisCacheHeader(NextResponse.json([], { status: detailsRes.status }), cacheEnabled ? 'miss' : 'skip')
+  }
 
   const detailsData = await detailsRes.json()
   const details: Record<string, { durationSec: number; viewCount: string }> = {}
@@ -107,7 +124,12 @@ export async function GET(req: NextRequest) {
     )
     .slice(0, 3)
 
-  if (results.length > 0) return NextResponse.json(results)
+  if (results.length > 0) {
+    if (cacheEnabled) {
+      await setRedisJson(cacheKey, results, 60 * 60 * 24)
+    }
+    return withRedisCacheHeader(NextResponse.json(results), cacheEnabled ? 'miss' : 'skip')
+  }
 
   // Fallback 1: relax duration (≤4 min) but keep relevance + tutorial filters
   const fallback1: YouTubeVideo[] = items
@@ -118,7 +140,12 @@ export async function GET(req: NextRequest) {
     )
     .slice(0, 3)
 
-  if (fallback1.length > 0) return NextResponse.json(fallback1)
+  if (fallback1.length > 0) {
+    if (cacheEnabled) {
+      await setRedisJson(cacheKey, fallback1, 60 * 60 * 24)
+    }
+    return withRedisCacheHeader(NextResponse.json(fallback1), cacheEnabled ? 'miss' : 'skip')
+  }
 
   // Fallback 2: relevance only (no tutorial keyword requirement)
   const fallback2: YouTubeVideo[] = items
@@ -126,8 +153,17 @@ export async function GET(req: NextRequest) {
     .filter((v): v is YouTubeVideo => v !== null && v.durationSec > 0 && isTitleRelevant(v.title))
     .slice(0, 3)
 
-  if (fallback2.length > 0) return NextResponse.json(fallback2)
+  if (fallback2.length > 0) {
+    if (cacheEnabled) {
+      await setRedisJson(cacheKey, fallback2, 60 * 60 * 24)
+    }
+    return withRedisCacheHeader(NextResponse.json(fallback2), cacheEnabled ? 'miss' : 'skip')
+  }
 
   // Last resort: return top 3 regardless
-  return NextResponse.json(items.map(toVideo).filter((v): v is YouTubeVideo => v !== null && v.durationSec > 0).slice(0, 3))
+  const payload = items.map(toVideo).filter((v): v is YouTubeVideo => v !== null && v.durationSec > 0).slice(0, 3)
+  if (cacheEnabled) {
+    await setRedisJson(cacheKey, payload, 60 * 60 * 24)
+  }
+  return withRedisCacheHeader(NextResponse.json(payload), cacheEnabled ? 'miss' : 'skip')
 }

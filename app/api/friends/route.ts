@@ -1,9 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getRedisJson, hasRedisClient, setRedisJson, withRedisCacheHeader } from '@/lib/redis'
 import { getAuthUser, getServiceClient } from '@/lib/supabase-server'
 
 export async function GET(req: NextRequest) {
   const user = await getAuthUser(req)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const cacheEnabled = hasRedisClient()
+  const cacheKey = `friends:v1:${user.id}`
+
+  if (cacheEnabled) {
+    const cached = await getRedisJson<unknown[]>(cacheKey)
+    if (cached !== null) {
+      return withRedisCacheHeader(NextResponse.json(cached), 'hit')
+    }
+  }
 
   const db = getServiceClient()
 
@@ -13,7 +24,7 @@ export async function GET(req: NextRequest) {
     .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`)
     .neq('status', 'declined')
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return withRedisCacheHeader(NextResponse.json({ error: error.message }, { status: 500 }), cacheEnabled ? 'miss' : 'skip')
 
   // Collect all user IDs to resolve profiles
   const userIds = new Set<string>()
@@ -39,5 +50,9 @@ export async function GET(req: NextRequest) {
     }
   })
 
-  return NextResponse.json(enriched)
+  if (cacheEnabled) {
+    await setRedisJson(cacheKey, enriched, 60)
+  }
+
+  return withRedisCacheHeader(NextResponse.json(enriched), cacheEnabled ? 'miss' : 'skip')
 }
