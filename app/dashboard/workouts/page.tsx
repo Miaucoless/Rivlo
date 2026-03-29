@@ -500,7 +500,7 @@ function createActiveExercisesFromWorkout(workout: Workout): ActiveExercise[] {
       set_type: set.set_type || 'standard',
       completed: false,
       actual_reps: set.reps,
-      actual_weight: set.weight_kg || 0,
+      actual_weight: workout.source === 'premade' ? undefined : (set.weight_kg || 0),
       actual_speed_mph: set.speed_mph,
       actual_incline_pct: set.incline_pct,
       actual_machine_level: set.machine_level,
@@ -2603,7 +2603,25 @@ export default function WorkoutsPage() {
   const accountCustomWorkouts = useMemo(() => {
     if (isDemoMode) return customWorkouts
 
-    return remoteCustomWorkouts
+    const merged = new Map<string, Workout>()
+
+    ;[...remoteCustomWorkouts, ...customWorkouts].forEach((workout) => {
+      const existing = merged.get(workout.id)
+      if (!existing) {
+        merged.set(workout.id, workout)
+        return
+      }
+
+      const existingUpdatedAt = new Date(existing.updated_at || 0).getTime()
+      const workoutUpdatedAt = new Date(workout.updated_at || 0).getTime()
+      if (workoutUpdatedAt >= existingUpdatedAt) {
+        merged.set(workout.id, workout)
+      }
+    })
+
+    return [...merged.values()].sort(
+      (left, right) => new Date(right.updated_at || 0).getTime() - new Date(left.updated_at || 0).getTime()
+    )
   }, [isDemoMode, remoteCustomWorkouts, customWorkouts])
   const shouldResumeFromQuery = searchParams.get('resume') === '1'
 
@@ -4558,13 +4576,21 @@ export default function WorkoutsPage() {
             onPause={pauseRunningWorkout}
             onSessionChange={handleActiveSessionExercisesChange}
             onComplete={async ({ exercises, caloriesBurned, totalVolumeKg, durationMin }, options) => {
+              const completedAt = new Date().toISOString()
+              const startedAt = activeWorkoutSession?.startedAt ?? completedAt
+              const startedTime = new Date(startedAt).getTime()
+              const completedTime = new Date(completedAt).getTime()
+              const actualDurationMin = Number.isNaN(startedTime) || Number.isNaN(completedTime) || completedTime <= startedTime
+                ? null
+                : Math.max(1, Math.round((completedTime - startedTime) / 60000))
+              const resolvedDurationMin = actualDurationMin ?? durationMin
               const performedExercises = normalizeActiveExercisesForWorkout(exercises)
               const performedMuscleGroups = Array.from(new Set(performedExercises.flatMap((exercise) => exercise.exercise.muscle_groups)))
 
               const performedWorkout: Workout = {
                 ...runningWorkout,
                 exercises: performedExercises,
-                estimated_duration_min: durationMin,
+                estimated_duration_min: resolvedDurationMin,
                 muscle_groups: (performedMuscleGroups.length > 0 ? performedMuscleGroups : runningWorkout.muscle_groups) as Workout['muscle_groups'],
                 updated_at: new Date().toISOString(),
               }
@@ -4575,9 +4601,9 @@ export default function WorkoutsPage() {
                 workout_id: runningWorkout.id,
                 workout: performedWorkout,
                 date: getTodayISO(),
-                started_at: activeWorkoutSession?.startedAt ?? new Date().toISOString(),
-                completed_at: new Date().toISOString(),
-                duration_min: durationMin,
+                started_at: startedAt,
+                completed_at: completedAt,
+                duration_min: resolvedDurationMin,
                 calories_burned_kcal: caloriesBurned,
                 total_volume_kg: totalVolumeKg,
                 exercises: exercises.map((exercise) => ({
