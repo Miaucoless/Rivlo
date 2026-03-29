@@ -1,11 +1,12 @@
 'use client'
 
-import { useDeferredValue, useEffect, useMemo, useRef, useState, useTransition } from 'react'
+import { useDeferredValue, useEffect, useMemo, useRef, useState, useTransition, useCallback } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
   Bell, Sun, Moon, Search, ChevronRight, Sparkles, CheckCheck, Settings,
   Menu, X, LayoutDashboard, Apple, Dumbbell, BarChart3, Calendar, BookOpen, Pill, Zap, LogOut, Flame, RefreshCw,
+  Users, UserPlus, UserCheck, UserX, Loader2, Download,
 } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { motion } from 'framer-motion'
@@ -14,6 +15,7 @@ import { formatDate } from '@/lib/utils'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Badge } from '@/components/ui/badge'
 import {
   Dialog,
   DialogContent,
@@ -21,6 +23,24 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { createClient } from '@/lib/supabase'
+import type { SavedMealTemplate } from '@/types'
+
+type Friendship = {
+  id: string
+  requester_id: string
+  addressee_id: string
+  status: 'pending' | 'accepted' | 'declined' | 'invited'
+  invited_email?: string
+  other_user: { id: string; name: string; username?: string } | null
+}
+
+async function getToken(): Promise<string | null> {
+  const supabase = createClient()
+  const { data: { session } } = await supabase.auth.getSession()
+  return session?.access_token ?? null
+}
 
 const PAGE_TITLES: Record<string, string> = {
   '/dashboard': 'Dashboard',
@@ -31,6 +51,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/journal': 'Journal',
   '/supplements': 'Supplements',
   '/settings': 'Settings',
+  '/shared': 'Shared With Me',
 }
 
 const SEARCH_ITEMS = [
@@ -57,14 +78,150 @@ export function TopBar() {
     streak,
     logout,
     syncNow,
+    addSavedMeal,
   } = useAppStore()
   const [isPending, startTransition] = useTransition()
   const [isSyncing, setIsSyncing] = useState(false)
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false)
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false)
+  const [isFriendsOpen, setIsFriendsOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const searchInputRef = useRef<HTMLInputElement>(null)
+
+  // Friends panel state
+  const [friends, setFriends] = useState<Friendship[]>([])
+  const [friendsLoading, setFriendsLoading] = useState(false)
+  const [friendsTab, setFriendsTab] = useState<'friends' | 'add' | 'requests'>('friends')
+  const [addQuery, setAddQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<{ id: string; name: string; username?: string }[]>([])
+  const [friendSearching, setFriendSearching] = useState(false)
+  const [friendSending, setFriendSending] = useState(false)
+  const [friendsLoaded, setFriendsLoaded] = useState(false)
+
+  const loadFriends = useCallback(async () => {
+    if (friendsLoading) return
+    setFriendsLoading(true)
+    const token = await getToken()
+    if (!token) { setFriendsLoading(false); return }
+    const res = await fetch('/api/friends', { headers: { Authorization: `Bearer ${token}` } })
+    if (res.ok) {
+      setFriends(await res.json())
+      setFriendsLoaded(true)
+    }
+    setFriendsLoading(false)
+  }, [friendsLoading])
+
+  const openFriends = (open: boolean) => {
+    setIsFriendsOpen(open)
+    if (open) {
+      setFriendsTab('friends')
+      setAddQuery('')
+      setSearchResults([])
+      if (!friendsLoaded && !friendsLoading) {
+        void loadFriends()
+      }
+    }
+  }
+
+  useEffect(() => {
+    if (!isFriendsOpen || friendsTab !== 'add' || addQuery.length < 2) {
+      setSearchResults([])
+      return
+    }
+    const timer = window.setTimeout(async () => {
+      setFriendSearching(true)
+      const token = await getToken()
+      if (!token) { setFriendSearching(false); return }
+      const res = await fetch(`/api/friends/search?q=${encodeURIComponent(addQuery.trim())}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (res.ok) setSearchResults(await res.json())
+      setFriendSearching(false)
+    }, 350)
+    return () => window.clearTimeout(timer)
+  }, [addQuery, friendsTab, isFriendsOpen])
+
+  async function sendFriendRequest(addresseeId?: string, email?: string) {
+    setFriendSending(true)
+    const token = await getToken()
+    if (!token) { setFriendSending(false); return }
+    const body = addresseeId ? { addressee_id: addresseeId } : { email }
+    const res = await fetch('/api/friends/request', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(body),
+    })
+    const data = await res.json()
+    if (res.ok) {
+      toast.success(data.message ?? 'Friend request sent!')
+      setAddQuery('')
+      setSearchResults([])
+      loadFriends()
+    } else {
+      toast.error(data.error ?? 'Could not send request.')
+    }
+    setFriendSending(false)
+  }
+
+  async function respondToFriendRequest(friendshipId: string, action: 'accept' | 'decline') {
+    const token = await getToken()
+    if (!token) return
+    await fetch('/api/friends/respond', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ friendship_id: friendshipId, action }),
+    })
+    toast.success(action === 'accept' ? 'Friend request accepted!' : 'Request declined.')
+    loadFriends()
+  }
+
+  async function removeFriend(friendshipId: string) {
+    const token = await getToken()
+    if (!token) return
+    await fetch(`/api/friends/${friendshipId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    setFriends((prev) => prev.filter((f) => f.id !== friendshipId))
+  }
+
+  // Share import state
+  const [importingIds, setImportingIds] = useState<Set<string>>(new Set())
+  const [importedIds, setImportedIds] = useState<Set<string>>(new Set())
+
+  async function importSharedItem(notifId: string, token: string) {
+    setImportingIds((prev) => { const n = new Set(prev); n.add(notifId); return n })
+    try {
+      const authToken = await getToken()
+      if (!authToken) { toast.error('Not signed in.'); return }
+      const res = await fetch(`/api/share/${token}/import`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
+        body: JSON.stringify({}),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        if (data.item_type === 'saved_meal' && data.imported_item) {
+          addSavedMeal(data.imported_item as SavedMealTemplate)
+        }
+        setImportedIds((prev) => { const n = new Set(prev); n.add(notifId); return n })
+        markNotificationRead(notifId)
+        toast.success(data.already_imported ? 'Already saved to your account.' : 'Saved to your account!')
+      } else {
+        toast.error(data.error ?? 'Could not import. Please try again.')
+      }
+    } catch {
+      toast.error('Import failed.')
+    } finally {
+      setImportingIds((prev) => { const n = new Set(prev); n.delete(notifId); return n })
+    }
+  }
+
+  const acceptedFriends = friends.filter((f) => f.status === 'accepted')
+  const incomingRequests = friends.filter((f) => f.status === 'pending' && f.addressee_id === user?.id)
+  const outgoingRequests = friends.filter((f) => (f.status === 'pending' || f.status === 'invited') && f.requester_id === user?.id)
+  const pendingCount = incomingRequests.length
 
   const handleMobileNavClose = () => setIsMobileNavOpen(false)
 
@@ -169,43 +326,24 @@ export function TopBar() {
           <Button
             variant="ghost"
             size="icon-sm"
-            aria-label="Sync now"
-            className="text-muted-foreground"
-            disabled={isSyncing || isDemoMode}
-            onClick={async () => {
-              if (isDemoMode) return
-              setIsSyncing(true)
-              try {
-                await syncNow()
-                toast.success('Synced latest data.')
-              } catch {
-                toast.error('Sync failed. Please try again.')
-              } finally {
-                setIsSyncing(false)
-              }
-            }}
-          >
-            <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
-          </Button>
-
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Search"
-            className="text-muted-foreground"
-            onClick={() => setIsSearchOpen(true)}
-          >
-            <Search className="w-4 h-4" />
-          </Button>
-
-          <Button
-            variant="ghost"
-            size="icon-sm"
             aria-label="Toggle theme"
             onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
             className="text-muted-foreground"
           >
             {resolvedTheme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Friends"
+            className="text-muted-foreground relative"
+            onClick={() => openFriends(true)}
+          >
+            <Users className="w-4 h-4" />
+            {pendingCount > 0 && (
+              <span className="absolute top-1 right-1 flex h-1.5 w-1.5 rounded-full bg-sky-400" />
+            )}
           </Button>
 
           <Button
@@ -290,6 +428,154 @@ export function TopBar() {
         </DialogContent>
       </Dialog>
 
+      {/* Friends dialog */}
+      <Dialog open={isFriendsOpen} onOpenChange={openFriends}>
+        <DialogContent className="max-w-sm border-border/60 bg-card/95 p-0 backdrop-blur">
+          <DialogHeader className="border-b border-border/60 px-5 py-4">
+            <DialogTitle className="text-base flex items-center gap-2">
+              <Users className="w-4 h-4" />
+              Friends
+              {pendingCount > 0 && <Badge variant="secondary" className="text-xs">{pendingCount} pending</Badge>}
+            </DialogTitle>
+            <DialogDescription>Your friends, requests, and add new connections.</DialogDescription>
+          </DialogHeader>
+
+          <Tabs value={friendsTab} onValueChange={(v) => setFriendsTab(v as typeof friendsTab)} className="flex flex-col">
+            <TabsList className="mx-5 mt-4 mb-0 grid grid-cols-3">
+              <TabsTrigger value="friends" className="text-xs gap-1">
+                <UserCheck className="w-3.5 h-3.5" />
+                Friends {acceptedFriends.length > 0 && <span className="font-data">({acceptedFriends.length})</span>}
+              </TabsTrigger>
+              <TabsTrigger value="add" className="text-xs gap-1">
+                <UserPlus className="w-3.5 h-3.5" />
+                Add
+              </TabsTrigger>
+              <TabsTrigger value="requests" className="text-xs gap-1">
+                <Bell className="w-3.5 h-3.5" />
+                Requests {pendingCount > 0 && <Badge className="text-[10px] h-4 px-1 bg-sky-500">{pendingCount}</Badge>}
+              </TabsTrigger>
+            </TabsList>
+
+            {/* Friends list */}
+            <TabsContent value="friends" className="px-5 pb-5 pt-4 mt-0 min-h-[160px]">
+              {friendsLoading ? (
+                <div className="flex justify-center py-6"><Loader2 className="w-4 h-4 animate-spin text-muted-foreground" /></div>
+              ) : acceptedFriends.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-6">No friends yet. Add someone in the Add tab!</p>
+              ) : (
+                <div className="space-y-2 max-h-56 overflow-y-auto">
+                  {acceptedFriends.map((f) => (
+                    <div key={f.id} className="flex items-center gap-2.5 px-2 py-2 rounded-lg border border-border/50 bg-muted/20">
+                      <div className="w-7 h-7 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
+                        {f.other_user?.name.charAt(0).toUpperCase() ?? '?'}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{f.other_user?.name}</p>
+                        {f.other_user?.username && <p className="text-xs text-muted-foreground">@{f.other_user.username}</p>}
+                      </div>
+                      <button
+                        onClick={() => removeFriend(f.id)}
+                        className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                        title="Remove friend"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </TabsContent>
+
+            {/* Add friend */}
+            <TabsContent value="add" className="px-5 pb-5 pt-4 mt-0 min-h-[160px] space-y-3">
+              <div className="flex gap-2">
+                <Input
+                  placeholder="@username or email"
+                  value={addQuery}
+                  onChange={(e) => setAddQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && addQuery.includes('@') && !addQuery.startsWith('@') && searchResults.length === 0 && !friendSearching) {
+                      sendFriendRequest(undefined, addQuery.trim())
+                    }
+                  }}
+                  className="h-9 text-sm flex-1"
+                />
+                {addQuery.includes('@') && !addQuery.startsWith('@') && searchResults.length === 0 && !friendSearching && (
+                  <Button size="sm" disabled={friendSending} onClick={() => sendFriendRequest(undefined, addQuery.trim())} className="h-9">
+                    Invite
+                  </Button>
+                )}
+              </div>
+              {friendSearching && <p className="text-xs text-muted-foreground">Searching…</p>}
+              {searchResults.length > 0 && (
+                <div className="space-y-1">
+                  {searchResults.map((r) => (
+                    <div key={r.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg border border-border/50 bg-muted/20">
+                      <div className="w-6 h-6 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
+                        {r.name.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium truncate">{r.name}</p>
+                        {r.username && <p className="text-xs text-muted-foreground">@{r.username}</p>}
+                      </div>
+                      <Button size="sm" variant="outline" disabled={friendSending} onClick={() => sendFriendRequest(r.id)} className="h-7 text-xs">
+                        Add
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {addQuery.length >= 2 && !friendSearching && searchResults.length === 0 && !addQuery.includes('@') && (
+                <p className="text-xs text-muted-foreground">No users found. Try searching by @username or enter an email to invite.</p>
+              )}
+            </TabsContent>
+
+            {/* Requests */}
+            <TabsContent value="requests" className="px-5 pb-5 pt-4 mt-0 min-h-[160px] space-y-4">
+              {incomingRequests.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Incoming</p>
+                  {incomingRequests.map((f) => (
+                    <div key={f.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg border border-border/50 bg-muted/20">
+                      <div className="w-6 h-6 rounded-full bg-gradient-to-br from-sky-400 to-blue-500 flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
+                        {f.other_user?.name.charAt(0).toUpperCase() ?? '?'}
+                      </div>
+                      <p className="text-sm flex-1 truncate">{f.other_user?.name ?? f.invited_email}</p>
+                      <button onClick={() => respondToFriendRequest(f.id, 'accept')} className="p-1 rounded text-emerald-400 hover:bg-emerald-500/10 transition-colors" title="Accept">
+                        <UserCheck className="w-4 h-4" />
+                      </button>
+                      <button onClick={() => respondToFriendRequest(f.id, 'decline')} className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors" title="Decline">
+                        <UserX className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {outgoingRequests.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Sent</p>
+                  {outgoingRequests.map((f) => (
+                    <div key={f.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg border border-border/50 bg-muted/20">
+                      <div className="w-6 h-6 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
+                        {f.other_user?.name.charAt(0).toUpperCase() ?? (f.invited_email?.[0].toUpperCase() ?? '?')}
+                      </div>
+                      <p className="text-sm flex-1 truncate">{f.other_user?.name ?? f.invited_email}</p>
+                      <Badge variant="outline" className="text-[10px]">{f.status === 'invited' ? 'Invited' : 'Pending'}</Badge>
+                      <button onClick={() => removeFriend(f.id)} className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors" title="Cancel">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {incomingRequests.length === 0 && outgoingRequests.length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-6">No pending requests.</p>
+              )}
+            </TabsContent>
+          </Tabs>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={isNotificationsOpen} onOpenChange={openNotifications}>
         <DialogContent className="max-w-lg border-border/60 bg-card/95 p-0 backdrop-blur">
           <DialogHeader className="border-b border-border/60 px-5 py-4">
@@ -314,42 +600,88 @@ export function TopBar() {
           </DialogHeader>
 
           <div className="max-h-[420px] space-y-3 overflow-y-auto p-5">
-            {notifications.map((item) => (
-              <motion.button
-                key={item.id}
-                type="button"
-                whileHover={{ y: -1 }}
-                onClick={() => {
-                  markNotificationRead(item.id)
-                  if (item.action_url) openRoute(item.action_url)
-                }}
-                className="w-full rounded-2xl border border-border/60 bg-background/70 p-4 text-left transition-colors hover:border-emerald-500/40 hover:bg-emerald-500/5"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className={`h-2 w-2 rounded-full ${
-                        item.type === 'success'
-                          ? 'bg-emerald-400'
-                          : item.type === 'warning'
-                            ? 'bg-amber-400'
-                            : item.type === 'error'
-                              ? 'bg-rose-400'
-                              : 'bg-sky-400'
-                      }`} />
-                      <p className="font-medium">{item.title}</p>
+            {notifications.map((item) => {
+              const isShare = item.type === 'share_received'
+              const shareToken = isShare && item.action_url
+                ? item.action_url.split('/share/')[1]
+                : null
+              const isImporting = importingIds.has(item.id)
+              const isImported = importedIds.has(item.id)
+
+              if (isShare && shareToken) {
+                return (
+                  <motion.div
+                    key={item.id}
+                    whileHover={{ y: -1 }}
+                    className="rounded-2xl border border-sky-500/30 bg-sky-500/5 p-4"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="h-2 w-2 rounded-full bg-sky-400 flex-shrink-0" />
+                          <p className="font-medium text-sm">{item.title}</p>
+                        </div>
+                        <p className="mt-1 text-sm text-muted-foreground font-medium">&ldquo;{item.message}&rdquo;</p>
+                      </div>
+                      {!item.read && <span className="mt-1 rounded-full bg-sky-500/15 px-2 py-0.5 text-[11px] font-medium text-sky-400 shrink-0">New</span>}
                     </div>
-                    <p className="mt-2 text-sm text-muted-foreground">{item.message}</p>
+                    <div className="mt-3">
+                      <Button
+                        size="sm"
+                        className="w-full gap-2 h-8"
+                        disabled={isImporting || isImported}
+                        onClick={() => importSharedItem(item.id, shareToken)}
+                      >
+                        {isImporting ? (
+                          <><Loader2 className="w-3.5 h-3.5 animate-spin" />Saving…</>
+                        ) : isImported ? (
+                          <><CheckCheck className="w-3.5 h-3.5" />Saved!</>
+                        ) : (
+                          <><Download className="w-3.5 h-3.5" />Save to my account</>
+                        )}
+                      </Button>
+                    </div>
+                  </motion.div>
+                )
+              }
+
+              return (
+                <motion.button
+                  key={item.id}
+                  type="button"
+                  whileHover={{ y: -1 }}
+                  onClick={() => {
+                    markNotificationRead(item.id)
+                    if (item.action_url) openRoute(item.action_url)
+                  }}
+                  className="w-full rounded-2xl border border-border/60 bg-background/70 p-4 text-left transition-colors hover:border-emerald-500/40 hover:bg-emerald-500/5"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className={`h-2 w-2 rounded-full ${
+                          item.type === 'success'
+                            ? 'bg-emerald-400'
+                            : item.type === 'warning'
+                              ? 'bg-amber-400'
+                              : item.type === 'error'
+                                ? 'bg-rose-400'
+                                : 'bg-sky-400'
+                        }`} />
+                        <p className="font-medium">{item.title}</p>
+                      </div>
+                      <p className="mt-2 text-sm text-muted-foreground">{item.message}</p>
+                    </div>
+                    {!item.read && <span className="mt-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-medium text-emerald-400">New</span>}
                   </div>
-                  {!item.read && <span className="mt-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-medium text-emerald-400">New</span>}
-                </div>
-                {item.action_url && (
-                  <div className="mt-3 flex items-center text-xs text-muted-foreground">
-                    Open {PAGE_TITLES[item.action_url] || 'page'}
-                  </div>
-                )}
-              </motion.button>
-            ))}
+                  {item.action_url && (
+                    <div className="mt-3 flex items-center text-xs text-muted-foreground">
+                      Open {PAGE_TITLES[item.action_url] || 'page'}
+                    </div>
+                  )}
+                </motion.button>
+              )
+            })}
           </div>
         </DialogContent>
       </Dialog>
@@ -402,6 +734,7 @@ export function TopBar() {
                 { label: 'Journal',    href: '/dashboard/journal',      icon: BookOpen },
                 { label: 'Supplements',href: '/dashboard/supplements',  icon: Pill },
                 { label: 'Settings',   href: '/dashboard/settings',     icon: Settings },
+                { label: 'Shared With Me', href: '/dashboard/shared', icon: Users },
               ].map(({ label, href, icon: Icon }) => {
                 const isActive = pathname === href || pathname.startsWith(href + '/')
                 return (

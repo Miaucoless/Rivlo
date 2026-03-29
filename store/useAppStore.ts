@@ -70,6 +70,8 @@ interface AppStore {
   notificationPreferences: NotificationPreferences
   supplements: SupplementEntry[]
   calendarReminders: CalendarReminder[]
+  deletedSavedMealIds: string[]
+  deletedCustomWorkoutIds: string[]
 
   // Auth & Profile
   user: UserProfile | null
@@ -120,7 +122,7 @@ interface AppStore {
   removeMealEntry: (date: string, mealId: string) => void
   addSavedMeal: (meal: SavedMealTemplate) => void
   updateSavedMeal: (mealId: string, updates: Partial<SavedMealTemplate>) => void
-  removeSavedMeal: (mealId: string) => void
+  removeSavedMeal: (mealId: string) => Promise<boolean>
   addCustomRecipe: (recipe: Recipe) => void
   updateCustomRecipe: (recipeId: string, updates: Partial<Recipe>) => void
   removeCustomRecipe: (recipeId: string) => void
@@ -160,7 +162,7 @@ interface AppStore {
   removeWorkoutLog: (logId: string) => void
   addCustomWorkout: (workout: Workout) => void
   updateCustomWorkout: (workoutId: string, updates: Partial<Workout>) => void
-  removeCustomWorkout: (workoutId: string) => void
+  removeCustomWorkout: (workoutId: string) => Promise<boolean>
 
   // Getters
   getDailyMeals: (date: string) => MealLogEntry[]
@@ -566,6 +568,8 @@ export const useAppStore = create<AppStore>()(
       notificationPreferences: DEFAULT_NOTIFICATION_PREFERENCES,
       supplements: [],
       calendarReminders: [],
+      deletedSavedMealIds: [],
+      deletedCustomWorkoutIds: [],
       user: null,
       isAuthenticated: false,
       isDemoMode: false,
@@ -594,6 +598,8 @@ export const useAppStore = create<AppStore>()(
               notifications: [],
               supplements: [],
               calendarReminders: [],
+              deletedSavedMealIds: [],
+              deletedCustomWorkoutIds: [],
               weightHistory: [],
               journalEntries: [],
               workoutLogs: [],
@@ -677,7 +683,7 @@ export const useAppStore = create<AppStore>()(
         const cloudWorkoutTemplateIds = new Set(cloud.customWorkouts.map((w) => w.id))
         const localOnlyWorkoutTemplates =
           localState.cloudHydratedUserId === userId
-            ? localState.customWorkouts.filter((w) => !cloudWorkoutTemplateIds.has(w.id))
+            ? localState.customWorkouts.filter((w) => !cloudWorkoutTemplateIds.has(w.id) && !localState.deletedCustomWorkoutIds.includes(w.id))
             : []
 
         // Seed payload: always upload local data that doesn't exist in cloud yet
@@ -730,18 +736,20 @@ export const useAppStore = create<AppStore>()(
         }
 
         set((state) => {
+          const savedMeals = finalCloud.savedMeals.filter((meal) => !state.deletedSavedMealIds.includes(meal.id))
+          const customWorkouts = finalCloud.customWorkouts.filter((workout) => !state.deletedCustomWorkoutIds.includes(workout.id))
           const updates = {
             mealEntries: finalCloud.mealEntries,
             workoutLogs: finalCloud.workoutLogs,
             weightHistory: finalCloud.weightHistory,
             journalEntries: finalCloud.journalEntries,
-            savedMeals: finalCloud.savedMeals,
+            savedMeals,
             supplements: finalCloud.supplements,
             calendarReminders: finalCloud.calendarReminders,
             weeklyMealPlan: finalCloud.weeklyMealPlan,
             groceryList: finalCloud.groceryList,
             customRecipes: finalCloud.customRecipes,
-            customWorkouts: finalCloud.customWorkouts,
+            customWorkouts,
             waterLogs: finalCloud.waterLogs,
             cloudHydratedUserId: userId,
           }
@@ -1031,6 +1039,7 @@ export const useAppStore = create<AppStore>()(
       addSavedMeal: (meal) => {
         set((state) => ({
           savedMeals: [meal, ...state.savedMeals],
+          deletedSavedMealIds: state.deletedSavedMealIds.filter((id) => id !== meal.id),
         }))
 
         const state = get()
@@ -1050,6 +1059,7 @@ export const useAppStore = create<AppStore>()(
               ? { ...meal, ...updates, updated_at: new Date().toISOString() }
               : meal
           ),
+          deletedSavedMealIds: state.deletedSavedMealIds.filter((id) => id !== mealId),
         }))
 
         const state = get()
@@ -1062,7 +1072,7 @@ export const useAppStore = create<AppStore>()(
         }
       },
 
-      removeSavedMeal: (mealId) => {
+      removeSavedMeal: async (mealId) => {
         // Collect all log entry IDs linked to this template before removing
         const stateSnap = get()
         const linkedEntryIds: Array<{ date: string; id: string }> = []
@@ -1074,29 +1084,43 @@ export const useAppStore = create<AppStore>()(
           }
         }
 
-        set((state) => {
-          // Remove template
-          const savedMeals = state.savedMeals.filter((meal) => meal.id !== mealId)
-          // Remove linked log entries
-          const mealEntries = { ...state.mealEntries }
-          for (const { date, id } of linkedEntryIds) {
-            mealEntries[date] = (mealEntries[date] || []).filter(e => e.id !== id)
-          }
-          return { savedMeals, mealEntries }
-        })
+        const previousSavedMeals = stateSnap.savedMeals
+        const previousMealEntries = stateSnap.mealEntries
+        const nextSavedMeals = previousSavedMeals.filter((meal) => meal.id !== mealId)
+        const nextMealEntries = { ...previousMealEntries }
+        for (const { date, id } of linkedEntryIds) {
+          nextMealEntries[date] = (nextMealEntries[date] || []).filter(e => e.id !== id)
+        }
+
+        set((state) => ({
+          savedMeals: nextSavedMeals,
+          mealEntries: nextMealEntries,
+          deletedSavedMealIds: state.deletedSavedMealIds.includes(mealId)
+            ? state.deletedSavedMealIds
+            : [...state.deletedSavedMealIds, mealId],
+        }))
 
         const state = get()
         if (state.user && !state.isDemoMode) {
-          void saveMetadataCloudState(state.user.id, {
-            savedMeals: state.savedMeals,
-            supplements: state.supplements,
-            calendarReminders: state.calendarReminders,
-          })
-          // Delete linked log entries from cloud
-          for (const { id } of linkedEntryIds) {
-            void deleteMealEntryCloud(state.user.id, id)
+          try {
+            await saveMetadataCloudState(state.user.id, {
+              savedMeals: nextSavedMeals,
+              supplements: state.supplements,
+              calendarReminders: state.calendarReminders,
+            })
+            for (const { id } of linkedEntryIds) {
+              await deleteMealEntryCloud(state.user.id, id)
+            }
+          } catch {
+            set((current) => ({
+              savedMeals: previousSavedMeals,
+              mealEntries: previousMealEntries,
+              deletedSavedMealIds: current.deletedSavedMealIds.filter((id) => id !== mealId),
+            }))
+            return false
           }
         }
+        return true
       },
 
       addCustomRecipe: (recipe) => {
@@ -1493,6 +1517,7 @@ export const useAppStore = create<AppStore>()(
       addCustomWorkout: (workout) => {
         set((state) => ({
           customWorkouts: [workout, ...state.customWorkouts],
+          deletedCustomWorkoutIds: state.deletedCustomWorkoutIds.filter((id) => id !== workout.id),
         }))
 
         const state = get()
@@ -1509,6 +1534,7 @@ export const useAppStore = create<AppStore>()(
             syncedWorkout = { ...workout, ...updates, updated_at: new Date().toISOString() }
             return syncedWorkout
           }),
+          deletedCustomWorkoutIds: state.deletedCustomWorkoutIds.filter((id) => id !== workoutId),
         }))
 
         const state = get()
@@ -1517,15 +1543,30 @@ export const useAppStore = create<AppStore>()(
         }
       },
 
-      removeCustomWorkout: (workoutId) => {
+      removeCustomWorkout: async (workoutId) => {
+        const previousWorkouts = get().customWorkouts
+        const nextWorkouts = previousWorkouts.filter((workout) => workout.id !== workoutId)
+
         set((state) => ({
-          customWorkouts: state.customWorkouts.filter((workout) => workout.id !== workoutId),
+          customWorkouts: nextWorkouts,
+          deletedCustomWorkoutIds: state.deletedCustomWorkoutIds.includes(workoutId)
+            ? state.deletedCustomWorkoutIds
+            : [...state.deletedCustomWorkoutIds, workoutId],
         }))
 
         const state = get()
         if (state.user && !state.isDemoMode) {
-          void deleteCustomWorkoutCloud(state.user.id, workoutId)
+          try {
+            await deleteCustomWorkoutCloud(state.user.id, workoutId)
+          } catch {
+            set((current) => ({
+              customWorkouts: previousWorkouts,
+              deletedCustomWorkoutIds: current.deletedCustomWorkoutIds.filter((id) => id !== workoutId),
+            }))
+            return false
+          }
         }
+        return true
       },
 
       getDailyMeals: (date) => {

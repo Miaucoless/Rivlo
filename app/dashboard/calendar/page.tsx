@@ -55,6 +55,24 @@ function getWorkoutSetRowClass(set: { set_type?: 'standard' | 'drop' }) {
   )
 }
 
+function formatWorkoutTime(iso?: string) {
+  if (!iso) return '—'
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return '—'
+  return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+}
+
+function formatWorkoutDuration(startedAt?: string, completedAt?: string, durationMin?: number) {
+  if (typeof durationMin === 'number' && durationMin > 0) return `${durationMin}m`
+  if (!startedAt || !completedAt) return '—'
+
+  const start = new Date(startedAt).getTime()
+  const end = new Date(completedAt).getTime()
+  if (Number.isNaN(start) || Number.isNaN(end) || end <= start) return '—'
+
+  return `${Math.round((end - start) / 60000)}m`
+}
+
 export default function CalendarPage() {
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState<Date | null>(new Date())
@@ -305,6 +323,9 @@ export default function CalendarPage() {
                     {selectedWorkoutLogs.map((log) => {
                       const totalSets = log.exercises.reduce((s, e) => s + e.sets.length, 0)
                       const isExpanded = expandedWorkoutId === log.id
+                      const startedTime = formatWorkoutTime(log.started_at)
+                      const finishedTime = formatWorkoutTime(log.completed_at)
+                      const durationLabel = formatWorkoutDuration(log.started_at, log.completed_at, log.duration_min)
                       return (
                         <div key={log.id} className="border-b border-border/40 last:border-0">
                           {/* Collapsed header — always visible */}
@@ -322,7 +343,7 @@ export default function CalendarPage() {
                                   <p className="text-sm font-semibold truncate">{log.workout.name}</p>
                                 </div>
                                 <p className="text-xs text-muted-foreground mt-0.5">
-                                  {log.exercises.length} exercises · {totalSets} sets · {log.duration_min || 0}m
+                                  {log.exercises.length} exercises · {totalSets} sets · {durationLabel}
                                 </p>
                               </div>
                               {isExpanded
@@ -355,9 +376,18 @@ export default function CalendarPage() {
                                   )}
 
                                   {/* Stats row - simplified */}
+                                  <div className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
+                                    <span className="flex items-center gap-1.5 text-muted-foreground">
+                                      <Clock className="w-4 h-4" /> Started {startedTime}
+                                    </span>
+                                    <span className="flex items-center gap-1.5 text-muted-foreground">
+                                      <Clock className="w-4 h-4" /> Finished {finishedTime}
+                                    </span>
+                                  </div>
+
                                   <div className="flex gap-4 text-sm">
                                     <span className="flex items-center gap-1.5 text-muted-foreground">
-                                      <Clock className="w-4 h-4" /> {log.duration_min || 0}m
+                                      <Clock className="w-4 h-4" /> {durationLabel}
                                     </span>
                                     <span className="flex items-center gap-1.5 text-orange-400">
                                       <Flame className="w-4 h-4" /> {log.calories_burned_kcal || 0} kcal

@@ -25,7 +25,7 @@ import { EXERCISE_LIBRARY, WORKOUTS } from '@/lib/mock-data'
 import { EXERCISE_CLASSIFICATIONS } from '@/lib/exercise-classifications'
 import type { Exercise, ExerciseLibraryItem, ExerciseSetMetric, Gender, MuscleGroup, UserProfile, Workout, WorkoutExercise, WorkoutSet, WorkoutSplit } from '@/types'
 import { cn, formatVolumeValue, getTodayISO, getWeightUnitLabel, kgToLbs, lbsToKg } from '@/lib/utils'
-import { createUserWorkoutTemplate, deleteUserWorkoutTemplate, fetchUserWorkoutTemplates, updateUserWorkoutTemplate } from '@/lib/workout-templates'
+import { createUserWorkoutTemplate, fetchUserWorkoutTemplates, updateUserWorkoutTemplate } from '@/lib/workout-templates'
 import { toast } from 'sonner'
 import type { UnitSystem } from '@/types'
 
@@ -75,6 +75,33 @@ const SET_METRIC_OPTIONS: Array<{ value: ExerciseSetMetric; label: string }> = [
   { value: 'minutes', label: 'Minutes' },
   { value: 'intervals', label: 'Intervals' },
 ]
+
+function formatWorkoutTime(iso?: string) {
+  if (!iso) return '—'
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return '—'
+  return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+}
+
+function formatWorkoutDuration(startedAt?: string, completedAt?: string, durationMin?: number) {
+  if (typeof durationMin === 'number' && durationMin > 0) {
+    const hours = Math.floor(durationMin / 60)
+    const minutes = durationMin % 60
+    if (hours > 0) return `${hours}h ${minutes}m`
+    return `${minutes} min`
+  }
+
+  if (!startedAt || !completedAt) return '—'
+  const start = new Date(startedAt).getTime()
+  const end = new Date(completedAt).getTime()
+  if (Number.isNaN(start) || Number.isNaN(end) || end <= start) return '—'
+
+  const diffMin = Math.round((end - start) / 60000)
+  const hours = Math.floor(diffMin / 60)
+  const minutes = diffMin % 60
+  if (hours > 0) return `${hours}h ${minutes}m`
+  return `${minutes} min`
+}
 
 function isCardioExercise(exercise: WorkoutExercise['exercise']) {
   const name = exercise.name.toLowerCase()
@@ -3212,21 +3239,15 @@ export default function WorkoutsPage() {
   const handleDeleteWorkout = async (workout: Workout) => {
     if (workout.source !== 'custom') return
 
-    if (isDemoMode) {
-      removeCustomWorkout(workout.id)
-      toast.success('Saved workout removed.')
+    const success = await removeCustomWorkout(workout.id)
+    if (!success) {
+      toast.error('Failed to remove saved workout.')
       return
     }
 
-    if (!user) return
-
-    const response = await deleteUserWorkoutTemplate(user.id, workout.id)
-    if (!response.success) {
-      toast.error(response.error || 'Failed to remove saved workout.')
-      return
+    if (!isDemoMode) {
+      setRemoteCustomWorkouts((current) => current.filter((item) => item.id !== workout.id))
     }
-
-    setRemoteCustomWorkouts((current) => current.filter((item) => item.id !== workout.id))
     toast.success('Saved workout removed.')
   }
 
@@ -3404,6 +3425,9 @@ export default function WorkoutsPage() {
                             const totalSets = log.exercises.reduce((s, e) => s + e.sets.length, 0)
                             const isLogToday = log.date === getTodayISO()
                             const isExpanded = expandedLogId === log.id
+                            const startedTime = formatWorkoutTime(log.started_at)
+                            const finishedTime = formatWorkoutTime(log.completed_at)
+                            const durationLabel = formatWorkoutDuration(log.started_at, log.completed_at, log.duration_min)
                             return (
                               <div key={log.id} className="border-b border-border/30 last:border-b-0">
                                 {/* Header row */}
@@ -3419,7 +3443,7 @@ export default function WorkoutsPage() {
                                       {isLogToday && <span className="shrink-0 rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-400 uppercase tracking-wide">Today</span>}
                                     </div>
                                     <p className="text-xs text-muted-foreground mt-0.5">
-                                      {log.exercises.length} exercise{log.exercises.length !== 1 ? 's' : ''} · {totalSets} sets{log.duration_min ? ` · ${log.duration_min} min` : ''}
+                                      {log.exercises.length} exercise{log.exercises.length !== 1 ? 's' : ''} · {totalSets} sets · {durationLabel}
                                     </p>
                                   </button>
 
@@ -3456,9 +3480,11 @@ export default function WorkoutsPage() {
                                     >
                                       <div className="px-4 pb-4 space-y-3 border-t border-border/30 pt-3 bg-muted/5">
                                         {/* Stats row */}
-                                        <div className="grid grid-cols-2 gap-2">
+                                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                                           {[
-                                            { label: 'Duration', value: log.duration_min ? `${log.duration_min}m` : '—' },
+                                            { label: 'Started', value: startedTime },
+                                            { label: 'Finished', value: finishedTime },
+                                            { label: 'Duration', value: durationLabel },
                                             { label: 'Calories', value: log.calories_burned_kcal ? `${log.calories_burned_kcal} kcal` : '—' },
                                           ].map(({ label, value }) => (
                                             <div key={label} className="rounded-lg bg-muted/30 border border-border/40 px-2.5 py-2 text-center">
@@ -4137,14 +4163,23 @@ export default function WorkoutsPage() {
 
             {todayLoggedWorkouts.length > 0 ? (
               <div className="space-y-3">
-                {todayLoggedWorkouts.map((log) => (
+                {todayLoggedWorkouts.map((log) => {
+                  const startedTime = formatWorkoutTime(log.started_at)
+                  const finishedTime = formatWorkoutTime(log.completed_at)
+                  const durationLabel = formatWorkoutDuration(log.started_at, log.completed_at, log.duration_min)
+
+                  return (
                   <div key={log.id} className="rounded-2xl border border-border/60 bg-card p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-semibold">{log.workout.name}</p>
                         <p className="mt-1 text-xs text-muted-foreground">
-                          {log.exercises.length} exercises · {log.duration_min || 0} min · {log.calories_burned_kcal || 0} kcal
+                          {log.exercises.length} exercises · {durationLabel} · {log.calories_burned_kcal || 0} kcal
                         </p>
+                        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+                          <span>Started: <span className="font-medium text-foreground/85">{startedTime}</span></span>
+                          <span>Finished: <span className="font-medium text-foreground/85">{finishedTime}</span></span>
+                        </div>
                       </div>
                       <div className="flex items-center gap-2">
                         <Button variant="outline" size="sm" onClick={() => loadLoggedWorkoutForEdit(log.id)}>
@@ -4156,7 +4191,7 @@ export default function WorkoutsPage() {
                       </div>
                     </div>
                   </div>
-                ))}
+                )})}
               </div>
             ) : (
               <div className="rounded-2xl border border-dashed border-border/60 px-4 py-10 text-center">

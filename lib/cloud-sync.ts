@@ -133,13 +133,15 @@ async function fetchMetadataAppState(userId: string): Promise<MetadataAppState> 
 
 export async function saveMetadataCloudState(userId: string, state: MetadataAppState) {
   const supabase = createClient()
-  await supabase.from('user_app_state').upsert({
+  const { error } = await supabase.from('user_app_state').upsert({
     user_id: userId,
     saved_meals: state.savedMeals,
     supplements: state.supplements,
     calendar_reminders: state.calendarReminders,
     updated_at: new Date().toISOString(),
   }, { onConflict: 'user_id' })
+
+  if (error) throw new Error(error.message)
 }
 
 function mealToRow(userId: string, date: string, meal: MealLogEntry) {
@@ -591,7 +593,8 @@ export async function upsertCustomWorkout(userId: string, workout: Workout) {
 
 export async function deleteCustomWorkoutCloud(userId: string, workoutId: string) {
   const supabase = createClient()
-  await supabase.from('workout_templates').delete().eq('user_id', userId).eq('id', workoutId)
+  const { error } = await supabase.from('workout_templates').delete().eq('user_id', userId).eq('id', workoutId)
+  if (error) throw new Error(error.message)
 }
 
 export async function deleteCustomRecipeCloud(userId: string, recipeId: string) {

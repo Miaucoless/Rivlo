@@ -3822,6 +3822,7 @@ export default function MealsPage() {
   const [recipeFilterTag, setRecipeFilterTag] = useState<string>('all')
   const [recipeSearchText, setRecipeSearchText] = useState('')
   // Grocery list state
+  const [shareGroceryOpen, setShareGroceryOpen] = useState(false)
   const [addItemOpen, setAddItemOpen] = useState(false)
   const [newItemName, setNewItemName] = useState('')
   const [newItemAmount, setNewItemAmount] = useState('')
@@ -4138,8 +4139,12 @@ export default function MealsPage() {
     toast.success('Meal removed.')
   }
 
-  const handleDeleteSavedMealTemplate = (mealId: string) => {
-    removeSavedMeal(mealId)
+  const handleDeleteSavedMealTemplate = async (mealId: string) => {
+    const success = await removeSavedMeal(mealId)
+    if (!success) {
+      toast.error('Failed to delete saved meal.')
+      return
+    }
     toast.success('Saved meal deleted.')
   }
 
@@ -4754,6 +4759,10 @@ export default function MealsPage() {
                   <CalendarDays className="w-3.5 h-3.5" />
                   From Plan
                 </Button>
+                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setShareGroceryOpen(true)}>
+                  <Share2 className="w-3.5 h-3.5" />
+                  Share
+                </Button>
                 {grocery.items.some(i => i.checked) && (
                   <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground" onClick={clearCheckedItems}>
                     <X className="w-3.5 h-3.5" />
@@ -4872,6 +4881,16 @@ export default function MealsPage() {
           )}
         </TabsContent>
       </Tabs>
+
+      {grocery && (
+        <ShareModal
+          open={shareGroceryOpen}
+          onOpenChange={setShareGroceryOpen}
+          itemType="grocery_list"
+          itemName="Grocery List"
+          itemData={grocery as unknown as Record<string, unknown>}
+        />
+      )}
 
       {/* Add Grocery Item dialog */}
       <Dialog open={addItemOpen} onOpenChange={(open) => { if (!open) { setAddItemOpen(false); setGrocerySearchQuery(''); setGroceryShowSuggestions(false) } }}>

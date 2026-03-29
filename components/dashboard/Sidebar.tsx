@@ -17,6 +17,7 @@ import {
   Flame,
   Trophy,
   Pill,
+  Inbox,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAppStore } from '@/store/useAppStore'
@@ -30,6 +31,7 @@ const NAV_ITEMS = [
   { label: 'Calendar', href: '/dashboard/calendar', icon: Calendar },
   { label: 'Journal', href: '/dashboard/journal', icon: BookOpen },
   { label: 'Supplements', href: '/dashboard/supplements', icon: Pill },
+  { label: 'Shared With Me', href: '/dashboard/shared', icon: Inbox },
 ]
 
 export function Sidebar() {

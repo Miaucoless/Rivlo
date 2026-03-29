@@ -30,7 +30,7 @@ type FriendshipRow = {
 type ShareModalProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
-  itemType: 'workout' | 'saved_meal' | 'recipe'
+  itemType: 'workout' | 'saved_meal' | 'recipe' | 'grocery_list'
   itemName: string
   itemData: Record<string, unknown>
 }
@@ -42,7 +42,7 @@ async function getToken(): Promise<string | null> {
 }
 
 export function ShareModal({ open, onOpenChange, itemType, itemName, itemData }: ShareModalProps) {
-  const [tab, setTab] = useState<'link' | 'friends'>('link')
+  const [tab, setTab] = useState<'link' | 'friends'>('friends')
 
   // Link tab state
   const [shareUrl, setShareUrl] = useState<string | null>(null)
@@ -58,6 +58,7 @@ export function ShareModal({ open, onOpenChange, itemType, itemName, itemData }:
   const [message, setMessage] = useState('')
   const [sending, setSending] = useState(false)
   const [sentTo, setSentTo] = useState<Set<string>>(new Set())
+  const [friendsLoaded, setFriendsLoaded] = useState(false)
 
   // Reset state when modal opens
   useEffect(() => {
@@ -69,12 +70,14 @@ export function ShareModal({ open, onOpenChange, itemType, itemName, itemData }:
       setMessage('')
       setSentTo(new Set())
       setFriendSearch('')
+      setFriends([])
+      setFriendsLoaded(false)
     }
   }, [open])
 
   // Load accepted friends when friends tab is active
   useEffect(() => {
-    if (tab !== 'friends' || friends.length > 0) return
+    if (!open || tab !== 'friends' || friendsLoaded || friendsLoading) return
     setFriendsLoading(true)
     getToken().then((token) => {
       if (!token) { setFriendsLoading(false); return }
@@ -85,11 +88,12 @@ export function ShareModal({ open, onOpenChange, itemType, itemName, itemData }:
             .filter((r) => r.status === 'accepted' && r.other_user)
             .map((r) => r.other_user!)
           setFriends(accepted)
+          setFriendsLoaded(true)
         })
         .catch(() => {})
         .finally(() => setFriendsLoading(false))
     })
-  }, [tab, friends.length])
+  }, [open, tab, friendsLoaded, friendsLoading])
 
   const createShare = useCallback(async (): Promise<{ share_id: string; url: string } | null> => {
     if (shareId && shareUrl) return { share_id: shareId, url: shareUrl }
@@ -190,7 +194,7 @@ export function ShareModal({ open, onOpenChange, itemType, itemName, itemData }:
                 <><Copy className="w-4 h-4" />Copy link</>
               )}
             </Button>
-            <p className="text-xs text-muted-foreground text-center">Anyone with the link can view and import this {itemType.replace('_', ' ')}.</p>
+            <p className="text-xs text-muted-foreground text-center">Anyone with the link can view and import this {itemType === 'grocery_list' ? 'grocery list' : itemType.replace('_', ' ')}.</p>
           </TabsContent>
 
           {/* ── Friends tab ── */}
