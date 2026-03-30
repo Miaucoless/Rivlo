@@ -6,6 +6,7 @@ import {
   format,
   startOfWeek,
   subDays,
+  subMinutes,
 } from 'date-fns'
 import type {
   UserProfile,
@@ -370,9 +371,13 @@ const DEMO_WORKOUT_MUSCLES: WorkoutLog['workout']['muscle_groups'][] = [
 
 function generateWorkoutLogs() {
   const logs: WorkoutLog[] = []
-  const workoutDays = [1, 3, 6, 8, 10, 13, 15, 17, 20, 22, 24, 27, 29, 31, 34, 36, 38, 41]
+  const workoutDays = [0, 1, 3, 6, 8, 10, 13, 15, 17, 20, 22, 24, 27, 29, 31, 34, 36, 38, 41]
   workoutDays.forEach((daysAgo, i) => {
     const idx = i % 3
+    const durationMin = 55 + Math.floor(Math.random() * 20)
+    const completedAt = subDays(new Date(), daysAgo)
+    completedAt.setHours(17 + (i % 3), 12 + ((i * 7) % 36), 0, 0)
+    const startedAt = subMinutes(completedAt, durationMin)
     // Slightly vary weights each session to simulate progression
     const progressFactor = Math.max(0, Math.floor(i / 3)) // every full PPL cycle = ~1 progression step
     const exercises: WorkoutLog['exercises'] = DEMO_WORKOUT_EXERCISES_BY_INDEX[idx].map((ex) => ({
@@ -399,10 +404,10 @@ function generateWorkoutLogs() {
         difficulty: 'intermediate',
         split_type: 'ppl',
       },
-      date: format(subDays(new Date(), daysAgo), 'yyyy-MM-dd'),
-      started_at: subDays(new Date(), daysAgo).toISOString(),
-      completed_at: subDays(new Date(), daysAgo).toISOString(),
-      duration_min: 55 + Math.floor(Math.random() * 20),
+      date: format(completedAt, 'yyyy-MM-dd'),
+      started_at: startedAt.toISOString(),
+      completed_at: completedAt.toISOString(),
+      duration_min: durationMin,
       exercises,
       calories_burned_kcal: 320 + Math.floor(Math.random() * 120),
       rating: (Math.floor(Math.random() * 2) + 4) as 4 | 5,
@@ -696,6 +701,8 @@ export const useAppStore = create<AppStore>()(
           return
         }
 
+        try {
+
         set((state) => ({
           syncStatus: isOfflineClient() ? 'offline' : 'syncing',
           pendingCloudWrites: state.pendingCloudWrites,
@@ -836,6 +843,11 @@ export const useAppStore = create<AppStore>()(
             lastSyncedAt: new Date().toISOString(),
           }
         })
+
+        } catch (err) {
+          console.error('Cloud hydration failed:', err)
+          set({ syncStatus: 'error' })
+        }
       },
 
       syncNow: async () => {

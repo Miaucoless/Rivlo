@@ -1,0 +1,141 @@
+<h2>Collapsible bottom bar — mobile</h2>
+<p class="subtitle">The bar collapses to a small chip. Tap to expand back.</p>
+
+<div style="display:flex;gap:28px;justify-content:center;flex-wrap:wrap;margin-top:8px;">
+
+  <!-- State 1: Expanded -->
+  <div>
+    <p class="label" style="text-align:center;margin-bottom:8px;">Expanded (default)</p>
+    <div style="width:220px;height:420px;background:#06100f;border-radius:20px;border:2px solid #1a3a28;overflow:hidden;position:relative;display:flex;flex-direction:column;font-family:sans-serif;">
+      <div style="padding:12px 14px 8px;border-bottom:1px solid #1a3a28;display:flex;justify-content:space-between;align-items:center;">
+        <div style="color:#e5e7eb;font-size:12px;font-weight:700;">Push Day A</div>
+        <div style="color:#6b7280;font-size:10px;">68%</div>
+      </div>
+      <div style="flex:1;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:8px;padding-bottom:60px;">
+        <div style="background:#0d2018;border-radius:8px;padding:8px;">
+          <div style="color:#d1fae5;font-size:11px;font-weight:600;margin-bottom:4px;">Barbell Bench Press</div>
+          <div style="display:flex;justify-content:space-between;color:#6b7280;font-size:10px;padding:2px 0;"><span>Set 1</span><span style="color:#10b981;">✓ 85kg × 5</span></div>
+          <div style="display:flex;justify-content:space-between;color:#e5e7eb;font-size:10px;padding:2px 0;"><span>Set 2</span><span>85kg × —</span></div>
+        </div>
+        <div style="background:#0d2018;border-radius:8px;padding:8px;">
+          <div style="color:#d1fae5;font-size:11px;font-weight:600;margin-bottom:4px;">Overhead Press</div>
+          <div style="display:flex;justify-content:space-between;color:#4b5563;font-size:10px;padding:2px 0;"><span>Set 1</span><span>—</span></div>
+        </div>
+      </div>
+      <!-- Expanded bar -->
+      <div style="position:absolute;bottom:0;left:0;right:0;background:#0b1a15;border-top:1px solid #f59e0b44;padding:8px 10px 10px;display:flex;align-items:center;justify-content:space-between;">
+        <div style="display:flex;gap:14px;align-items:center;">
+          <div style="text-align:center;">
+            <div style="color:#10b981;font-size:16px;font-weight:700;font-family:monospace;line-height:1;">42:17</div>
+            <div style="color:#6b7280;font-size:7px;text-transform:uppercase;letter-spacing:.1em;margin-top:1px;">Duration</div>
+          </div>
+          <div style="width:1px;height:28px;background:#1a3a28;"></div>
+          <div style="text-align:center;">
+            <div style="color:#f59e0b;font-size:16px;font-weight:700;font-family:monospace;line-height:1;">1:03</div>
+            <div style="color:#6b7280;font-size:7px;text-transform:uppercase;letter-spacing:.1em;margin-top:1px;">Rest</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <button style="font-size:9px;color:#9ca3af;background:#1a2e22;border:1px solid #2a4032;border-radius:8px;padding:4px 8px;font-family:sans-serif;">Skip</button>
+          <!-- Collapse chevron -->
+          <button style="color:#6b7280;background:#1a2e22;border:1px solid #2a4032;border-radius:8px;padding:4px 6px;font-size:11px;line-height:1;">↓</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- State 2: Collapsed to chip -->
+  <div>
+    <p class="label" style="text-align:center;margin-bottom:8px;">Collapsed</p>
+    <div style="width:220px;height:420px;background:#06100f;border-radius:20px;border:2px solid #1a3a28;overflow:hidden;position:relative;display:flex;flex-direction:column;font-family:sans-serif;">
+      <div style="padding:12px 14px 8px;border-bottom:1px solid #1a3a28;display:flex;justify-content:space-between;align-items:center;">
+        <div style="color:#e5e7eb;font-size:12px;font-weight:700;">Push Day A</div>
+        <div style="color:#6b7280;font-size:10px;">68%</div>
+      </div>
+      <!-- Full height content — no bottom padding needed when collapsed -->
+      <div style="flex:1;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:8px;padding-bottom:40px;">
+        <div style="background:#0d2018;border-radius:8px;padding:8px;">
+          <div style="color:#d1fae5;font-size:11px;font-weight:600;margin-bottom:4px;">Barbell Bench Press</div>
+          <div style="display:flex;justify-content:space-between;color:#6b7280;font-size:10px;padding:2px 0;"><span>Set 1</span><span style="color:#10b981;">✓ 85kg × 5</span></div>
+          <div style="display:flex;justify-content:space-between;color:#e5e7eb;font-size:10px;padding:2px 0;"><span>Set 2</span><span>85kg × —</span></div>
+        </div>
+        <div style="background:#0d2018;border-radius:8px;padding:8px;">
+          <div style="color:#d1fae5;font-size:11px;font-weight:600;margin-bottom:4px;">Overhead Press</div>
+          <div style="display:flex;justify-content:space-between;color:#4b5563;font-size:10px;padding:2px 0;"><span>Set 1</span><span>—</span></div>
+        </div>
+        <div style="background:#0d2018;border-radius:8px;padding:8px;">
+          <div style="color:#d1fae5;font-size:11px;font-weight:600;margin-bottom:4px;">Incline DB Press</div>
+          <div style="display:flex;justify-content:space-between;color:#4b5563;font-size:10px;padding:2px 0;"><span>Set 1</span><span>—</span></div>
+        </div>
+      </div>
+      <!-- Collapsed chip — pinned bottom right -->
+      <div style="position:absolute;bottom:10px;right:10px;">
+        <button style="display:flex;align-items:center;gap:6px;background:#0b1a15;border:1px solid #1a3a28;border-radius:999px;padding:5px 10px;font-family:monospace;cursor:pointer;">
+          <span style="color:#10b981;font-size:12px;font-weight:700;">42:17</span>
+          <span style="color:#374151;font-size:10px;">·</span>
+          <span style="color:#f59e0b;font-size:12px;font-weight:700;">1:03</span>
+          <span style="color:#6b7280;font-size:10px;margin-left:2px;">↑</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- State 3: Collapsed, no rest -->
+  <div>
+    <p class="label" style="text-align:center;margin-bottom:8px;">Collapsed, no rest</p>
+    <div style="width:220px;height:420px;background:#06100f;border-radius:20px;border:2px solid #1a3a28;overflow:hidden;position:relative;display:flex;flex-direction:column;font-family:sans-serif;">
+      <div style="padding:12px 14px 8px;border-bottom:1px solid #1a3a28;display:flex;justify-content:space-between;align-items:center;">
+        <div style="color:#e5e7eb;font-size:12px;font-weight:700;">Push Day A</div>
+        <div style="color:#6b7280;font-size:10px;">68%</div>
+      </div>
+      <div style="flex:1;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:8px;padding-bottom:40px;">
+        <div style="background:#0d2018;border-radius:8px;padding:8px;">
+          <div style="color:#d1fae5;font-size:11px;font-weight:600;margin-bottom:4px;">Barbell Bench Press</div>
+          <div style="display:flex;justify-content:space-between;color:#10b981;font-size:10px;padding:2px 0;"><span>Set 1</span><span>✓ 85kg × 5</span></div>
+        </div>
+        <div style="background:#0d2018;border-radius:8px;padding:8px;">
+          <div style="color:#d1fae5;font-size:11px;font-weight:600;margin-bottom:4px;">Overhead Press</div>
+          <div style="display:flex;justify-content:space-between;color:#4b5563;font-size:10px;padding:2px 0;"><span>Set 1</span><span>—</span></div>
+        </div>
+      </div>
+      <!-- Collapsed chip — duration only -->
+      <div style="position:absolute;bottom:10px;right:10px;">
+        <button style="display:flex;align-items:center;gap:6px;background:#0b1a15;border:1px solid #1a3a28;border-radius:999px;padding:5px 10px;font-family:monospace;cursor:pointer;">
+          <span style="color:#10b981;font-size:12px;font-weight:700;">42:17</span>
+          <span style="color:#6b7280;font-size:10px;margin-left:2px;">↑</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div style="margin-top:24px;max-width:480px;margin-left:auto;margin-right:auto;background:#0d2018;border-radius:12px;padding:14px 18px;font-family:sans-serif;">
+  <div style="color:#e5e7eb;font-size:12px;font-weight:600;margin-bottom:8px;">Behaviour notes</div>
+  <ul style="color:#9ca3af;font-size:11px;line-height:1.7;margin:0;padding-left:16px;">
+    <li>Bar starts <strong style="color:#d1fae5;">expanded</strong> when workout begins</li>
+    <li><strong style="color:#d1fae5;">↓ chevron</strong> collapses it to a pill in the bottom-right corner</li>
+    <li>Pill shows live timers at a glance — tap anywhere on it to re-expand</li>
+    <li>When rest timer starts, bar <strong style="color:#d1fae5;">auto-expands</strong> so you don't miss it</li>
+    <li>Left strip on desktop is always visible (no collapse needed)</li>
+  </ul>
+</div>
+
+<div style="margin-top:20px;max-width:480px;margin-left:auto;margin-right:auto;">
+  <div class="options">
+    <div class="option" data-choice="approve" onclick="toggleSelect(this)">
+      <div class="letter">✓</div>
+      <div class="content">
+        <h3>That's the design</h3>
+        <p>Let's write the spec and build it.</p>
+      </div>
+    </div>
+    <div class="option" data-choice="tweak" onclick="toggleSelect(this)">
+      <div class="letter">~</div>
+      <div class="content">
+        <h3>One more tweak</h3>
+        <p>Tell me what to change in the terminal.</p>
+      </div>
+    </div>
+  </div>
+</div>

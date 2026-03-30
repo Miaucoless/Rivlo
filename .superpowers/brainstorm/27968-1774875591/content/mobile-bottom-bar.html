@@ -1,0 +1,107 @@
+<h2>Mobile — pinned bottom bar</h2>
+<p class="subtitle">On small screens the left strip becomes a slim bar fixed to the bottom of the modal.</p>
+
+<div style="display:flex;gap:24px;justify-content:center;flex-wrap:wrap;margin-top:8px;">
+
+  <!-- Phone mockup: rest timer active -->
+  <div>
+    <p class="label" style="text-align:center;margin-bottom:8px;">Rest timer active</p>
+    <div style="width:220px;height:420px;background:#06100f;border-radius:20px;border:2px solid #1a3a28;overflow:hidden;position:relative;display:flex;flex-direction:column;font-family:sans-serif;">
+
+      <!-- Modal header -->
+      <div style="padding:12px 14px 8px;border-bottom:1px solid #1a3a28;display:flex;justify-content:space-between;align-items:center;">
+        <div style="color:#e5e7eb;font-size:12px;font-weight:700;">Push Day A</div>
+        <div style="color:#6b7280;font-size:10px;">68%</div>
+      </div>
+
+      <!-- Scrollable exercise list -->
+      <div style="flex:1;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:8px;padding-bottom:60px;">
+        <div style="background:#0d2018;border-radius:8px;padding:8px;">
+          <div style="color:#d1fae5;font-size:11px;font-weight:600;margin-bottom:4px;">Barbell Bench Press</div>
+          <div style="display:flex;justify-content:space-between;color:#6b7280;font-size:10px;padding:2px 0;"><span>Set 1</span><span style="color:#10b981;">✓ 85kg × 5</span></div>
+          <div style="display:flex;justify-content:space-between;color:#e5e7eb;font-size:10px;padding:2px 0;"><span>Set 2</span><span>85kg × —</span></div>
+          <div style="display:flex;justify-content:space-between;color:#4b5563;font-size:10px;padding:2px 0;"><span>Set 3</span><span>—</span></div>
+        </div>
+        <div style="background:#0d2018;border-radius:8px;padding:8px;">
+          <div style="color:#d1fae5;font-size:11px;font-weight:600;margin-bottom:4px;">Overhead Press</div>
+          <div style="display:flex;justify-content:space-between;color:#4b5563;font-size:10px;padding:2px 0;"><span>Set 1</span><span>—</span></div>
+        </div>
+        <div style="background:#0d2018;border-radius:8px;padding:8px;">
+          <div style="color:#d1fae5;font-size:11px;font-weight:600;margin-bottom:4px;">Incline DB Press</div>
+          <div style="display:flex;justify-content:space-between;color:#4b5563;font-size:10px;padding:2px 0;"><span>Set 1</span><span>—</span></div>
+        </div>
+      </div>
+
+      <!-- Pinned bottom bar — rest active (amber) -->
+      <div style="position:absolute;bottom:0;left:0;right:0;background:#0b1a15;border-top:1px solid #f59e0b44;padding:8px 14px;display:flex;align-items:center;justify-content:space-between;">
+        <div style="display:flex;gap:16px;align-items:center;">
+          <div style="text-align:center;">
+            <div style="color:#10b981;font-size:16px;font-weight:700;font-family:monospace;line-height:1;">42:17</div>
+            <div style="color:#6b7280;font-size:7px;text-transform:uppercase;letter-spacing:.1em;margin-top:1px;">Duration</div>
+          </div>
+          <div style="width:1px;height:28px;background:#1a3a28;"></div>
+          <div style="text-align:center;">
+            <div style="color:#f59e0b;font-size:16px;font-weight:700;font-family:monospace;line-height:1;">1:03</div>
+            <div style="color:#6b7280;font-size:7px;text-transform:uppercase;letter-spacing:.1em;margin-top:1px;">Rest</div>
+          </div>
+        </div>
+        <button style="font-size:9px;color:#9ca3af;background:#1a2e22;border:1px solid #2a4032;border-radius:8px;padding:5px 10px;font-family:sans-serif;">Skip Rest</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Phone mockup: no rest timer -->
+  <div>
+    <p class="label" style="text-align:center;margin-bottom:8px;">No rest timer</p>
+    <div style="width:220px;height:420px;background:#06100f;border-radius:20px;border:2px solid #1a3a28;overflow:hidden;position:relative;display:flex;flex-direction:column;font-family:sans-serif;">
+
+      <!-- Modal header -->
+      <div style="padding:12px 14px 8px;border-bottom:1px solid #1a3a28;display:flex;justify-content:space-between;align-items:center;">
+        <div style="color:#e5e7eb;font-size:12px;font-weight:700;">Push Day A</div>
+        <div style="color:#6b7280;font-size:10px;">68%</div>
+      </div>
+
+      <!-- Scrollable exercise list -->
+      <div style="flex:1;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:8px;padding-bottom:52px;">
+        <div style="background:#0d2018;border-radius:8px;padding:8px;">
+          <div style="color:#d1fae5;font-size:11px;font-weight:600;margin-bottom:4px;">Barbell Bench Press</div>
+          <div style="display:flex;justify-content:space-between;color:#6b7280;font-size:10px;padding:2px 0;"><span>Set 1</span><span style="color:#10b981;">✓ 85kg × 5</span></div>
+          <div style="display:flex;justify-content:space-between;color:#e5e7eb;font-size:10px;padding:2px 0;"><span>Set 2</span><span>85kg × —</span></div>
+        </div>
+        <div style="background:#0d2018;border-radius:8px;padding:8px;">
+          <div style="color:#d1fae5;font-size:11px;font-weight:600;margin-bottom:4px;">Overhead Press</div>
+          <div style="display:flex;justify-content:space-between;color:#4b5563;font-size:10px;padding:2px 0;"><span>Set 1</span><span>—</span></div>
+        </div>
+      </div>
+
+      <!-- Pinned bottom bar — no rest (slim, just duration) -->
+      <div style="position:absolute;bottom:0;left:0;right:0;background:#0b1a15;border-top:1px solid #1a3a28;padding:8px 14px;display:flex;align-items:center;gap:12px;">
+        <div style="text-align:center;">
+          <div style="color:#10b981;font-size:16px;font-weight:700;font-family:monospace;line-height:1;">42:17</div>
+          <div style="color:#6b7280;font-size:7px;text-transform:uppercase;letter-spacing:.1em;margin-top:1px;">Duration</div>
+        </div>
+        <div style="color:#374151;font-size:9px;font-family:monospace;">· Rest —</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div style="margin-top:24px;max-width:500px;margin-left:auto;margin-right:auto;">
+  <div class="options">
+    <div class="option" data-choice="approve" onclick="toggleSelect(this)">
+      <div class="letter">✓</div>
+      <div class="content">
+        <h3>Looks good — go with this</h3>
+        <p>Bottom bar on mobile, left strip on desktop/tablet.</p>
+      </div>
+    </div>
+    <div class="option" data-choice="tweak" onclick="toggleSelect(this)">
+      <div class="letter">~</div>
+      <div class="content">
+        <h3>Close, but I want a tweak</h3>
+        <p>Tell me what to change in the terminal.</p>
+      </div>
+    </div>
+  </div>
+</div>

@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { format, startOfWeek, subDays } from 'date-fns'
 import {
   ChefHat, ShoppingCart, Clock, Users, Flame,
-  CheckCircle, Circle, Download, Plus, Zap, Pencil, Trash2, X, CalendarDays,
+  CheckCircle, Circle, Plus, Zap, Pencil, Trash2, X, CalendarDays,
   Coffee, Soup, Moon, Cookie, GlassWater, Search, BookOpen, ChevronDown, Share2,
 } from 'lucide-react'
 import { ShareModal } from '@/components/sharing/ShareModal'
@@ -1849,9 +1849,9 @@ function MealEditorModal({
       const usingList = manualItems.length > 0
       const singleName = manualItemName.trim()
       const singleCalories = Number(manualCalories)
-      const singleProtein = Number(manualProtein || 0)
-      const singleCarbs = Number(manualCarbs || 0)
-      const singleFat = Number(manualFat || 0)
+      const singleProtein = parseOptionalMacroInput(manualProtein)
+      const singleCarbs = parseOptionalMacroInput(manualCarbs)
+      const singleFat = parseOptionalMacroInput(manualFat)
 
       if (!usingList && !singleName) {
         toast.error('Add a manual item name first.')
@@ -1863,6 +1863,11 @@ function MealEditorModal({
         return
       }
 
+      if (Number.isNaN(singleProtein) || Number.isNaN(singleCarbs) || Number.isNaN(singleFat)) {
+        toast.error('Macros must be valid numbers when provided.')
+        return
+      }
+
       const finalMacros = usingList
         ? {
             calories: Math.round(manualTotals.calories),
@@ -1870,12 +1875,11 @@ function MealEditorModal({
             carbs_g: Math.round(manualTotals.carbs_g),
             fat_g: Math.round(manualTotals.fat_g),
           }
-        : {
-            calories: Math.round(singleCalories),
-            protein_g: Math.round(singleProtein),
-            carbs_g: Math.round(singleCarbs),
-            fat_g: Math.round(singleFat),
-          }
+        : buildItemMacros(singleCalories, {
+            protein_g: singleProtein,
+            carbs_g: singleCarbs,
+            fat_g: singleFat,
+          })
 
       const finalName =
         manualMealName.trim() ||
@@ -1899,7 +1903,11 @@ function MealEditorModal({
               matched_name: singleName,
               amount: 1,
               unit: 'serving',
-              macros: { calories: Math.round(singleCalories), protein_g: Math.round(singleProtein), carbs_g: Math.round(singleCarbs), fat_g: Math.round(singleFat) },
+              macros: buildItemMacros(singleCalories, {
+                protein_g: singleProtein,
+                carbs_g: singleCarbs,
+                fat_g: singleFat,
+              }),
             },
           ]
 
@@ -3884,6 +3892,9 @@ export default function MealsPage() {
   const [customIngAmount, setCustomIngAmount] = useState('')
   const [customIngUnit, setCustomIngUnit] = useState('g')
   const [addMealMode, setAddMealMode] = useState<'recipe' | 'saved' | 'custom'>('saved')
+  const [plannerRecipeAmountMode, setPlannerRecipeAmountMode] = useState<RecipeAmountMode>('servings')
+  const [plannerRecipeServings, setPlannerRecipeServings] = useState('1')
+  const [plannerRecipeUnits, setPlannerRecipeUnits] = useState('1')
   const [expandedMeals, setExpandedMeals] = useState<Record<string, boolean>>({})
   const [expandedMealSections, setExpandedMealSections] = useState<Record<MealType, boolean>>({
     breakfast: false,
@@ -4061,12 +4072,32 @@ export default function MealsPage() {
     setCustomIngAmount('')
     setCustomIngUnit('g')
     setAddMealMode('recipe')
+    setPlannerRecipeAmountMode('servings')
+    setPlannerRecipeServings('1')
+    setPlannerRecipeUnits('1')
     setAddMealDialogOpen(true)
   }
 
   function confirmAddRecipe(recipe: Recipe) {
     if (!pendingSlot) return
-    addPlannedMeal(pendingSlot.day, pendingSlot.slot, { type: 'recipe', recipe })
+    const numericAmount = Number(plannerRecipeAmountMode === 'servings' ? plannerRecipeServings : plannerRecipeUnits)
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+      toast.error(`Enter a valid ${plannerRecipeAmountMode === 'servings' ? 'serving' : 'unit'} amount.`)
+      return
+    }
+
+    if (plannerRecipeAmountMode === 'units' && (!recipe.yield_quantity || !recipe.yield_unit)) {
+      toast.error('This recipe does not have a unit yield yet. Use servings for this one.')
+      return
+    }
+
+    addPlannedMeal(pendingSlot.day, pendingSlot.slot, {
+      type: 'recipe',
+      recipe,
+      recipe_amount: plannerRecipeAmountMode === 'servings'
+        ? { kind: 'servings', servings: numericAmount }
+        : { kind: 'units', units: numericAmount },
+    })
     setAddMealDialogOpen(false)
     setPendingSlot(null)
   }
@@ -4124,17 +4155,6 @@ export default function MealsPage() {
       return acc
     }, { breakfast: [], lunch: [], dinner: [], snack: [], drink: [] })
   }, [todayMeals])
-
-  const handleExport = () => {
-    const data = JSON.stringify({ date: today, meals: todayMeals, totals: todayTotals }, null, 2)
-    const blob = new Blob([data], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `meal-log-${today}.json`
-    a.click()
-    toast.success('Meal log exported!')
-  }
 
   const openAdd = (mealType?: MealType) => {
     setEditingMeal(null)
@@ -4244,10 +4264,6 @@ export default function MealsPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <Button variant="outline" size="sm" className="h-10 gap-2 rounded-full px-4" onClick={handleExport}>
-              <Download className="h-4 w-4" />
-              Export
-            </Button>
             <Button variant="brand" size="sm" className="h-10 gap-2 rounded-full px-4" onClick={() => openAdd()}>
               <Plus className="h-4 w-4" />
               Add Meal
@@ -4728,9 +4744,18 @@ export default function MealsPage() {
                                 {planned.type === 'recipe' ? planned.recipe.name : planned.type === 'saved' ? planned.savedMeal.name : planned.name}
                               </p>
                               {planned.type === 'recipe' && (
-                                <p className="text-[11px] text-muted-foreground">
-                                  {planned.recipe.macros.calories} cal · {planned.recipe.macros.protein_g}g protein
-                                </p>
+                                <>
+                                  <p className="text-[11px] text-muted-foreground">
+                                    {planned.recipe.macros.calories} cal · {planned.recipe.macros.protein_g}g protein
+                                  </p>
+                                  {planned.recipe_amount && (
+                                    <p className="text-[10px] text-muted-foreground/70">
+                                      {planned.recipe_amount.kind === 'servings'
+                                        ? `${planned.recipe_amount.servings} serving${planned.recipe_amount.servings === 1 ? '' : 's'} planned`
+                                        : `${planned.recipe_amount.units} ${planned.recipe.yield_unit || 'unit'}${planned.recipe_amount.units === 1 ? '' : 's'} planned`}
+                                    </p>
+                                  )}
+                                </>
                               )}
                               {planned.type === 'saved' && (
                                 <p className="text-[11px] text-muted-foreground">
@@ -5189,7 +5214,36 @@ export default function MealsPage() {
             )}
 
             {addMealMode === 'recipe' && (
-              <div className="space-y-2">
+              <div className="space-y-3">
+                <div className="rounded-xl border border-border/50 bg-muted/20 p-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Planned Amount</p>
+                  <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                    <Select value={plannerRecipeAmountMode} onValueChange={(value) => setPlannerRecipeAmountMode(value as RecipeAmountMode)}>
+                      <SelectTrigger className="h-9 text-xs sm:w-[140px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="servings">Servings</SelectItem>
+                        <SelectItem value="units">Units</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      className="h-9 text-sm sm:w-[120px]"
+                      type="number"
+                      min={0.1}
+                      step={0.1}
+                      value={plannerRecipeAmountMode === 'servings' ? plannerRecipeServings : plannerRecipeUnits}
+                      onChange={(e) => {
+                        if (plannerRecipeAmountMode === 'servings') setPlannerRecipeServings(e.target.value)
+                        else setPlannerRecipeUnits(e.target.value)
+                      }}
+                      placeholder="1"
+                    />
+                    <p className="text-xs text-muted-foreground sm:self-center">
+                      Grocery list amounts will use this planned quantity.
+                    </p>
+                  </div>
+                </div>
                 {filteredPlanRecipes.length === 0 ? (
                   <p className="text-sm text-muted-foreground text-center py-6">No recipes found</p>
                 ) : filteredPlanRecipes.map((recipe) => (

@@ -135,7 +135,13 @@ export interface CustomMealIngredient {
 }
 
 export type PlannedItem =
-  | { type: 'recipe'; recipe: Recipe }
+  | {
+      type: 'recipe'
+      recipe: Recipe
+      recipe_amount?:
+        | { kind: 'servings'; servings: number }
+        | { kind: 'units'; units: number }
+    }
   | { type: 'saved'; savedMeal: SavedMealTemplate }
   | { type: 'custom'; name: string; ingredients: CustomMealIngredient[] }
 

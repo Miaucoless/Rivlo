@@ -517,12 +517,12 @@ function FeatureRow({ feature, index }: { feature: Feature; index: number }) {
   const blur = useTransform(
     scrollYProgress,
     [0, 0.14, 0.24, 0.5, 0.76, 0.86, 1],
-    [7, 4, 0, 0, 0, 4, 7]
+    [3.5, 1.5, 0, 0, 0, 1.5, 3.5]
   )
   const scale = useTransform(
     scrollYProgress,
     [0, 0.18, 0.3, 0.5, 0.7, 0.82, 1],
-    [0.975, 0.988, 1, 1, 1, 0.988, 0.975]
+    [0.988, 0.994, 1, 1, 1, 0.994, 0.988]
   )
   const filter = useMotionTemplate`blur(${blur}px)`
 

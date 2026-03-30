@@ -141,7 +141,9 @@ export async function saveMetadataCloudState(userId: string, state: MetadataAppS
     updated_at: new Date().toISOString(),
   }, { onConflict: 'user_id' })
 
-  if (error) throw new Error(error.message)
+  // RLS violations (code 42501) mean the session has expired — local data is
+  // preserved and the sync will succeed on the next valid session.
+  if (error && error.code !== '42501') throw new Error(error.message)
 }
 
 function mealToRow(userId: string, date: string, meal: MealLogEntry) {

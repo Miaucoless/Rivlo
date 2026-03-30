@@ -769,26 +769,39 @@ export default function DashboardPage() {
                                       {isExpandable && expanded && (
                                         <div className="mt-2 space-y-1 pl-2 border-l border-border/40">
                                           {meal.recipe && meal.recipe.ingredients && meal.recipe.ingredients.length > 0 ? (
-                                            // Show recipe ingredients
-                                            meal.recipe.ingredients.map((ingredient, ingredientIndex) => (
-                                              <div key={`${meal.id}-recipe-ingredient-${ingredientIndex}`}>
-                                                <div className="flex items-center gap-1.5">
-                                                  <span className="text-[11px] font-medium text-foreground/70 truncate">{ingredient.name}</span>
-                                                  <span className="text-[10px] font-data text-muted-foreground/40">{ingredient.amount} {ingredient.unit}</span>
+                                            <>
+                                              <div className="rounded-lg bg-muted/20 px-2 py-1.5 mb-1.5">
+                                                <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-0.5">Recipe Macros</p>
+                                                <div className="flex flex-wrap items-center gap-1.5">
+                                                  <span className="text-[10px] font-data text-muted-foreground/70">{meal.macros.calories} kcal</span>
+                                                  <span className="text-[10px] text-border/30">·</span>
+                                                  <span className="text-[10px] font-data text-muted-foreground/70">{meal.macros.protein_g}g P</span>
+                                                  <span className="text-[10px] text-border/30">·</span>
+                                                  <span className="text-[10px] font-data text-muted-foreground/70">{meal.macros.carbs_g}g C</span>
+                                                  <span className="text-[10px] text-border/30">·</span>
+                                                  <span className="text-[10px] font-data text-muted-foreground/70">{meal.macros.fat_g}g F</span>
                                                 </div>
-                                                {(ingredient.calories_per_unit ?? 0) > 0 && (
-                                                  <div className="flex items-center gap-1.5 mt-0.5">
-                                                    <span className="text-[10px] font-data text-muted-foreground/50">{Math.round(ingredient.calories_per_unit * ingredient.amount)} kcal</span>
-                                                    <span className="text-[10px] text-border/30">·</span>
-                                                    <span className="text-[10px] font-data text-muted-foreground/50">{Math.round(ingredient.macros.protein_g * ingredient.amount)}g P</span>
-                                                    <span className="text-[10px] text-border/30">·</span>
-                                                    <span className="text-[10px] font-data text-muted-foreground/50">{Math.round(ingredient.macros.carbs_g * ingredient.amount)}g C</span>
-                                                    <span className="text-[10px] text-border/30">·</span>
-                                                    <span className="text-[10px] font-data text-muted-foreground/50">{Math.round(ingredient.macros.fat_g * ingredient.amount)}g F</span>
-                                                  </div>
-                                                )}
                                               </div>
-                                            ))
+                                              {meal.recipe.ingredients.map((ingredient, ingredientIndex) => (
+                                                <div key={`${meal.id}-recipe-ingredient-${ingredientIndex}`}>
+                                                  <div className="flex items-center gap-1.5">
+                                                    <span className="text-[11px] font-medium text-foreground/70 truncate">{ingredient.name}</span>
+                                                    <span className="text-[10px] font-data text-muted-foreground/40">{ingredient.amount} {ingredient.unit}</span>
+                                                  </div>
+                                                  {(ingredient.calories_per_unit ?? 0) > 0 && (
+                                                    <div className="flex items-center gap-1.5 mt-0.5">
+                                                      <span className="text-[10px] font-data text-muted-foreground/50">{Math.round(ingredient.calories_per_unit * ingredient.amount)} kcal</span>
+                                                      <span className="text-[10px] text-border/30">·</span>
+                                                      <span className="text-[10px] font-data text-muted-foreground/50">{Math.round(ingredient.macros.protein_g * ingredient.amount)}g P</span>
+                                                      <span className="text-[10px] text-border/30">·</span>
+                                                      <span className="text-[10px] font-data text-muted-foreground/50">{Math.round(ingredient.macros.carbs_g * ingredient.amount)}g C</span>
+                                                      <span className="text-[10px] text-border/30">·</span>
+                                                      <span className="text-[10px] font-data text-muted-foreground/50">{Math.round(ingredient.macros.fat_g * ingredient.amount)}g F</span>
+                                                    </div>
+                                                  )}
+                                                </div>
+                                              ))}
+                                            </>
                                           ) : meal.meal_items && meal.meal_items.length > 0 ? (
                                             // Show meal items (for saved meals)
                                             meal.meal_items.map((item, itemIndex) => (

@@ -105,6 +105,16 @@ export function generateGroceryItems(weeklyMealPlan: WeeklyMealPlan | null): {
 } {
   const raw: Array<{ name: string; amount: number; unit: string }> = []
 
+  const getRecipeMultiplier = (planned: Extract<WeeklyMealPlan['days'][string][keyof WeeklyMealPlan['days'][string]][number], { type: 'recipe' }>) => {
+    const amount = planned.recipe_amount
+    if (!amount) return 1
+    if (amount.kind === 'servings') return Math.max(0, amount.servings)
+
+    const yieldQty = Number(planned.recipe.yield_quantity)
+    if (!Number.isFinite(yieldQty) || yieldQty <= 0) return 0
+    return Math.max(0, amount.units / yieldQty)
+  }
+
   if (weeklyMealPlan?.days) {
     for (const day of Object.values(weeklyMealPlan.days)) {
       for (const slot of ['breakfast', 'lunch', 'dinner', 'snack'] as const) {
@@ -112,8 +122,10 @@ export function generateGroceryItems(weeklyMealPlan: WeeklyMealPlan | null): {
         if (!items || items.length === 0) continue
         for (const planned of items) {
           if (planned.type === 'recipe') {
+            const multiplier = getRecipeMultiplier(planned)
+            if (multiplier <= 0) continue
             for (const ing of planned.recipe.ingredients) {
-              raw.push({ name: ing.name, amount: ing.amount, unit: ing.unit })
+              raw.push({ name: ing.name, amount: ing.amount * multiplier, unit: ing.unit })
             }
           } else if (planned.type === 'saved') {
             for (const item of planned.savedMeal.items) {

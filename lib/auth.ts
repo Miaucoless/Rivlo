@@ -103,17 +103,20 @@ export async function signInWithEmail(
 
 export async function requestPasswordReset(email: string): Promise<AuthResponse> {
   try {
-    const supabase = createClient()
-    const configuredOrigin = process.env.NEXT_PUBLIC_APP_URL?.trim()
-    const appOrigin = configuredOrigin || 'https://rivorafit.com'
-    const redirectTo = appOrigin ? `${appOrigin}/auth/recovery` : undefined
-
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo,
+    const response = await fetch('/api/auth/password-reset', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        email,
+      }),
     })
 
-    if (error) {
-      return { success: false, error: error.message }
+    const payload = await response.json().catch(() => null)
+
+    if (!response.ok) {
+      return { success: false, error: payload?.error || 'Failed to send password reset email.' }
     }
 
     return { success: true }

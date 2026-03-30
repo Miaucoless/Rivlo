@@ -42,7 +42,7 @@ export function createClient() {
     key,
     {
       auth: {
-        flowType: 'implicit',
+        flowType: 'pkce',
         detectSessionInUrl: true,
       },
     }
