@@ -78,10 +78,13 @@ export function TopBar() {
     streak,
     logout,
     syncNow,
+    syncStatus,
+    lastSyncedAt,
+    pendingCloudWrites,
+    flushPendingCloudWrites,
     addSavedMeal,
   } = useAppStore()
   const [isPending, startTransition] = useTransition()
-  const [isSyncing, setIsSyncing] = useState(false)
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false)
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false)
@@ -242,6 +245,15 @@ export function TopBar() {
   const title = PAGE_TITLES[pathname] || 'Dashboard'
   const today = formatDate(new Date(), 'EEEE, MMMM d')
   const deferredSearchQuery = useDeferredValue(searchQuery)
+  const syncLabel = syncStatus === 'offline'
+    ? `${pendingCloudWrites > 0 ? `${pendingCloudWrites} pending` : 'Offline mode'}`
+    : syncStatus === 'syncing'
+      ? `Syncing${pendingCloudWrites > 0 ? ` ${pendingCloudWrites}` : ''}`
+      : syncStatus === 'error'
+        ? `${pendingCloudWrites > 0 ? `${pendingCloudWrites} retrying` : 'Sync issue'}`
+        : lastSyncedAt
+          ? `Synced ${formatDate(lastSyncedAt, 'h:mm a')}`
+          : 'Ready'
 
   useEffect(() => {
     if (!isSearchOpen) return
@@ -316,7 +328,28 @@ export function TopBar() {
           </Button>
           <div>
             <h1 className="text-lg font-semibold">{title}</h1>
-            <p className="text-xs text-muted-foreground hidden sm:block">{today}</p>
+            <div className="hidden sm:flex sm:items-center sm:gap-2">
+              <p className="text-xs text-muted-foreground">{today}</p>
+              <button
+                type="button"
+                onClick={() => {
+                  void flushPendingCloudWrites()
+                  void syncNow()
+                }}
+                className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors ${
+                  syncStatus === 'offline'
+                    ? 'border-amber-500/30 bg-amber-500/10 text-amber-400'
+                    : syncStatus === 'error'
+                      ? 'border-rose-500/30 bg-rose-500/10 text-rose-400'
+                      : syncStatus === 'syncing'
+                        ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
+                        : 'border-border/60 bg-background/60 text-muted-foreground'
+                }`}
+              >
+                <RefreshCw className={`w-3 h-3 ${syncStatus === 'syncing' ? 'animate-spin' : ''}`} />
+                {syncLabel}
+              </button>
+            </div>
           </div>
         </div>
 

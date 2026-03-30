@@ -27,6 +27,10 @@ CREATE TABLE IF NOT EXISTS profiles (
   goal_target_change_kg NUMERIC(5,2),
   goal_timeframe_weeks INTEGER,
   preferred_workout_time TEXT CHECK (preferred_workout_time IN ('early_morning','morning','afternoon','evening','late_night','flexible')),
+  preferred_workout_days TEXT[] DEFAULT '{}',
+  training_experience TEXT CHECK (training_experience IN ('beginner','intermediate','advanced')),
+  dietary_style TEXT CHECK (dietary_style IN ('balanced','high_protein','vegetarian','vegan','pescatarian','low_carb')),
+  biggest_challenge TEXT,
   preferred_foods TEXT[] DEFAULT '{}',
   avoided_foods TEXT[] DEFAULT '{}',
   notification_preferences JSONB NOT NULL DEFAULT '{"daily_workout_reminder": true, "meal_logging_reminder": true, "weekly_progress_summary": false, "goal_milestone_alerts": true}'::jsonb,
@@ -56,6 +60,12 @@ ALTER TABLE profiles
   ADD COLUMN IF NOT EXISTS goal_timeframe_weeks INTEGER,
   ADD COLUMN IF NOT EXISTS preferred_workout_time TEXT
   CHECK (preferred_workout_time IN ('early_morning','morning','afternoon','evening','late_night','flexible')),
+  ADD COLUMN IF NOT EXISTS preferred_workout_days TEXT[] DEFAULT '{}',
+  ADD COLUMN IF NOT EXISTS training_experience TEXT
+  CHECK (training_experience IN ('beginner','intermediate','advanced')),
+  ADD COLUMN IF NOT EXISTS dietary_style TEXT
+  CHECK (dietary_style IN ('balanced','high_protein','vegetarian','vegan','pescatarian','low_carb')),
+  ADD COLUMN IF NOT EXISTS biggest_challenge TEXT,
   ADD COLUMN IF NOT EXISTS preferred_foods TEXT[] DEFAULT '{}',
   ADD COLUMN IF NOT EXISTS avoided_foods TEXT[] DEFAULT '{}',
   ADD COLUMN IF NOT EXISTS notification_preferences JSONB NOT NULL DEFAULT '{"daily_workout_reminder": true, "meal_logging_reminder": true, "weekly_progress_summary": false, "goal_milestone_alerts": true}'::jsonb,

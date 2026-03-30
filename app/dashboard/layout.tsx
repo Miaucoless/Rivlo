@@ -18,7 +18,7 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode
 }) {
-  const { isAuthenticated, sidebarCollapsed, syncNow, user } = useAppStore()
+  const { isAuthenticated, sidebarCollapsed, syncNow, flushPendingCloudWrites, user } = useAppStore()
   const isMobile = useIsMobile()
   const router = useRouter()
   const { loading } = useAuthInit()
@@ -55,6 +55,16 @@ export default function DashboardLayout({
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') void triggerSync()
     }
+    const handleOnline = () => {
+      void flushPendingCloudWrites()
+      void triggerSync()
+    }
+    const handleOffline = () => {
+      useAppStore.setState((state) => ({
+        ...state,
+        syncStatus: 'offline',
+      }))
+    }
     // pageshow fires when page is restored from bfcache (iOS PWA, back-forward nav)
     // visibilitychange alone doesn't fire in this case on iOS
     const handlePageShow = (e: PageTransitionEvent) => {
@@ -65,14 +75,18 @@ export default function DashboardLayout({
     window.addEventListener('focus', handleFocus)
     document.addEventListener('visibilitychange', handleVisibility)
     window.addEventListener('pageshow', handlePageShow)
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
 
     return () => {
       window.removeEventListener('focus', handleFocus)
       document.removeEventListener('visibilitychange', handleVisibility)
       window.removeEventListener('pageshow', handlePageShow)
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
       if (syncTimeoutId) clearTimeout(syncTimeoutId)
     }
-  }, [isAuthenticated, loading, syncNow])
+  }, [flushPendingCloudWrites, isAuthenticated, loading, syncNow])
 
   if (loading) {
     return (

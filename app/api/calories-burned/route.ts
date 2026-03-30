@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getRedisJson, hasRedisClient, normalizeRedisKeyPart, setRedisJson, withRedisCacheHeader } from '@/lib/redis'
+import { getRedisJson, hasRedisClient, normalizeRedisKeyPart, rateLimit, setRedisJson, withRedisCacheHeader } from '@/lib/redis'
 
 type NinjasCalorieResult = {
   name: string
@@ -15,6 +15,9 @@ type CaloriesBurnedResponse = {
 } | null
 
 export async function GET(req: NextRequest) {
+  const limited = await rateLimit(req, { limit: 30, windowSec: 60, prefix: 'calories-burned' })
+  if (limited) return limited
+
   const activity = req.nextUrl.searchParams.get('activity')?.trim()
   const weightKg = req.nextUrl.searchParams.get('weight_kg')
   const durationMin = req.nextUrl.searchParams.get('duration_min')

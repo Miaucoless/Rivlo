@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import type { FoodCatalogItem } from '@/lib/food-search'
-import { getRedisClient, getRedisJson, setRedisJson } from '@/lib/redis'
+import { getRedisClient, getRedisJson, rateLimit, setRedisJson } from '@/lib/redis'
 
 type OpenFoodFactsProduct = {
   code?: string
@@ -548,6 +548,9 @@ function filterAndRankItems(items: FoodCatalogItem[], query: string) {
 }
 
 export async function GET(request: NextRequest) {
+  const limited = await rateLimit(request, { limit: 20, windowSec: 60, prefix: 'food-search' })
+  if (limited) return limited
+
   const query = request.nextUrl.searchParams.get('q')?.trim() || ''
   if (query.length < 2) {
     return NextResponse.json({ items: [] })

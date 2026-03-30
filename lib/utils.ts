@@ -8,7 +8,7 @@ export function cn(...inputs: ClassValue[]) {
 
 // ─── Fitness Calculations ────────────────────────────────────────────────────────
 
-import type { ActivityLevel, FitnessGoal, Gender, PreferredWorkoutTime, UnitSystem, UserProfile } from '@/types'
+import type { ActivityLevel, DietaryStyle, FitnessGoal, Gender, PreferredWorkoutTime, TrainingExperience, UnitSystem, UserProfile } from '@/types'
 
 /**
  * Mifflin-St Jeor BMR formula (most accurate for most people)
@@ -126,6 +126,10 @@ export function buildUserProfile(formData: {
   goal_target_change_kg?: number
   goal_timeframe_weeks?: number
   preferred_workout_time?: PreferredWorkoutTime
+  preferred_workout_days?: string[]
+  training_experience?: TrainingExperience
+  dietary_style?: DietaryStyle
+  biggest_challenge?: string
   preferred_foods?: string[]
   avoided_foods?: string[]
 }): Omit<UserProfile, 'id' | 'created_at' | 'updated_at'> {
@@ -151,6 +155,7 @@ export function buildUserProfile(formData: {
     fat_target_g: macros.fat_g,
     water_goal_ml: Math.round(((formData.weight_kg ?? 70) * 35) / 50) * 50,
     onboarded: true,
+    onboarding_completed_at: new Date().toISOString(),
     avatar_url: undefined,
   }
 }

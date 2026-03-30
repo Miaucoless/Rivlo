@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getRedisJson, hasRedisClient, normalizeRedisKeyPart, setRedisJson, withRedisCacheHeader } from '@/lib/redis'
+import { getRedisJson, hasRedisClient, normalizeRedisKeyPart, rateLimit, setRedisJson, withRedisCacheHeader } from '@/lib/redis'
 
 export interface YouTubeVideo {
   id: string
@@ -27,6 +27,9 @@ function formatViewCount(n: string): string {
 }
 
 export async function GET(req: NextRequest) {
+  const limited = await rateLimit(req, { limit: 10, windowSec: 60, prefix: 'youtube' })
+  if (limited) return limited
+
   const query = req.nextUrl.searchParams.get('q') ?? ''
   if (!query.trim()) return NextResponse.json([])
 

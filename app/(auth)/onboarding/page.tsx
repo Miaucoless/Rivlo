@@ -10,10 +10,8 @@ import { Label } from '@/components/ui/label'
 import { useAppStore } from '@/store/useAppStore'
 import { updateProfile as persistProfile } from '@/lib/auth'
 import { buildUserProfile, formatGoalWeightChangeForInput, formatHeightForInput, formatWeightForInput, getHeightUnitLabel, getWeightUnitLabel, parseHeightInput, parseWeightInput } from '@/lib/utils'
-import type { Gender, ActivityLevel, FitnessGoal, PreferredWorkoutTime, UnitSystem, WorkoutSplit } from '@/types'
+import type { Gender, ActivityLevel, DietaryStyle, FitnessGoal, PreferredWorkoutTime, TrainingExperience, UnitSystem, WorkoutSplit } from '@/types'
 import { toast } from 'sonner'
-
-const TOTAL_STEPS = 6
 
 interface FormData {
   height_input: string
@@ -22,11 +20,15 @@ interface FormData {
   unit_system: UnitSystem
   gender: Gender
   activity_level: ActivityLevel
+  training_experience: TrainingExperience
   fitness_goal: FitnessGoal
+  biggest_challenge: string
   workout_split: WorkoutSplit
+  preferred_workout_days: string[]
   goal_target_change_input: string
   goal_timeframe_weeks_input: string
   preferred_workout_time: PreferredWorkoutTime
+  dietary_style: DietaryStyle
   preferred_foods_input: string
   avoided_foods_input: string
 }
@@ -37,6 +39,16 @@ type ChoiceCard = {
   description: string
   emoji: string
 }
+
+const WORKOUT_DAY_OPTIONS = [
+  { value: 'mon', label: 'Mon' },
+  { value: 'tue', label: 'Tue' },
+  { value: 'wed', label: 'Wed' },
+  { value: 'thu', label: 'Thu' },
+  { value: 'fri', label: 'Fri' },
+  { value: 'sat', label: 'Sat' },
+  { value: 'sun', label: 'Sun' },
+] as const
 
 function ChoiceGrid<T extends string>({
   value,
@@ -91,11 +103,15 @@ export default function OnboardingPage() {
       unit_system: unitSystem,
       gender: user?.gender || 'male',
       activity_level: user?.activity_level || 'moderately_active',
+      training_experience: user?.training_experience || 'intermediate',
       fitness_goal: user?.fitness_goal || 'fat_loss',
+      biggest_challenge: user?.biggest_challenge || '',
       workout_split: user?.workout_split || 'ppl',
+      preferred_workout_days: user?.preferred_workout_days || ['mon', 'tue', 'thu', 'sat'],
       goal_target_change_input: formatGoalWeightChangeForInput(user?.goal_target_change_kg, unitSystem),
       goal_timeframe_weeks_input: user?.goal_timeframe_weeks ? String(user.goal_timeframe_weeks) : '12',
       preferred_workout_time: user?.preferred_workout_time || 'evening',
+      dietary_style: user?.dietary_style || 'high_protein',
       preferred_foods_input: user?.preferred_foods?.join(', ') || '',
       avoided_foods_input: user?.avoided_foods?.join(', ') || '',
     }
@@ -104,6 +120,19 @@ export default function OnboardingPage() {
 
   const update = <K extends keyof FormData>(key: K, value: FormData[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }))
+
+  const toggleWorkoutDay = (day: string) =>
+    setForm((prev) => {
+      const alreadySelected = prev.preferred_workout_days.includes(day)
+      const nextDays = alreadySelected
+        ? prev.preferred_workout_days.filter((value) => value !== day)
+        : [...prev.preferred_workout_days, day]
+
+      return {
+        ...prev,
+        preferred_workout_days: nextDays.length > 0 ? nextDays : [day],
+      }
+    })
 
   useEffect(() => {
     if (user?.onboarded) {
@@ -161,11 +190,15 @@ export default function OnboardingPage() {
         unit_system: form.unit_system,
         gender: form.gender,
         activity_level: form.activity_level,
+        training_experience: form.training_experience,
         fitness_goal: form.fitness_goal,
+        biggest_challenge: form.biggest_challenge.trim() || undefined,
         workout_split: form.workout_split,
+        preferred_workout_days: form.preferred_workout_days,
         goal_target_change_kg: parseWeightInput(form.goal_target_change_input, form.unit_system) ?? undefined,
         goal_timeframe_weeks: Number(form.goal_timeframe_weeks_input) || undefined,
         preferred_workout_time: form.preferred_workout_time,
+        dietary_style: form.dietary_style,
         preferred_foods: form.preferred_foods_input.split(',').map((item) => item.trim()).filter(Boolean),
         avoided_foods: form.avoided_foods_input.split(',').map((item) => item.trim()).filter(Boolean),
       })
@@ -283,51 +316,106 @@ export default function OnboardingPage() {
       title: 'Activity level',
       subtitle: 'How active are you on a typical week?',
       content: (
-        <ChoiceGrid
-          value={form.activity_level}
-          onChange={(v) => update('activity_level', v)}
-          choices={[
-            { value: 'sedentary', label: 'Sedentary', description: 'Desk job, little exercise', emoji: '💺' },
-            { value: 'lightly_active', label: 'Lightly Active', description: '1–3 workouts/week', emoji: '🚶' },
-            { value: 'moderately_active', label: 'Moderately Active', description: '3–5 workouts/week', emoji: '🏃' },
-            { value: 'very_active', label: 'Very Active', description: '6–7 hard workouts/week', emoji: '⚡' },
-            { value: 'extra_active', label: 'Athlete', description: '2x/day or physical job', emoji: '🏆' },
-          ] as Array<{ value: ActivityLevel; label: string; description: string; emoji: string }>}
-        />
+        <div className="space-y-5">
+          <ChoiceGrid
+            value={form.activity_level}
+            onChange={(v) => update('activity_level', v)}
+            choices={[
+              { value: 'sedentary', label: 'Sedentary', description: 'Desk job, little exercise', emoji: '💺' },
+              { value: 'lightly_active', label: 'Lightly Active', description: '1–3 workouts/week', emoji: '🚶' },
+              { value: 'moderately_active', label: 'Moderately Active', description: '3–5 workouts/week', emoji: '🏃' },
+              { value: 'very_active', label: 'Very Active', description: '6–7 hard workouts/week', emoji: '⚡' },
+              { value: 'extra_active', label: 'Athlete', description: '2x/day or physical job', emoji: '🏆' },
+            ] as Array<{ value: ActivityLevel; label: string; description: string; emoji: string }>}
+          />
+
+          <div className="space-y-2">
+            <Label className="text-zinc-300">Training experience</Label>
+            <ChoiceGrid
+              value={form.training_experience}
+              onChange={(v) => update('training_experience', v)}
+              choices={[
+                { value: 'beginner', label: 'Beginner', description: 'Just getting consistent', emoji: '🌱' },
+                { value: 'intermediate', label: 'Intermediate', description: 'Already have a routine', emoji: '📈' },
+                { value: 'advanced', label: 'Advanced', description: 'Comfortable with structured programming', emoji: '🏋️' },
+              ] as Array<{ value: TrainingExperience; label: string; description: string; emoji: string }>}
+            />
+          </div>
+        </div>
       ),
     },
     {
       title: 'Your primary goal',
       subtitle: "This shapes your calorie target and program design.",
       content: (
-        <ChoiceGrid
-          value={form.fitness_goal}
-          onChange={(v) => update('fitness_goal', v)}
-          choices={[
-            { value: 'fat_loss', label: 'Fat Loss', description: 'Lose fat while preserving muscle', emoji: '🔥' },
-            { value: 'muscle_gain', label: 'Muscle Gain', description: 'Lean bulk for maximum gains', emoji: '💪' },
-            { value: 'maintenance', label: 'Maintenance', description: 'Maintain weight & improve fitness', emoji: '⚖️' },
-            { value: 'athletic_performance', label: 'Performance', description: 'Optimize for sport & strength', emoji: '🎯' },
-          ] as Array<{ value: FitnessGoal; label: string; description: string; emoji: string }>}
-        />
+        <div className="space-y-5">
+          <ChoiceGrid
+            value={form.fitness_goal}
+            onChange={(v) => update('fitness_goal', v)}
+            choices={[
+              { value: 'fat_loss', label: 'Fat Loss', description: 'Lose fat while preserving muscle', emoji: '🔥' },
+              { value: 'muscle_gain', label: 'Muscle Gain', description: 'Lean bulk for maximum gains', emoji: '💪' },
+              { value: 'maintenance', label: 'Maintenance', description: 'Maintain weight & improve fitness', emoji: '⚖️' },
+              { value: 'athletic_performance', label: 'Performance', description: 'Optimize for sport & strength', emoji: '🎯' },
+            ] as Array<{ value: FitnessGoal; label: string; description: string; emoji: string }>}
+          />
+
+          <div className="space-y-2">
+            <Label className="text-zinc-300">What usually gets in the way?</Label>
+            <Input
+              type="text"
+              value={form.biggest_challenge}
+              onChange={(e) => update('biggest_challenge', e.target.value)}
+              placeholder="e.g. Busy schedule, protein consistency, motivation"
+              className="bg-zinc-900 border-white/10 text-white"
+            />
+            <p className="text-xs text-zinc-500">We’ll use this to make your plan feel more realistic from day one.</p>
+          </div>
+        </div>
       ),
     },
     {
       title: 'Workout preference',
       subtitle: 'Choose a training split that fits your schedule.',
       content: (
-        <ChoiceGrid
-          value={form.workout_split}
-          onChange={(v) => update('workout_split', v)}
-          choices={[
-            { value: 'ppl', label: 'Push/Pull/Legs', description: '6-day split, optimal gains', emoji: '🔄' },
-            { value: 'upper_lower', label: 'Upper/Lower', description: '4-day split, balanced', emoji: '⬆️' },
-            { value: '3day_fullbody', label: '3-Day Full Body', description: 'Best for beginners', emoji: '🏋️' },
-            { value: '4day', label: '4-Day Bro Split', description: 'Classic bodybuilding split', emoji: '💥' },
-            { value: 'cardio_focus', label: 'Cardio Focus', description: 'Running, cycling, HIIT', emoji: '🏃' },
-            { value: '5day', label: '5-Day Split', description: 'Advanced hypertrophy', emoji: '📈' },
-          ] as Array<{ value: WorkoutSplit; label: string; description: string; emoji: string }>}
-        />
+        <div className="space-y-5">
+          <ChoiceGrid
+            value={form.workout_split}
+            onChange={(v) => update('workout_split', v)}
+            choices={[
+              { value: 'ppl', label: 'Push/Pull/Legs', description: '6-day split, optimal gains', emoji: '🔄' },
+              { value: 'upper_lower', label: 'Upper/Lower', description: '4-day split, balanced', emoji: '⬆️' },
+              { value: '3day_fullbody', label: '3-Day Full Body', description: 'Best for beginners', emoji: '🏋️' },
+              { value: '4day', label: '4-Day Bro Split', description: 'Classic bodybuilding split', emoji: '💥' },
+              { value: 'cardio_focus', label: 'Cardio Focus', description: 'Running, cycling, HIIT', emoji: '🏃' },
+              { value: '5day', label: '5-Day Split', description: 'Advanced hypertrophy', emoji: '📈' },
+            ] as Array<{ value: WorkoutSplit; label: string; description: string; emoji: string }>}
+          />
+
+          <div className="space-y-2">
+            <Label className="text-zinc-300">Preferred training days</Label>
+            <div className="grid grid-cols-4 gap-2 sm:grid-cols-7">
+              {WORKOUT_DAY_OPTIONS.map((day) => {
+                const selected = form.preferred_workout_days.includes(day.value)
+                return (
+                  <button
+                    key={day.value}
+                    type="button"
+                    onClick={() => toggleWorkoutDay(day.value)}
+                    className={`rounded-lg border px-2 py-3 text-sm font-medium transition-all ${
+                      selected
+                        ? 'border-emerald-500 bg-emerald-500/10 text-emerald-400'
+                        : 'border-white/10 bg-zinc-900/60 text-zinc-400 hover:border-white/20'
+                    }`}
+                  >
+                    {day.label}
+                  </button>
+                )
+              })}
+            </div>
+            <p className="text-xs text-zinc-500">Choose the days you’re most likely to actually train.</p>
+          </div>
+        </div>
       ),
     },
     {
@@ -348,6 +436,22 @@ export default function OnboardingPage() {
                 { value: 'late_night', label: 'Late Night', description: 'Night owl training', emoji: '🌙' },
                 { value: 'flexible', label: 'Flexible', description: 'Any time works', emoji: '🔄' },
               ] as Array<{ value: PreferredWorkoutTime; label: string; description: string; emoji: string }>}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-zinc-300">Diet style</Label>
+            <ChoiceGrid
+              value={form.dietary_style}
+              onChange={(v) => update('dietary_style', v)}
+              choices={[
+                { value: 'high_protein', label: 'High Protein', description: 'Prioritize protein in every meal', emoji: '🥩' },
+                { value: 'balanced', label: 'Balanced', description: 'Flexible macros and variety', emoji: '⚖️' },
+                { value: 'low_carb', label: 'Lower Carb', description: 'Carb-conscious planning', emoji: '🥑' },
+                { value: 'vegetarian', label: 'Vegetarian', description: 'Plant-forward meals', emoji: '🥗' },
+                { value: 'vegan', label: 'Vegan', description: 'Fully plant-based', emoji: '🌿' },
+                { value: 'pescatarian', label: 'Pescatarian', description: 'Seafood plus plant-forward meals', emoji: '🐟' },
+              ] as Array<{ value: DietaryStyle; label: string; description: string; emoji: string }>}
             />
           </div>
 
@@ -453,6 +557,21 @@ export default function OnboardingPage() {
                   in <span className="text-white font-semibold">{form.goal_timeframe_weeks_input} weeks</span>
                 </p>
               )}
+              <p className="mt-2 text-sm text-zinc-300">
+                Workout rhythm: <span className="text-white font-semibold">{form.preferred_workout_days.length} preferred day{form.preferred_workout_days.length === 1 ? '' : 's'}</span>
+                {' · '}
+                <span className="text-white font-semibold capitalize">{form.training_experience}</span> level
+              </p>
+              <p className="mt-1 text-sm text-zinc-300">
+                Diet style: <span className="text-white font-semibold">{form.dietary_style.replace('_', ' ')}</span>
+                {' · '}
+                Training time: <span className="text-white font-semibold">{form.preferred_workout_time.replace('_', ' ')}</span>
+              </p>
+              {form.biggest_challenge.trim() && (
+                <p className="mt-2 text-sm text-zinc-300">
+                  Biggest challenge: <span className="text-white font-semibold">{form.biggest_challenge.trim()}</span>
+                </p>
+              )}
             </div>
 
             <p className="text-xs text-zinc-500 text-center">
@@ -482,7 +601,7 @@ export default function OnboardingPage() {
 
         {/* Progress bar */}
         <div className="flex items-center gap-2 mb-8">
-          {Array.from({ length: TOTAL_STEPS }).map((_, i) => (
+          {Array.from({ length: steps.length }).map((_, i) => (
             <div
               key={i}
               className={`h-1.5 flex-1 rounded-full transition-all duration-500 ${
@@ -490,7 +609,7 @@ export default function OnboardingPage() {
               }`}
             />
           ))}
-          <span className="text-xs text-zinc-500 ml-2 whitespace-nowrap">{step}/{TOTAL_STEPS}</span>
+          <span className="text-xs text-zinc-500 ml-2 whitespace-nowrap">{step}/{steps.length}</span>
         </div>
 
         {/* Step content */}
@@ -524,7 +643,7 @@ export default function OnboardingPage() {
             Back
           </Button>
 
-          {step < TOTAL_STEPS ? (
+          {step < steps.length ? (
             <Button
               variant="brand"
               onClick={() => setStep((s) => s + 1)}

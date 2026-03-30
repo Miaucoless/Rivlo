@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getRedisJson, hasRedisClient, normalizeRedisKeyPart, setRedisJson, withRedisCacheHeader } from '@/lib/redis'
+import { getRedisJson, hasRedisClient, normalizeRedisKeyPart, rateLimit, setRedisJson, withRedisCacheHeader } from '@/lib/redis'
 
 export type NinjasNutritionItem = {
   name: string
@@ -17,6 +17,9 @@ export type NinjasNutritionItem = {
 }
 
 export async function GET(req: NextRequest) {
+  const limited = await rateLimit(req, { limit: 30, windowSec: 60, prefix: 'nutrition' })
+  if (limited) return limited
+
   const query = req.nextUrl.searchParams.get('query')?.trim()
   if (!query) return NextResponse.json([])
 

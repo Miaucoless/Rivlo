@@ -1,14 +1,16 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { useAppStore } from '@/store/useAppStore'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Dumbbell, UtensilsCrossed, BookOpen, CheckCircle, Loader2, AlertCircle, ArrowLeft, ShoppingCart } from 'lucide-react'
+import { Textarea } from '@/components/ui/textarea'
+import { Dumbbell, UtensilsCrossed, BookOpen, CheckCircle, Loader2, AlertCircle, ArrowLeft, ShoppingCart, Flame, Heart, MessageSquare, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
+import { formatDistanceToNow } from 'date-fns'
 import type { SavedMealTemplate } from '@/types'
 
 type SharedItem = {
@@ -19,6 +21,20 @@ type SharedItem = {
   owner_name: string
   message?: string
   created_at: string
+}
+
+type ShareReaction = {
+  reaction: 'fire' | 'love' | 'try_this' | 'inspired'
+  count: number
+}
+
+type ShareComment = {
+  id: string
+  body: string
+  created_at: string
+  user_name: string
+  username?: string | null
+  is_owner: boolean
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -34,6 +50,17 @@ const TYPE_ICONS: Record<string, React.ReactNode> = {
   recipe: <BookOpen className="w-5 h-5" />,
   grocery_list: <ShoppingCart className="w-5 h-5" />,
 }
+
+const REACTION_OPTIONS: Array<{
+  value: ShareReaction['reaction']
+  label: string
+  icon: React.ReactNode
+}> = [
+  { value: 'fire', label: 'Fire', icon: <Flame className="w-3.5 h-3.5" /> },
+  { value: 'love', label: 'Love', icon: <Heart className="w-3.5 h-3.5" /> },
+  { value: 'try_this', label: 'Try this', icon: <CheckCircle className="w-3.5 h-3.5" /> },
+  { value: 'inspired', label: 'Inspired', icon: <Sparkles className="w-3.5 h-3.5" /> },
+]
 
 // Resolve exercise name from either workout template or log structure
 function getExerciseName(ex: Record<string, unknown>): string {
@@ -57,6 +84,12 @@ export default function SharePage() {
   const [importing, setImporting] = useState(false)
   const [imported, setImported] = useState(false)
   const [authed, setAuthed] = useState<boolean | null>(null)
+  const [reactions, setReactions] = useState<ShareReaction[]>([])
+  const [currentReaction, setCurrentReaction] = useState<ShareReaction['reaction'] | null>(null)
+  const [comments, setComments] = useState<ShareComment[]>([])
+  const [commentBody, setCommentBody] = useState('')
+  const [socialLoading, setSocialLoading] = useState(false)
+  const [socialPosting, setSocialPosting] = useState(false)
 
   useEffect(() => {
     const supabase = createClient()
@@ -75,6 +108,28 @@ export default function SharePage() {
       .catch(() => setNotFound(true))
       .finally(() => setLoading(false))
   }, [token])
+
+  const loadSocial = useCallback(async () => {
+    setSocialLoading(true)
+    try {
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch(`/api/share/${token}/social`, {
+        headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : undefined,
+      })
+      const data = await res.json().catch(() => null)
+      if (!res.ok || !data) return
+      setReactions(data.reactions ?? [])
+      setCurrentReaction(data.current_reaction ?? null)
+      setComments(data.comments ?? [])
+    } finally {
+      setSocialLoading(false)
+    }
+  }, [token])
+
+  useEffect(() => {
+    void loadSocial()
+  }, [authed, loadSocial])
 
   async function handleImport() {
     if (!authed) return
@@ -103,6 +158,78 @@ export default function SharePage() {
       toast.error('Import failed. Please try again.')
     } finally {
       setImporting(false)
+    }
+  }
+
+  async function handleReaction(reaction: ShareReaction['reaction']) {
+    if (!authed) {
+      router.push(`/login?redirect=/share/${token}`)
+      return
+    }
+
+    setSocialPosting(true)
+    try {
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        router.push(`/login?redirect=/share/${token}`)
+        return
+      }
+
+      const res = await fetch(`/api/share/${token}/social`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ type: 'reaction', reaction }),
+      })
+
+      const data = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(data?.error || 'Could not react.')
+
+      await loadSocial()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not react right now.')
+    } finally {
+      setSocialPosting(false)
+    }
+  }
+
+  async function handleCommentSubmit() {
+    if (!commentBody.trim()) return
+    if (!authed) {
+      router.push(`/login?redirect=/share/${token}`)
+      return
+    }
+
+    setSocialPosting(true)
+    try {
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        router.push(`/login?redirect=/share/${token}`)
+        return
+      }
+
+      const res = await fetch(`/api/share/${token}/social`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ type: 'comment', body: commentBody }),
+      })
+      const data = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(data?.error || 'Could not post comment.')
+
+      setCommentBody('')
+      await loadSocial()
+      toast.success('Comment posted.')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not post comment.')
+    } finally {
+      setSocialPosting(false)
     }
   }
 
@@ -249,6 +376,82 @@ export default function SharePage() {
                   </div>
                 </div>
               )}
+
+              <div className="space-y-3 rounded-2xl border border-white/25 bg-white/35 p-3 backdrop-blur-sm dark:border-white/10 dark:bg-white/5">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Community reactions</p>
+                    <p className="text-sm text-muted-foreground">
+                      Shared {formatDistanceToNow(new Date(item.created_at), { addSuffix: true })}
+                    </p>
+                  </div>
+                  {socialLoading ? <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" /> : null}
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  {REACTION_OPTIONS.map((option) => {
+                    const matchingReaction = reactions.find((reaction) => reaction.reaction === option.value)
+                    const isActive = currentReaction === option.value
+
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => void handleReaction(option.value)}
+                        disabled={socialPosting}
+                        className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                          isActive
+                            ? 'border-emerald-500 bg-emerald-500/10 text-emerald-400'
+                            : 'border-white/20 bg-white/45 text-muted-foreground hover:border-white/35 dark:border-white/10 dark:bg-white/5'
+                        }`}
+                      >
+                        {option.icon}
+                        <span>{option.label}</span>
+                        <span className="font-data">{matchingReaction?.count ?? 0}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+
+                <div className="space-y-2 rounded-xl border border-white/20 bg-white/30 p-3 dark:border-white/10 dark:bg-white/[0.03]">
+                  <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    <MessageSquare className="w-3.5 h-3.5" />
+                    Conversation
+                  </div>
+                  <Textarea
+                    value={commentBody}
+                    onChange={(event) => setCommentBody(event.target.value)}
+                    maxLength={280}
+                    placeholder={authed ? 'Leave encouragement, feedback, or tell them you’re trying it too.' : 'Log in to comment on this share.'}
+                    disabled={!authed || socialPosting}
+                    className="min-h-[84px] border-white/20 bg-white/60 dark:border-white/10 dark:bg-white/[0.05]"
+                  />
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-[11px] text-muted-foreground">{commentBody.trim().length}/280</p>
+                    <Button size="sm" onClick={() => void handleCommentSubmit()} disabled={!authed || socialPosting || !commentBody.trim()}>
+                      {socialPosting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Post comment'}
+                    </Button>
+                  </div>
+
+                  <div className="space-y-2">
+                    {comments.length > 0 ? comments.map((comment) => (
+                      <div key={comment.id} className="rounded-xl border border-white/15 bg-white/45 px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.04]">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-sm font-medium">
+                            {comment.user_name}
+                            {comment.is_owner ? <span className="ml-1 text-xs text-emerald-400">Creator</span> : null}
+                          </p>
+                          <p className="text-[11px] text-muted-foreground">{formatDistanceToNow(new Date(comment.created_at), { addSuffix: true })}</p>
+                        </div>
+                        {comment.username ? <p className="text-[11px] text-muted-foreground">@{comment.username}</p> : null}
+                        <p className="mt-1 text-sm text-foreground/90">{comment.body}</p>
+                      </div>
+                    )) : (
+                      <p className="text-sm text-muted-foreground">No comments yet. Be the first to react.</p>
+                    )}
+                  </div>
+                </div>
+              </div>
 
               {imported ? (
                 <div className="flex items-center gap-2 justify-center py-2 text-emerald-500 font-medium text-sm">

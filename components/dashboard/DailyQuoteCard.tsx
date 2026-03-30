@@ -19,7 +19,7 @@ export function DailyQuoteCard() {
       if (showRefresh) setRefreshing(true)
       else setLoading(true)
 
-      const newQuote = await getDailyQuote()
+      const newQuote = await getDailyQuote({ forceFresh: showRefresh })
       setQuote(newQuote)
       setAnimKey((k) => k + 1)
     } catch {

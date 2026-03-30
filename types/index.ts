@@ -6,6 +6,8 @@ export type FitnessGoal = 'fat_loss' | 'muscle_gain' | 'maintenance' | 'athletic
 export type WorkoutSplit = 'ppl' | 'upper_lower' | '3day_fullbody' | '4day' | '5day' | '6day' | 'cardio_focus'
 export type UnitSystem = 'imperial' | 'metric'
 export type PreferredWorkoutTime = 'early_morning' | 'morning' | 'afternoon' | 'evening' | 'late_night' | 'flexible'
+export type TrainingExperience = 'beginner' | 'intermediate' | 'advanced'
+export type DietaryStyle = 'balanced' | 'high_protein' | 'vegetarian' | 'vegan' | 'pescatarian' | 'low_carb'
 export type SupplementCategory = 'vitamin' | 'mineral' | 'herbal' | 'supplement' | 'medicine' | 'other'
 export type SupplementFrequency = 'daily' | 'twice_daily' | 'three_times_daily' | 'weekly' | 'as_needed'
 
@@ -26,6 +28,10 @@ export interface UserProfile {
   goal_target_change_kg?: number
   goal_timeframe_weeks?: number
   preferred_workout_time?: PreferredWorkoutTime
+  preferred_workout_days?: string[]
+  training_experience?: TrainingExperience
+  dietary_style?: DietaryStyle
+  biggest_challenge?: string
   preferred_foods?: string[]
   avoided_foods?: string[]
   notification_preferences?: NotificationPreferences
@@ -42,6 +48,7 @@ export interface UserProfile {
   fat_target_g: number
   water_goal_ml: number
   onboarded: boolean
+  onboarding_completed_at?: string
   created_at: string
   updated_at: string
 }

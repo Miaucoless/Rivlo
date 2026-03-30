@@ -8,25 +8,22 @@ import { LandingFooter } from './LandingFooter'
 
 export default function LandingPage() {
   useEffect(() => {
-    document.documentElement.style.overflowY = 'auto'
+    // Counteract any scroll locks applied by the dashboard layout
+    document.documentElement.style.overflow = 'auto'
     document.documentElement.style.height = 'auto'
-    document.documentElement.style.pointerEvents = 'auto'
-    document.body.style.overflowY = 'auto'
+    document.body.style.overflow = 'auto'
     document.body.style.height = 'auto'
-    document.body.style.pointerEvents = 'auto'
 
     return () => {
-      document.documentElement.style.overflowY = ''
+      document.documentElement.style.overflow = ''
       document.documentElement.style.height = ''
-      document.documentElement.style.pointerEvents = ''
-      document.body.style.overflowY = ''
+      document.body.style.overflow = ''
       document.body.style.height = ''
-      document.body.style.pointerEvents = ''
     }
   }, [])
 
   return (
-    <div className="h-[100dvh] overflow-y-auto overflow-x-hidden bg-[#0a0a0a] text-white">
+    <div className="min-h-screen overflow-x-hidden bg-[#0a0a0a] text-white">
       <LandingNav />
       <main>
         <HeroSection />

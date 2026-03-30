@@ -63,6 +63,27 @@ function getWorkoutSetRowClass(set: { set_type?: 'standard' | 'drop' }) {
   )
 }
 
+function calculateConsecutiveStreak(activeDates: Iterable<string>) {
+  const dateSet = new Set(Array.from(activeDates))
+  if (dateSet.size === 0) return 0
+
+  const today = getTodayISO()
+  const yesterday = format(subDays(new Date(), 1), 'yyyy-MM-dd')
+  const latestDate = Array.from(dateSet).sort().at(-1)
+
+  if (!latestDate || (latestDate !== today && latestDate !== yesterday)) return 0
+
+  let streak = 0
+  let cursor = latestDate
+
+  while (dateSet.has(cursor)) {
+    streak += 1
+    cursor = format(subDays(new Date(`${cursor}T12:00:00`), 1), 'yyyy-MM-dd')
+  }
+
+  return streak
+}
+
 // Quick Add Meal Dialog
 function QuickAddMealDialog() {
   const [open, setOpen] = useState(false)
@@ -131,7 +152,7 @@ function QuickAddMealDialog() {
 
 export default function DashboardPage() {
   const router = useRouter()
-  const { user, getDailyTotals, getDailyMeals, mealEntries, weightHistory, workoutLogs, streak } = useAppStore()
+  const { user, getDailyTotals, getDailyMeals, mealEntries, waterLogs, weightHistory, workoutLogs, streak } = useAppStore()
   const [hasPausedWorkout, setHasPausedWorkout] = useState(false)
   const [expandedDashboardLogId, setExpandedDashboardLogId] = useState<string | null>(null)
   const [expandedMealType, setExpandedMealType] = useState<string | null>(null)
@@ -212,6 +233,29 @@ export default function DashboardPage() {
       target: user.calorie_target,
     }
   })
+
+  const workoutDateSet = new Set(workoutLogs.map((workout) => workout.date))
+  const proteinHitDateSet = new Set(
+    Object.entries(mealEntries)
+      .filter(([, meals]) => meals.reduce((sum, meal) => sum + meal.macros.protein_g, 0) >= user.protein_target_g)
+      .map(([date]) => date)
+  )
+  const hydrationDateSet = new Set(
+    Object.entries(waterLogs)
+      .filter(([, entries]) => entries.reduce((sum, entry) => sum + entry.amount_ml, 0) >= (user.water_goal_ml || 2500))
+      .map(([date]) => date)
+  )
+
+  const workoutStreak = calculateConsecutiveStreak(workoutDateSet)
+  const proteinStreak = calculateConsecutiveStreak(proteinHitDateSet)
+  const hydrationStreak = calculateConsecutiveStreak(hydrationDateSet)
+
+  const recentSevenDates = Array.from({ length: 7 }, (_, i) => format(subDays(new Date(), i), 'yyyy-MM-dd'))
+  const weeklyWorkoutCount = recentSevenDates.filter((date) => workoutDateSet.has(date)).length
+  const weeklyProteinHitCount = recentSevenDates.filter((date) => proteinHitDateSet.has(date)).length
+  const weeklyHydrationHitCount = recentSevenDates.filter((date) => hydrationDateSet.has(date)).length
+  const weeklyLoggingCount = recentSevenDates.filter((date) => (mealEntries[date] || []).length > 0).length
+  const consistencyScore = Math.round(((weeklyWorkoutCount + weeklyProteinHitCount + weeklyHydrationHitCount + weeklyLoggingCount) / 28) * 100)
 
   const calorieChartData = recentMealDays
     .filter((day) => day.meals.length > 0)
@@ -833,6 +877,46 @@ export default function DashboardPage() {
 
         {/* AI Insight + recent journal */}
         <motion.div variants={stagger.item} initial="initial" animate="animate" className="space-y-4">
+          <Card>
+            <CardContent className="p-4 space-y-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold">Consistency Score</p>
+                  <p className="text-xs text-muted-foreground mt-1">Last 7 days across workouts, logging, protein, and hydration.</p>
+                </div>
+                <div className="text-right">
+                  <p className="font-data text-2xl font-bold">{consistencyScore}%</p>
+                  <p className="text-[11px] text-muted-foreground">weekly score</p>
+                </div>
+              </div>
+              <div className="progress-track">
+                <div
+                  className={cn(
+                    'progress-fill',
+                    consistencyScore >= 80 ? 'bg-emerald-500' : consistencyScore >= 55 ? 'bg-amber-500' : 'bg-rose-500'
+                  )}
+                  style={{ width: `${consistencyScore}%` }}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { label: 'Overall', value: `${streak}d`, sub: 'any activity' },
+                  { label: 'Workouts', value: `${workoutStreak}d`, sub: `${weeklyWorkoutCount}/7 days` },
+                  { label: 'Protein', value: `${proteinStreak}d`, sub: `${weeklyProteinHitCount}/7 days` },
+                  { label: 'Hydration', value: `${hydrationStreak}d`, sub: `${weeklyHydrationHitCount}/7 days` },
+                ].map((item) => (
+                  <div key={item.label} className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">{item.label}</p>
+                      <p className="font-data text-lg font-semibold">{item.value}</p>
+                    </div>
+                    <p className="mt-1 text-[11px] text-muted-foreground">{item.sub}</p>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Daily quote */}
           <DailyQuoteCard />
 

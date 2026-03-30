@@ -1,5 +1,5 @@
 import { Redis } from '@upstash/redis'
-import { NextResponse } from 'next/server'
+import { type NextRequest, NextResponse } from 'next/server'
 
 let redisClient: Redis | null | undefined
 
@@ -65,4 +65,50 @@ export async function deleteRedisKeys(keys: string[]) {
   } catch {
     // Swallow cache delete failures so writes still succeed without Redis.
   }
+}
+
+// ─── Rate Limiting ────────────────────────────────────────────────────────────
+
+function getClientIp(req: NextRequest): string {
+  const forwarded = req.headers.get('x-forwarded-for')
+  return forwarded ? forwarded.split(',')[0].trim() : 'unknown'
+}
+
+/**
+ * Sliding-window rate limiter backed by Redis INCR + EXPIRE.
+ * Returns a 429 NextResponse if the client is over the limit, otherwise null.
+ * Fails open (returns null) when Redis is unavailable so the app keeps working.
+ */
+export async function rateLimit(
+  req: NextRequest,
+  { limit, windowSec, prefix }: { limit: number; windowSec: number; prefix: string }
+): Promise<NextResponse | null> {
+  const redis = getRedisClient()
+  if (!redis) return null
+
+  const clientId = getClientIp(req)
+  const window = Math.floor(Date.now() / (windowSec * 1000))
+  const key = `rl:${prefix}:${clientId}:${window}`
+
+  try {
+    const count = await redis.incr(key)
+    if (count === 1) await redis.expire(key, windowSec)
+    if (count > limit) {
+      return NextResponse.json(
+        { error: 'Too many requests. Please slow down.' },
+        {
+          status: 429,
+          headers: {
+            'Retry-After': String(windowSec),
+            'X-RateLimit-Limit': String(limit),
+            'X-RateLimit-Remaining': '0',
+          },
+        }
+      )
+    }
+  } catch {
+    // Swallow Redis errors — rate limiting is best-effort.
+  }
+
+  return null
 }

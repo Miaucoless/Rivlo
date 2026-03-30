@@ -92,11 +92,15 @@ interface AppStore {
   weeklyMealPlan: WeeklyMealPlan | null
   groceryList: GroceryList | null
   streak: number
+  syncStatus: 'idle' | 'syncing' | 'offline' | 'error'
+  lastSyncedAt: string | null
+  pendingCloudWrites: number
 
   // Actions
   setUser: (user: UserProfile | null) => void
   hydrateFromCloud: (userId: string) => Promise<void>
   syncNow: () => Promise<void>
+  flushPendingCloudWrites: () => Promise<void>
   updateProfile: (updates: Partial<UserProfile>) => void
   loginDemo: () => void
   logout: () => void
@@ -234,6 +238,59 @@ function calculateActivityStreak(state: Pick<AppStore, 'weightHistory' | 'journa
   }
 
   return streak
+}
+
+const pendingCloudWriteQueue: Array<() => Promise<void>> = []
+let flushingPendingCloudWrites = false
+
+function isOfflineClient() {
+  return typeof navigator !== 'undefined' && navigator.onLine === false
+}
+
+async function flushCloudWriteQueue(set: any) {
+  if (flushingPendingCloudWrites) return
+
+  if (isOfflineClient()) {
+    set({ syncStatus: 'offline', pendingCloudWrites: pendingCloudWriteQueue.length })
+    return
+  }
+
+  if (pendingCloudWriteQueue.length === 0) {
+    set({ syncStatus: 'idle', pendingCloudWrites: 0, lastSyncedAt: new Date().toISOString() })
+    return
+  }
+
+  flushingPendingCloudWrites = true
+  set({ syncStatus: 'syncing', pendingCloudWrites: pendingCloudWriteQueue.length })
+
+  try {
+    while (pendingCloudWriteQueue.length > 0) {
+      const task = pendingCloudWriteQueue[0]
+      await task()
+      pendingCloudWriteQueue.shift()
+      set({
+        syncStatus: pendingCloudWriteQueue.length > 0 ? 'syncing' : 'idle',
+        pendingCloudWrites: pendingCloudWriteQueue.length,
+        lastSyncedAt: new Date().toISOString(),
+      })
+    }
+  } catch {
+    set({
+      syncStatus: isOfflineClient() ? 'offline' : 'error',
+      pendingCloudWrites: pendingCloudWriteQueue.length,
+    })
+  } finally {
+    flushingPendingCloudWrites = false
+  }
+}
+
+function enqueueCloudWrite(set: any, task: () => Promise<void>) {
+  pendingCloudWriteQueue.push(task)
+  set({
+    syncStatus: isOfflineClient() ? 'offline' : 'syncing',
+    pendingCloudWrites: pendingCloudWriteQueue.length,
+  })
+  void flushCloudWriteQueue(set)
 }
 
 // Realistic exercise sets for each PPL day in demo mode
@@ -604,10 +661,13 @@ export const useAppStore = create<AppStore>()(
               journalEntries: [],
               workoutLogs: [],
               mealEntries: {},
-              waterLogs: {},
-              weeklyMealPlan: null,
-              groceryList: null,
-              streak: 0,
+      waterLogs: {},
+      weeklyMealPlan: null,
+      groceryList: null,
+      streak: 0,
+      syncStatus: 'idle',
+      lastSyncedAt: null,
+      pendingCloudWrites: 0,
               cloudHydratedUserId: null,
               user,
               isAuthenticated: !!user,
@@ -636,9 +696,20 @@ export const useAppStore = create<AppStore>()(
           return
         }
 
+        set((state) => ({
+          syncStatus: isOfflineClient() ? 'offline' : 'syncing',
+          pendingCloudWrites: state.pendingCloudWrites,
+        }))
+
         const cloud = await fetchCloudState(userId)
         console.log('☁️ Cloud data received:', cloud ? 'SUCCESS' : 'NULL')
-        if (!cloud) return
+        if (!cloud) {
+          set((state) => ({
+            syncStatus: isOfflineClient() ? 'offline' : 'error',
+            pendingCloudWrites: state.pendingCloudWrites,
+          }))
+          return
+        }
 
         const localState = get()
         console.log('📱 Local state before hydration:', {
@@ -758,14 +829,24 @@ export const useAppStore = create<AppStore>()(
           const dbNotes = (finalCloud.dbNotifications ?? []) as import('@/types').Notification[]
           const existingIds = new Set(computed.map((n) => n.id))
           const merged = [...dbNotes.filter((n) => !existingIds.has(n.id)), ...computed]
-          return { ...refreshed, notifications: merged }
+          return {
+            ...refreshed,
+            notifications: merged,
+            syncStatus: state.pendingCloudWrites > 0 ? 'syncing' : 'idle',
+            lastSyncedAt: new Date().toISOString(),
+          }
         })
       },
 
       syncNow: async () => {
         const state = get()
         if (!state.user || state.isDemoMode) return
+        await flushCloudWriteQueue(set)
         await state.hydrateFromCloud(state.user.id)
+      },
+
+      flushPendingCloudWrites: async () => {
+        await flushCloudWriteQueue(set)
       },
 
       updateProfile: (updates) => {
@@ -786,7 +867,7 @@ export const useAppStore = create<AppStore>()(
           }
         }
 
-        ;(async () => {
+        enqueueCloudWrite(set, async () => {
           const resp = await updateProfileCloud(state.user!.id, updates)
           if (!resp.success || !resp.user) {
             const err = String(resp.error || '')
@@ -794,15 +875,13 @@ export const useAppStore = create<AppStore>()(
               updates.water_goal_ml != null &&
               (err.includes('water_goal_ml') || err.includes('schema cache'))
 
-            // If the DB column is not migrated yet, keep the local value and avoid noisy toasts.
             if (missingWaterGoalColumn) return
 
             if (resp.error) toast.error(resp.error)
-            return
+            throw new Error(resp.error || 'Profile sync failed.')
           }
+
           set((s) => withRefreshedNotifications(s, { user: resp.user }))
-        })().catch((err) => {
-          toast.error(String(err))
         })
       },
 
@@ -832,11 +911,15 @@ export const useAppStore = create<AppStore>()(
           },
           groceryList: null,
           streak: 12,
+          syncStatus: 'idle',
+          lastSyncedAt: null,
+          pendingCloudWrites: 0,
           supplements: generateDemoSupplements(),
           notificationPreferences: DEFAULT_NOTIFICATION_PREFERENCES,
         })),
 
-      logout: () =>
+      logout: () => {
+        pendingCloudWriteQueue.length = 0
         set({
           savedMeals: [],
           customRecipes: [],
@@ -859,7 +942,11 @@ export const useAppStore = create<AppStore>()(
           weeklyMealPlan: null,
           groceryList: null,
           streak: 0,
-        }),
+          syncStatus: 'idle',
+          lastSyncedAt: null,
+          pendingCloudWrites: 0,
+        })
+      },
 
       toggleSidebar: () =>
         set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
@@ -907,7 +994,9 @@ export const useAppStore = create<AppStore>()(
 
         const state = get()
         if (state.user && !state.isDemoMode) {
-          void upsertWeightEntry(state.user.id, normalizedEntry)
+          enqueueCloudWrite(set, async () => {
+            await upsertWeightEntry(state.user.id, normalizedEntry)
+          })
         }
       },
 
@@ -918,7 +1007,9 @@ export const useAppStore = create<AppStore>()(
 
         const state = get()
         if (state.user && !state.isDemoMode) {
-          void deleteWeightEntryCloud(state.user.id, id)
+          enqueueCloudWrite(set, async () => {
+            await deleteWeightEntryCloud(state.user.id, id)
+          })
         }
       },
 
@@ -930,7 +1021,9 @@ export const useAppStore = create<AppStore>()(
 
         const state = get()
         if (state.user && !state.isDemoMode) {
-          void upsertJournalEntry(state.user.id, normalizedEntry)
+          enqueueCloudWrite(set, async () => {
+            await upsertJournalEntry(state.user.id, normalizedEntry)
+          })
         }
       },
 
@@ -946,7 +1039,9 @@ export const useAppStore = create<AppStore>()(
 
         const state = get()
         if (state.user && !state.isDemoMode && syncedEntry) {
-          void upsertJournalEntry(state.user.id, syncedEntry)
+          enqueueCloudWrite(set, async () => {
+            await upsertJournalEntry(state.user.id, syncedEntry)
+          })
         }
       },
 
@@ -957,7 +1052,9 @@ export const useAppStore = create<AppStore>()(
 
         const state = get()
         if (state.user && !state.isDemoMode) {
-          void deleteJournalEntryCloud(state.user.id, id)
+          enqueueCloudWrite(set, async () => {
+            await deleteJournalEntryCloud(state.user.id, id)
+          })
         }
       },
 
@@ -972,7 +1069,9 @@ export const useAppStore = create<AppStore>()(
 
         const state = get()
         if (state.user && !state.isDemoMode) {
-          void upsertMealEntry(state.user.id, date, normalizedMeal)
+          enqueueCloudWrite(set, async () => {
+            await upsertMealEntry(state.user.id, date, normalizedMeal)
+          })
         }
       },
 
@@ -991,7 +1090,9 @@ export const useAppStore = create<AppStore>()(
 
         const state = get()
         if (state.user && !state.isDemoMode && syncedMeal) {
-          void upsertMealEntry(state.user.id, date, syncedMeal)
+          enqueueCloudWrite(set, async () => {
+            await upsertMealEntry(state.user.id, date, syncedMeal)
+          })
         }
       },
 
@@ -1005,7 +1106,9 @@ export const useAppStore = create<AppStore>()(
 
         const state = get()
         if (state.user && !state.isDemoMode) {
-          void deleteMealEntryCloud(state.user.id, mealId)
+          enqueueCloudWrite(set, async () => {
+            await deleteMealEntryCloud(state.user.id, mealId)
+          })
         }
       },
 
@@ -1019,7 +1122,9 @@ export const useAppStore = create<AppStore>()(
         }))
         const state = get()
         if (state.user && !state.isDemoMode) {
-          void upsertWaterLog(state.user.id, normalized)
+          enqueueCloudWrite(set, async () => {
+            await upsertWaterLog(state.user.id, normalized)
+          })
         }
       },
 
@@ -1032,7 +1137,9 @@ export const useAppStore = create<AppStore>()(
         }))
         const state = get()
         if (state.user && !state.isDemoMode) {
-          void deleteWaterLog(state.user.id, entryId)
+          enqueueCloudWrite(set, async () => {
+            await deleteWaterLog(state.user.id, entryId)
+          })
         }
       },
 
@@ -1044,10 +1151,12 @@ export const useAppStore = create<AppStore>()(
 
         const state = get()
         if (state.user && !state.isDemoMode) {
-          void saveMetadataCloudState(state.user.id, {
-            savedMeals: state.savedMeals,
-            supplements: state.supplements,
-            calendarReminders: state.calendarReminders,
+          enqueueCloudWrite(set, async () => {
+            await saveMetadataCloudState(state.user.id, {
+              savedMeals: state.savedMeals,
+              supplements: state.supplements,
+              calendarReminders: state.calendarReminders,
+            })
           })
         }
       },
@@ -1064,10 +1173,12 @@ export const useAppStore = create<AppStore>()(
 
         const state = get()
         if (state.user && !state.isDemoMode) {
-          void saveMetadataCloudState(state.user.id, {
-            savedMeals: state.savedMeals,
-            supplements: state.supplements,
-            calendarReminders: state.calendarReminders,
+          enqueueCloudWrite(set, async () => {
+            await saveMetadataCloudState(state.user.id, {
+              savedMeals: state.savedMeals,
+              supplements: state.supplements,
+              calendarReminders: state.calendarReminders,
+            })
           })
         }
       },
@@ -1131,7 +1242,9 @@ export const useAppStore = create<AppStore>()(
 
         const state = get()
         if (state.user && !state.isDemoMode) {
-          void upsertCustomRecipe(state.user.id, normalizedRecipe)
+          enqueueCloudWrite(set, async () => {
+            await upsertCustomRecipe(state.user.id, normalizedRecipe)
+          })
         }
       },
 
@@ -1147,7 +1260,9 @@ export const useAppStore = create<AppStore>()(
 
         const state = get()
         if (state.user && !state.isDemoMode && syncedRecipe) {
-          void upsertCustomRecipe(state.user.id, syncedRecipe)
+          enqueueCloudWrite(set, async () => {
+            await upsertCustomRecipe(state.user.id, syncedRecipe)
+          })
         }
       },
 
@@ -1158,7 +1273,9 @@ export const useAppStore = create<AppStore>()(
 
         const state = get()
         if (state.user && !state.isDemoMode) {
-          void deleteCustomRecipeCloud(state.user.id, recipeId)
+          enqueueCloudWrite(set, async () => {
+            await deleteCustomRecipeCloud(state.user.id, recipeId)
+          })
         }
       },
 
@@ -1168,7 +1285,9 @@ export const useAppStore = create<AppStore>()(
 
         const state = get()
         if (state.user && !state.isDemoMode) {
-          void upsertMealPlan(state.user.id, normalizedPlan)
+          enqueueCloudWrite(set, async () => {
+            await upsertMealPlan(state.user.id, normalizedPlan)
+          })
         }
       },
 
@@ -1178,7 +1297,9 @@ export const useAppStore = create<AppStore>()(
 
         const state = get()
         if (state.user && !state.isDemoMode) {
-          void upsertGroceryList(state.user.id, normalizedList)
+          enqueueCloudWrite(set, async () => {
+            await upsertGroceryList(state.user.id, normalizedList)
+          })
         }
       },
 
@@ -1193,7 +1314,9 @@ export const useAppStore = create<AppStore>()(
 
         const state = get()
         if (state.user && !state.isDemoMode && state.groceryList) {
-          void upsertGroceryList(state.user.id, state.groceryList)
+          enqueueCloudWrite(set, async () => {
+            await upsertGroceryList(state.user.id, state.groceryList!)
+          })
         }
       },
 
@@ -1218,7 +1341,9 @@ export const useAppStore = create<AppStore>()(
 
         const state = get()
         if (state.user && !state.isDemoMode && state.groceryList) {
-          void upsertGroceryList(state.user.id, state.groceryList)
+          enqueueCloudWrite(set, async () => {
+            await upsertGroceryList(state.user.id, state.groceryList!)
+          })
         }
       },
 
@@ -1232,7 +1357,9 @@ export const useAppStore = create<AppStore>()(
 
         const state = get()
         if (state.user && !state.isDemoMode && state.groceryList) {
-          void upsertGroceryList(state.user.id, state.groceryList)
+          enqueueCloudWrite(set, async () => {
+            await upsertGroceryList(state.user.id, state.groceryList!)
+          })
         }
       },
 
@@ -1248,7 +1375,9 @@ export const useAppStore = create<AppStore>()(
 
         const state = get()
         if (state.user && !state.isDemoMode && state.groceryList) {
-          void upsertGroceryList(state.user.id, state.groceryList)
+          enqueueCloudWrite(set, async () => {
+            await upsertGroceryList(state.user.id, state.groceryList!)
+          })
         }
       },
 
@@ -1262,7 +1391,9 @@ export const useAppStore = create<AppStore>()(
 
         const state = get()
         if (state.user && !state.isDemoMode && state.groceryList) {
-          void upsertGroceryList(state.user.id, state.groceryList)
+          enqueueCloudWrite(set, async () => {
+            await upsertGroceryList(state.user.id, state.groceryList!)
+          })
         }
       },
 
@@ -1270,7 +1401,9 @@ export const useAppStore = create<AppStore>()(
         set({ groceryList: null })
         const state = get()
         if (state.user && !state.isDemoMode) {
-          void clearGroceryListCloud(state.user.id)
+          enqueueCloudWrite(set, async () => {
+            await clearGroceryListCloud(state.user.id)
+          })
         }
       },
 
@@ -1306,7 +1439,9 @@ export const useAppStore = create<AppStore>()(
 
         const state = get()
         if (state.user && !state.isDemoMode && state.weeklyMealPlan) {
-          void upsertMealPlan(state.user.id, state.weeklyMealPlan)
+          enqueueCloudWrite(set, async () => {
+            await upsertMealPlan(state.user.id, state.weeklyMealPlan!)
+          })
         }
       },
 
@@ -1331,7 +1466,9 @@ export const useAppStore = create<AppStore>()(
 
         const state = get()
         if (state.user && !state.isDemoMode && state.weeklyMealPlan) {
-          void upsertMealPlan(state.user.id, state.weeklyMealPlan)
+          enqueueCloudWrite(set, async () => {
+            await upsertMealPlan(state.user.id, state.weeklyMealPlan!)
+          })
         }
       },
 
@@ -1351,7 +1488,9 @@ export const useAppStore = create<AppStore>()(
 
         const state = get()
         if (state.user && !state.isDemoMode && state.weeklyMealPlan) {
-          void upsertMealPlan(state.user.id, state.weeklyMealPlan)
+          enqueueCloudWrite(set, async () => {
+            await upsertMealPlan(state.user.id, state.weeklyMealPlan!)
+          })
         }
       },
 
@@ -1363,10 +1502,12 @@ export const useAppStore = create<AppStore>()(
 
         const state = get()
         if (state.user && !state.isDemoMode) {
-          void saveMetadataCloudState(state.user.id, {
-            savedMeals: state.savedMeals,
-            supplements: state.supplements,
-            calendarReminders: state.calendarReminders,
+          enqueueCloudWrite(set, async () => {
+            await saveMetadataCloudState(state.user.id, {
+              savedMeals: state.savedMeals,
+              supplements: state.supplements,
+              calendarReminders: state.calendarReminders,
+            })
           })
         }
       },
@@ -1382,10 +1523,12 @@ export const useAppStore = create<AppStore>()(
 
         const state = get()
         if (state.user && !state.isDemoMode) {
-          void saveMetadataCloudState(state.user.id, {
-            savedMeals: state.savedMeals,
-            supplements: state.supplements,
-            calendarReminders: state.calendarReminders,
+          enqueueCloudWrite(set, async () => {
+            await saveMetadataCloudState(state.user.id, {
+              savedMeals: state.savedMeals,
+              supplements: state.supplements,
+              calendarReminders: state.calendarReminders,
+            })
           })
         }
       },
@@ -1397,10 +1540,12 @@ export const useAppStore = create<AppStore>()(
 
         const state = get()
         if (state.user && !state.isDemoMode) {
-          void saveMetadataCloudState(state.user.id, {
-            savedMeals: state.savedMeals,
-            supplements: state.supplements,
-            calendarReminders: state.calendarReminders,
+          enqueueCloudWrite(set, async () => {
+            await saveMetadataCloudState(state.user.id, {
+              savedMeals: state.savedMeals,
+              supplements: state.supplements,
+              calendarReminders: state.calendarReminders,
+            })
           })
         }
       },
@@ -1424,10 +1569,12 @@ export const useAppStore = create<AppStore>()(
 
         const state = get()
         if (state.user && !state.isDemoMode) {
-          void saveMetadataCloudState(state.user.id, {
-            savedMeals: state.savedMeals,
-            supplements: state.supplements,
-            calendarReminders: state.calendarReminders,
+          enqueueCloudWrite(set, async () => {
+            await saveMetadataCloudState(state.user.id, {
+              savedMeals: state.savedMeals,
+              supplements: state.supplements,
+              calendarReminders: state.calendarReminders,
+            })
           })
         }
       },
@@ -1438,10 +1585,12 @@ export const useAppStore = create<AppStore>()(
 
         const state = get()
         if (state.user && !state.isDemoMode) {
-          void saveMetadataCloudState(state.user.id, {
-            savedMeals: state.savedMeals,
-            supplements: state.supplements,
-            calendarReminders: state.calendarReminders,
+          enqueueCloudWrite(set, async () => {
+            await saveMetadataCloudState(state.user.id, {
+              savedMeals: state.savedMeals,
+              supplements: state.supplements,
+              calendarReminders: state.calendarReminders,
+            })
           })
         }
       },
@@ -1453,10 +1602,12 @@ export const useAppStore = create<AppStore>()(
 
         const state = get()
         if (state.user && !state.isDemoMode) {
-          void saveMetadataCloudState(state.user.id, {
-            savedMeals: state.savedMeals,
-            supplements: state.supplements,
-            calendarReminders: state.calendarReminders,
+          enqueueCloudWrite(set, async () => {
+            await saveMetadataCloudState(state.user.id, {
+              savedMeals: state.savedMeals,
+              supplements: state.supplements,
+              calendarReminders: state.calendarReminders,
+            })
           })
         }
       },
@@ -1466,10 +1617,12 @@ export const useAppStore = create<AppStore>()(
 
         const state = get()
         if (state.user && !state.isDemoMode) {
-          void saveMetadataCloudState(state.user.id, {
-            savedMeals: state.savedMeals,
-            supplements: state.supplements,
-            calendarReminders: state.calendarReminders,
+          enqueueCloudWrite(set, async () => {
+            await saveMetadataCloudState(state.user.id, {
+              savedMeals: state.savedMeals,
+              supplements: state.supplements,
+              calendarReminders: state.calendarReminders,
+            })
           })
         }
       },
@@ -1483,7 +1636,9 @@ export const useAppStore = create<AppStore>()(
 
         const state = get()
         if (state.user && !state.isDemoMode) {
-          void upsertWorkoutLog(state.user.id, normalizedLog)
+          enqueueCloudWrite(set, async () => {
+            await upsertWorkoutLog(state.user.id, normalizedLog)
+          })
         }
       },
 
@@ -1499,7 +1654,9 @@ export const useAppStore = create<AppStore>()(
 
         const state = get()
         if (state.user && !state.isDemoMode && syncedLog) {
-          void upsertWorkoutLog(state.user.id, syncedLog)
+          enqueueCloudWrite(set, async () => {
+            await upsertWorkoutLog(state.user.id, syncedLog)
+          })
         }
       },
 
@@ -1510,7 +1667,9 @@ export const useAppStore = create<AppStore>()(
 
         const state = get()
         if (state.user && !state.isDemoMode) {
-          void deleteWorkoutLogCloud(state.user.id, logId)
+          enqueueCloudWrite(set, async () => {
+            await deleteWorkoutLogCloud(state.user.id, logId)
+          })
         }
       },
 
@@ -1522,7 +1681,9 @@ export const useAppStore = create<AppStore>()(
 
         const state = get()
         if (state.user && !state.isDemoMode) {
-          void upsertCustomWorkout(state.user.id, workout)
+          enqueueCloudWrite(set, async () => {
+            await upsertCustomWorkout(state.user.id, workout)
+          })
         }
       },
 
@@ -1539,7 +1700,9 @@ export const useAppStore = create<AppStore>()(
 
         const state = get()
         if (state.user && !state.isDemoMode && syncedWorkout) {
-          void upsertCustomWorkout(state.user.id, syncedWorkout)
+          enqueueCloudWrite(set, async () => {
+            await upsertCustomWorkout(state.user.id, syncedWorkout)
+          })
         }
       },
 
@@ -1658,6 +1821,7 @@ export const useAppStore = create<AppStore>()(
         weeklyMealPlan: state.weeklyMealPlan,
         groceryList: state.groceryList,
         streak: state.streak,
+        lastSyncedAt: state.lastSyncedAt,
       }),
     }
   )
