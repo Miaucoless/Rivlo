@@ -11,6 +11,8 @@ import { Label } from '@/components/ui/label'
 import { finalizePasswordRecoverySession, requestPasswordReset, updatePassword } from '@/lib/auth'
 import { toast } from 'sonner'
 
+const CANONICAL_APP_ORIGIN = process.env.NEXT_PUBLIC_APP_URL || 'https://rivorafit.com'
+
 function ResetPasswordPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -40,11 +42,34 @@ function ResetPasswordPageContent() {
   }, [])
 
   useEffect(() => {
+    if (typeof window === 'undefined' || !isRecoveryMode) return
+
+    const canonicalOrigin = CANONICAL_APP_ORIGIN.replace(/\/$/, '')
+    const currentOrigin = window.location.origin.replace(/\/$/, '')
+
+    if (!canonicalOrigin || canonicalOrigin === currentOrigin) return
+
+    const nextUrl = new URL(window.location.pathname + window.location.search + window.location.hash, canonicalOrigin)
+    window.location.replace(nextUrl.toString())
+  }, [isRecoveryMode])
+
+  useEffect(() => {
     let cancelled = false
 
     void (async () => {
       if (!isRecoveryMode) {
         setRecoveryChecked(true)
+        return
+      }
+
+      const canonicalOrigin = typeof window !== 'undefined'
+        ? CANONICAL_APP_ORIGIN.replace(/\/$/, '')
+        : ''
+      const currentOrigin = typeof window !== 'undefined'
+        ? window.location.origin.replace(/\/$/, '')
+        : ''
+
+      if (canonicalOrigin && currentOrigin && canonicalOrigin !== currentOrigin) {
         return
       }
 

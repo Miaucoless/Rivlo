@@ -6,6 +6,8 @@ import { useAppStore } from '@/store/useAppStore'
 import LandingPage from '@/components/landing/LandingPage'
 import { useAuthInit } from '@/hooks/useAuthInit'
 
+const CANONICAL_APP_ORIGIN = process.env.NEXT_PUBLIC_APP_URL || 'https://rivorafit.com'
+
 function HomePageContent() {
   const { isAuthenticated, isDemoMode } = useAppStore()
   const router = useRouter()
@@ -26,6 +28,15 @@ function HomePageContent() {
         Boolean(hashParams.get('refresh_token'))
 
       if (hasRecoveryQuery || hasRecoveryHash) {
+        const canonicalOrigin = CANONICAL_APP_ORIGIN.replace(/\/$/, '')
+        const currentOrigin = window.location.origin.replace(/\/$/, '')
+
+        if (canonicalOrigin && canonicalOrigin !== currentOrigin) {
+          const recoveryUrl = new URL(window.location.pathname + window.location.search + window.location.hash, canonicalOrigin)
+          window.location.replace(recoveryUrl.toString())
+          return
+        }
+
         const nextUrl = new URL('/reset-password', window.location.origin)
 
         if (hasRecoveryQuery) {

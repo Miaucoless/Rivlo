@@ -39,7 +39,13 @@ export function createClient() {
 
   return createBrowserClient(
     url,
-    key
+    key,
+    {
+      auth: {
+        flowType: 'implicit',
+        detectSessionInUrl: true,
+      },
+    }
   )
 }
 

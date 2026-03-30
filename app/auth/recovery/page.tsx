@@ -3,12 +3,23 @@
 import { Suspense, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 
+const CANONICAL_APP_ORIGIN = process.env.NEXT_PUBLIC_APP_URL || 'https://rivorafit.com'
+
 function RecoveryBridgeContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
   useEffect(() => {
     if (typeof window === 'undefined') return
+
+    const canonicalOrigin = CANONICAL_APP_ORIGIN.replace(/\/$/, '')
+    const currentOrigin = window.location.origin.replace(/\/$/, '')
+
+    if (canonicalOrigin && canonicalOrigin !== currentOrigin) {
+      const nextUrl = new URL(window.location.pathname + window.location.search + window.location.hash, canonicalOrigin)
+      window.location.replace(nextUrl.toString())
+      return
+    }
 
     const nextUrl = new URL('/reset-password', window.location.origin)
 

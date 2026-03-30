@@ -104,8 +104,9 @@ export async function signInWithEmail(
 export async function requestPasswordReset(email: string): Promise<AuthResponse> {
   try {
     const supabase = createClient()
-    const origin = typeof window !== 'undefined' ? window.location.origin : ''
-    const redirectTo = origin ? `${origin}/reset-password` : undefined
+    const configuredOrigin = process.env.NEXT_PUBLIC_APP_URL?.trim()
+    const appOrigin = configuredOrigin || 'https://rivorafit.com'
+    const redirectTo = appOrigin ? `${appOrigin}/auth/recovery` : undefined
 
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo,
