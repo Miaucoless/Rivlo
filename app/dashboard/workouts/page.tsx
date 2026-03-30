@@ -2065,9 +2065,8 @@ function ActiveWorkoutModal({
       return next
     })
 
-    if (toggledToCompleted && !startedAt) {
-      setStartedAt(new Date().toISOString())
-    } else if (!toggledToCompleted && remainingCompletedSets === 0) {
+    // Reset the duration timer if all sets are unchecked
+    if (!toggledToCompleted && remainingCompletedSets === 0) {
       setStartedAt(null)
     }
 
@@ -2308,6 +2307,8 @@ function ActiveWorkoutModal({
           durationSeconds={liveDurationSeconds}
           restSeconds={restRemainingSeconds}
           progress={progress}
+          isTimerStarted={startedAt !== null}
+          onStartTimer={() => setStartedAt(new Date().toISOString())}
           onSkipRest={() => setRestEndsAtMs(null)}
         />
         <div className="min-w-0 flex-1 overflow-y-auto px-3 pb-3 sm:px-6 sm:pb-6">
@@ -2636,6 +2637,8 @@ function ActiveWorkoutModal({
         <WorkoutTimerBar
           durationSeconds={liveDurationSeconds}
           restSeconds={restRemainingSeconds}
+          isTimerStarted={startedAt !== null}
+          onStartTimer={() => setStartedAt(new Date().toISOString())}
           onSkipRest={() => setRestEndsAtMs(null)}
         />
       </div>

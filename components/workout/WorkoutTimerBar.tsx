@@ -5,6 +5,8 @@ import { useEffect, useRef, useState } from 'react'
 interface WorkoutTimerBarProps {
   durationSeconds: number
   restSeconds: number
+  isTimerStarted: boolean
+  onStartTimer: () => void
   onSkipRest: () => void
 }
 
@@ -16,7 +18,7 @@ function formatTime(totalSeconds: number): string {
   return `${m}:${String(s).padStart(2, '0')}`
 }
 
-export function WorkoutTimerBar({ durationSeconds, restSeconds, onSkipRest }: WorkoutTimerBarProps) {
+export function WorkoutTimerBar({ durationSeconds, restSeconds, isTimerStarted, onStartTimer, onSkipRest }: WorkoutTimerBarProps) {
   const [collapsed, setCollapsed] = useState(false)
   const prevRestRef = useRef(0)
   const restActive = restSeconds > 0
@@ -38,7 +40,11 @@ export function WorkoutTimerBar({ durationSeconds, restSeconds, onSkipRest }: Wo
           restActive ? 'border-amber-400/40' : 'border-border/40'
         }`}
       >
-        <span className="font-mono text-xs font-bold text-emerald-400">{formatTime(durationSeconds)}</span>
+        {isTimerStarted ? (
+          <span className="font-mono text-xs font-bold text-emerald-400">{formatTime(durationSeconds)}</span>
+        ) : (
+          <span className="text-[10px] font-semibold text-emerald-400/70">▶ Start</span>
+        )}
         {restActive && (
           <>
             <span className="text-[10px] text-muted-foreground">·</span>
@@ -57,17 +63,29 @@ export function WorkoutTimerBar({ durationSeconds, restSeconds, onSkipRest }: Wo
       }`}
     >
       <div className="flex items-center gap-3.5">
-        <div className="text-center">
-          <p className="font-mono text-base font-bold leading-none text-emerald-400">{formatTime(durationSeconds)}</p>
-          <p className="mt-0.5 text-[7px] uppercase tracking-[0.1em] text-muted-foreground">Duration</p>
-        </div>
-        <div className="h-7 w-px bg-border/40" />
-        <div className="text-center">
-          <p className={`font-mono text-base font-bold leading-none ${restActive ? 'text-amber-400' : 'text-muted-foreground'}`}>
-            {restActive ? formatTime(restSeconds) : '—'}
-          </p>
-          <p className="mt-0.5 text-[7px] uppercase tracking-[0.1em] text-muted-foreground">Rest</p>
-        </div>
+        {isTimerStarted ? (
+          <>
+            <div className="text-center">
+              <p className="font-mono text-base font-bold leading-none text-emerald-400">{formatTime(durationSeconds)}</p>
+              <p className="mt-0.5 text-[7px] uppercase tracking-[0.1em] text-muted-foreground">Duration</p>
+            </div>
+            <div className="h-7 w-px bg-border/40" />
+            <div className="text-center">
+              <p className={`font-mono text-base font-bold leading-none ${restActive ? 'text-amber-400' : 'text-muted-foreground'}`}>
+                {restActive ? formatTime(restSeconds) : '—'}
+              </p>
+              <p className="mt-0.5 text-[7px] uppercase tracking-[0.1em] text-muted-foreground">Rest</p>
+            </div>
+          </>
+        ) : (
+          <button
+            type="button"
+            onClick={onStartTimer}
+            className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-[10px] font-semibold text-emerald-400 transition-colors hover:bg-emerald-500/20"
+          >
+            ▶ Start Timer
+          </button>
+        )}
       </div>
       <div className="flex items-center gap-1.5">
         {restActive && (

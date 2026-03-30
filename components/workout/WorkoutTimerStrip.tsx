@@ -4,6 +4,8 @@ interface WorkoutTimerStripProps {
   durationSeconds: number
   restSeconds: number
   progress: number       // 0–100
+  isTimerStarted: boolean
+  onStartTimer: () => void
   onSkipRest: () => void
 }
 
@@ -17,7 +19,7 @@ function formatTime(totalSeconds: number): string {
 
 const CIRCUMFERENCE = 2 * Math.PI * 24 // ≈ 150.796
 
-export function WorkoutTimerStrip({ durationSeconds, restSeconds, progress, onSkipRest }: WorkoutTimerStripProps) {
+export function WorkoutTimerStrip({ durationSeconds, restSeconds, progress, isTimerStarted, onStartTimer, onSkipRest }: WorkoutTimerStripProps) {
   const restActive = restSeconds > 0
   const durationOffset = CIRCUMFERENCE * (1 - progress / 100)
   // Rest ring: half-filled when active (decorative indicator), empty when idle
@@ -36,17 +38,32 @@ export function WorkoutTimerStrip({ durationSeconds, restSeconds, progress, onSk
               cx="30" cy="30" r="24" fill="none"
               stroke="currentColor" strokeWidth="4"
               strokeDasharray={CIRCUMFERENCE}
-              strokeDashoffset={durationOffset}
+              strokeDashoffset={isTimerStarted ? durationOffset : CIRCUMFERENCE}
               strokeLinecap="round"
-              className="text-emerald-500 transition-all duration-1000"
+              className={isTimerStarted ? 'text-emerald-500 transition-all duration-1000' : 'text-border/20'}
             />
           </svg>
-          <span className="absolute font-mono text-[11px] font-bold text-emerald-400">
-            {formatTime(durationSeconds)}
-          </span>
+          {isTimerStarted ? (
+            <span className="absolute font-mono text-[11px] font-bold text-emerald-400">
+              {formatTime(durationSeconds)}
+            </span>
+          ) : (
+            <span className="absolute text-[9px] text-muted-foreground/50">—</span>
+          )}
         </div>
         <p className="text-[8px] uppercase tracking-[0.1em] text-muted-foreground">Duration</p>
       </div>
+
+      {/* Start button — shown only before timer is running */}
+      {!isTimerStarted && (
+        <button
+          type="button"
+          onClick={onStartTimer}
+          className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2 py-1.5 text-[9px] font-semibold text-emerald-400 transition-colors hover:bg-emerald-500/20"
+        >
+          ▶ Start
+        </button>
+      )}
 
       <div className="h-px w-14 bg-border/40" />
 
