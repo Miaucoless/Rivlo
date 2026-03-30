@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  BookOpen, CheckCircle, ChevronDown, ChevronUp, Circle, Copy, Dumbbell, Pencil, Play, PlayCircle, Plus, Search,
+  BookOpen, CheckCircle, ChevronDown, ChevronUp, Circle, Copy, Dumbbell, Eye, Pencil, Play, PlayCircle, Plus, Search,
   SlidersHorizontal, Sparkles, Trash2, Trophy, X, Share2,
 } from 'lucide-react'
 import { ShareModal } from '@/components/sharing/ShareModal'
@@ -21,7 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { useAppStore } from '@/store/useAppStore'
-import { EXERCISE_LIBRARY, WORKOUTS } from '@/lib/mock-data'
+import { EXERCISE_LIBRARY, WORKOUTS } from '@/lib/content-library'
 import { EXERCISE_CLASSIFICATIONS } from '@/lib/exercise-classifications'
 import type { Exercise, ExerciseLibraryItem, ExerciseSetMetric, Gender, MuscleGroup, UserProfile, Workout, WorkoutExercise, WorkoutSet, WorkoutSplit } from '@/types'
 import { cn, formatVolumeValue, getTodayISO, getWeightUnitLabel, kgToLbs, lbsToKg } from '@/lib/utils'
@@ -833,12 +833,14 @@ function SavedWorkoutCard({
   workout,
   averageDurationMin,
   onStart,
+  onPreview,
   onEdit,
   onDelete,
 }: {
   workout: Workout
   averageDurationMin?: number
   onStart: (workout: Workout) => void
+  onPreview: (workout: Workout) => void
   onEdit: (workout: Workout) => void
   onDelete?: (workout: Workout) => void
 }) {
@@ -898,6 +900,9 @@ function SavedWorkoutCard({
           <Play className="h-4 w-4 fill-current" />
           Start Workout
         </Button>
+        <Button variant="outline" size="icon" onClick={() => onPreview(workout)} title="Preview workout">
+          <Eye className="h-4 w-4" />
+        </Button>
         <Button variant="outline" size="icon" onClick={() => setShowShare(true)} title="Share workout">
           <Share2 className="h-4 w-4" />
         </Button>
@@ -932,6 +937,93 @@ function SavedWorkoutCard({
         itemData={workout as unknown as Record<string, unknown>}
       />
     </div>
+  )
+}
+
+function WorkoutPreviewDialog({
+  workout,
+  averageDurationMin,
+  onClose,
+}: {
+  workout: Workout | null
+  averageDurationMin?: number
+  onClose: () => void
+}) {
+  return (
+    <Dialog open={!!workout} onOpenChange={(open) => { if (!open) onClose() }}>
+      {workout && (
+        <DialogContent className="max-h-[90vh] w-[calc(100vw-1rem)] max-w-2xl overflow-y-auto overflow-x-hidden p-4 sm:p-6">
+          <DialogHeader>
+            <DialogTitle>{workout.name}</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="outline" className="capitalize">{workout.source || 'premade'}</Badge>
+                <Badge variant="outline" className="capitalize">{workout.difficulty}</Badge>
+                {workout.day_label && (
+                  <span className="text-xs uppercase tracking-[0.14em] text-muted-foreground">{workout.day_label}</span>
+                )}
+              </div>
+              <p className="text-sm text-muted-foreground">{workout.description}</p>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2">
+              <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5">
+                <p className="font-data text-lg font-semibold">{workout.exercises.length}</p>
+                <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Exercises</p>
+              </div>
+              <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5">
+                <p className="font-data text-lg font-semibold">{formatAverageWorkoutTime(averageDurationMin ?? workout.estimated_duration_min)}</p>
+                <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Time</p>
+              </div>
+              <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5">
+                <p className="font-data text-lg font-semibold">{workout.muscle_groups.length}</p>
+                <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Focus</p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {workout.exercises.map((exercise, exerciseIndex) => (
+                <div key={`${workout.id}-${exercise.exercise.id}-${exerciseIndex}`} className="rounded-xl border border-border/60 overflow-hidden">
+                  <div className="border-b border-border/40 bg-muted/20 px-3 py-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm font-semibold">{exercise.exercise.name}</p>
+                      <span className="text-[11px] text-muted-foreground">{exercise.sets.length} set{exercise.sets.length !== 1 ? 's' : ''}</span>
+                    </div>
+                  </div>
+                  <div className="px-3 py-2">
+                    <div className="grid grid-cols-3 text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5 px-1">
+                      <span>Set</span>
+                      <span className="text-center">{getSetMetricLabel(exercise.exercise)}</span>
+                      <span className="text-right">Weight</span>
+                    </div>
+                    <div className="space-y-1">
+                      {exercise.sets.map((set) => (
+                        <div
+                          key={`${exercise.exercise.id}-${set.set_number}-${set.drop_set_index ?? 'base'}`}
+                          className={getDropSetRowClass(
+                            'grid grid-cols-3 items-center rounded-lg border border-transparent bg-background/60 px-2 py-1.5 text-xs',
+                            set,
+                          )}
+                        >
+                          <span className={cn('font-medium', getDropSetLabelClass(set))}>{getSetDisplayName(set)}</span>
+                          <span className="text-center font-data font-semibold tabular-nums">{set.reps}</span>
+                          <span className="text-right font-data tabular-nums text-muted-foreground">
+                            {set.weight_kg && set.weight_kg > 0 ? `${Math.round(set.weight_kg)} kg` : 'BW'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </DialogContent>
+      )}
+    </Dialog>
   )
 }
 
@@ -2565,6 +2657,7 @@ export default function WorkoutsPage() {
   } = useAppStore()
 
   const [previewExercise, setPreviewExercise] = useState<Exercise | null>(null)
+  const [previewWorkout, setPreviewWorkout] = useState<Workout | null>(null)
   const [tab, setTab] = useState<'log' | 'saved'>('log')
   const [runningWorkout, setRunningWorkout] = useState<Workout | null>(null)
   const [activeWorkoutSession, setActiveWorkoutSession] = useState<PersistedActiveWorkoutSession | null>(null)
@@ -4070,6 +4163,7 @@ export default function WorkoutsPage() {
                       </div>
 
                       <div className="overflow-hidden rounded-xl border border-border/50">
+                        <div className="overflow-x-auto">
                         {inputMode === 'treadmill' ? (
                           <div className="grid grid-cols-[80px_1fr_1fr_1fr_1fr_auto] gap-2 border-b border-border/40 bg-muted/20 px-3 py-2 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
                             <span>Set</span>
@@ -4205,6 +4299,7 @@ export default function WorkoutsPage() {
                             </div>
                           )
                         ))}
+                        </div>
                       </div>
 
                       <div className="mt-3 flex flex-wrap gap-2">
@@ -4249,7 +4344,7 @@ export default function WorkoutsPage() {
 
                   return (
                   <div key={log.id} className="rounded-2xl border border-border/60 bg-card p-4">
-                    <div className="flex items-start justify-between gap-3">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-semibold">{log.workout.name}</p>
                         <p className="mt-1 text-xs text-muted-foreground">
@@ -4260,7 +4355,7 @@ export default function WorkoutsPage() {
                           <span>Finished: <span className="font-medium text-foreground/85">{finishedTime}</span></span>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
                         <Button variant="outline" size="sm" onClick={() => loadLoggedWorkoutForEdit(log.id)}>
                           Edit
                         </Button>
@@ -4425,7 +4520,7 @@ export default function WorkoutsPage() {
               ) : (
                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                   {filteredSavedWorkouts.map((workout) => (
-                    <SavedWorkoutCard key={workout.id} workout={workout} averageDurationMin={averageDurationByWorkoutId.get(workout.id)} onStart={startWorkout} onEdit={(item) => { setEditingWorkout(item); setBuilderOpen(true) }} onDelete={handleDeleteWorkout} />
+                    <SavedWorkoutCard key={workout.id} workout={workout} averageDurationMin={averageDurationByWorkoutId.get(workout.id)} onStart={startWorkout} onPreview={setPreviewWorkout} onEdit={(item) => { setEditingWorkout(item); setBuilderOpen(true) }} onDelete={handleDeleteWorkout} />
                   ))}
                 </div>
               )}
@@ -4665,6 +4760,11 @@ export default function WorkoutsPage() {
         )}
       </Dialog>
 
+      <WorkoutPreviewDialog
+        workout={previewWorkout}
+        averageDurationMin={previewWorkout ? averageDurationByWorkoutId.get(previewWorkout.id) : undefined}
+        onClose={() => setPreviewWorkout(null)}
+      />
       <ExercisePreviewDialog exercise={previewExercise} onClose={() => setPreviewExercise(null)} />
     </div>
   )

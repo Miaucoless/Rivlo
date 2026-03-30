@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase'
 import type { CalendarReminder, GroceryList, JournalEntry, Recipe, SavedMealTemplate, SupplementEntry, WaterEntry, WeightEntry, WeeklyMealPlan, Workout, WorkoutLog } from '@/types'
-import type { MealLogEntry } from '@/lib/mock-data'
+import type { MealLogEntry } from '@/lib/content-library'
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 

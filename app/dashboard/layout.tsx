@@ -18,16 +18,19 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode
 }) {
-  const { isAuthenticated, sidebarCollapsed, syncNow } = useAppStore()
+  const { isAuthenticated, sidebarCollapsed, syncNow, user } = useAppStore()
   const isMobile = useIsMobile()
   const router = useRouter()
   const { loading } = useAuthInit()
 
   useEffect(() => {
-    if (!loading && !isAuthenticated) {
+    if (loading) return
+    if (!isAuthenticated) {
       router.replace('/login')
+    } else if (user && !user.onboarded) {
+      router.replace('/onboarding')
     }
-  }, [isAuthenticated, loading, router])
+  }, [isAuthenticated, loading, router, user])
 
   useEffect(() => {
     if (loading || !isAuthenticated) return
@@ -82,7 +85,7 @@ export default function DashboardLayout({
     )
   }
 
-  if (!isAuthenticated) return null
+  if (!isAuthenticated || (user && !user.onboarded)) return null
 
   return (
     <div className="relative flex min-h-screen overflow-hidden bg-background md:h-screen md:min-h-0">

@@ -34,7 +34,7 @@ import {
   TODAY_MEALS,
   TODAY_TOTALS,
   type MealLogEntry,
-} from '@/lib/mock-data'
+} from '@/lib/content-library'
 import {
   clearGroceryListCloud,
   deleteCustomWorkoutCloud,

@@ -105,7 +105,7 @@ export async function requestPasswordReset(email: string): Promise<AuthResponse>
   try {
     const supabase = createClient()
     const origin = typeof window !== 'undefined' ? window.location.origin : ''
-    const redirectTo = origin ? `${origin}/reset-password` : undefined
+    const redirectTo = origin ? `${origin}/auth/recovery` : undefined
 
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo,

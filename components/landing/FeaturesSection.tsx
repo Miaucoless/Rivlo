@@ -1,8 +1,7 @@
 'use client'
 
 import { useRef } from 'react'
-import { motion } from 'framer-motion'
-import { useScroll, useTransform } from 'framer-motion'
+import { motion, useMotionTemplate, useScroll, useTransform } from 'framer-motion'
 import { CheckCircle2 } from 'lucide-react'
 
 type FeatureTone = 'emerald' | 'amber' | 'sky' | 'rose' | 'teal' | 'violet'
@@ -515,13 +514,24 @@ function FeatureRow({ feature, index }: { feature: Feature; index: number }) {
     [0, 0.12, 0.24, 0.5, 0.76, 0.88, 1],
     [0.38, 0.62, 0.96, 1, 0.96, 0.62, 0.38]
   )
+  const blur = useTransform(
+    scrollYProgress,
+    [0, 0.14, 0.24, 0.5, 0.76, 0.86, 1],
+    [7, 4, 0, 0, 0, 4, 7]
+  )
+  const scale = useTransform(
+    scrollYProgress,
+    [0, 0.18, 0.3, 0.5, 0.7, 0.82, 1],
+    [0.975, 0.988, 1, 1, 1, 0.988, 0.975]
+  )
+  const filter = useMotionTemplate`blur(${blur}px)`
 
   return (
     <motion.article
       ref={rowRef}
       whileHover={{ opacity: 1 }}
       transition={{ duration: 0.22 }}
-      style={{ opacity }}
+      style={{ opacity, scale, filter }}
       className="py-8 md:py-10"
     >
       <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,0.78fr)_minmax(0,1fr)] lg:gap-14">

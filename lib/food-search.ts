@@ -3889,8 +3889,8 @@ const CUSTOM_FOOD_CATALOG: FoodCatalogItem[] = [
   default_serving_label: 'Grande 16 oz',
   grams_per_serving: 473,
   macros_per_serving: {
-    calories: 180,
-    protein_g: 26,
+    calories: 230,
+    protein_g: 27,
     carbs_g: 12,
     fat_g: 5
   }

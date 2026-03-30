@@ -21,10 +21,10 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useAppStore, type SavedMealTemplate } from '@/store/useAppStore'
 import { getTodayISO } from '@/lib/utils'
-import { RECIPES } from '@/lib/mock-data'
+import { RECIPES } from '@/lib/content-library'
 import type { Recipe, PlannedSlot, CustomMealIngredient } from '@/types'
 import { generateGroceryItems, categorizeIngredient, estimatePrice } from '@/lib/grocery-generator'
-import type { MealLogEntry } from '@/lib/mock-data'
+import type { MealLogEntry } from '@/lib/content-library'
 import {
   type FoodCatalogItem,
   getKnownFoodCatalog,
@@ -1039,6 +1039,7 @@ function MealEditorModal({
   const [manualCarbs, setManualCarbs] = useState('')
   const [manualFat, setManualFat] = useState('')
   const [manualItems, setManualItems] = useState<ManualItemRow[]>([])
+  const [manualSaveAsTemplate, setManualSaveAsTemplate] = useState(false)
   // Ingredient-only list for editing saved meal templates (no macros)
   const [savedMealIngredients, setSavedMealIngredients] = useState<Array<{ id: string; name: string; amount: number | null; unit: string; macros?: { calories: number; protein_g: number; carbs_g: number; fat_g: number } }>>([])
   const [savedMealIngName, setSavedMealIngName] = useState('')
@@ -1547,6 +1548,7 @@ function MealEditorModal({
       setManualCarbs(String(editingSavedMeal.macros.carbs_g))
       setManualFat(String(editingSavedMeal.macros.fat_g))
       setManualItems([])
+      setManualSaveAsTemplate(false)
       setSavedMealIngredients(
         editingSavedMeal.items.map((item) => ({
           id: `ing-${Math.random().toString(36).slice(2)}`,
@@ -1619,6 +1621,7 @@ function MealEditorModal({
       setManualProtein(editSource === 'manual' ? String(editingMeal.macros.protein_g) : '')
       setManualCarbs(editSource === 'manual' ? String(editingMeal.macros.carbs_g) : '')
       setManualFat(editSource === 'manual' ? String(editingMeal.macros.fat_g) : '')
+      setManualSaveAsTemplate(false)
       setManualItems(
         editSource !== 'manual'
           ? []
@@ -1675,6 +1678,7 @@ function MealEditorModal({
       setManualCarbs('')
       setManualFat('')
       setManualItems([])
+      setManualSaveAsTemplate(false)
     }
   }, [editingMeal, editingSavedMeal, initialMealType, open])
 
@@ -1919,6 +1923,15 @@ function MealEditorModal({
 
         onOpenChange(false)
         return
+      }
+
+      if (manualSaveAsTemplate) {
+        onSaveTemplate({
+          name: finalName,
+          meal_type: mealType,
+          macros: finalMacros,
+          items: manualTemplateItems,
+        })
       }
 
       onSave({
@@ -2735,6 +2748,31 @@ function MealEditorModal({
                   Add item to meal
                 </Button>
               </div>
+              )}
+
+              {!editingSavedMeal && (
+                <button
+                  type="button"
+                  onClick={() => setManualSaveAsTemplate((value) => !value)}
+                  className={`w-full rounded-lg border px-3 py-2.5 text-sm transition-colors ${
+                    manualSaveAsTemplate
+                      ? 'border-emerald-500 bg-emerald-500/10 text-emerald-300'
+                      : 'border-border text-muted-foreground hover:text-foreground hover:bg-accent'
+                  }`}
+                >
+                  {manualSaveAsTemplate ? '✓ Add to Saved Meals enabled' : 'Add to Saved Meals'}
+                </button>
+              )}
+
+              {!editingSavedMeal && manualSaveAsTemplate && (
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Saved meal name</Label>
+                  <Input
+                    value={manualMealName}
+                    onChange={(e) => setManualMealName(e.target.value)}
+                    placeholder="e.g. Manual high-protein lunch"
+                  />
+                </div>
               )}
 
               {!editingSavedMeal && manualItems.length > 0 ? (
