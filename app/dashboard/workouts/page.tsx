@@ -9,6 +9,8 @@ import {
   BookOpen, CheckCircle, ChevronDown, ChevronUp, Circle, Copy, Dumbbell, Eye, Pencil, Play, PlayCircle, Plus, Search,
   SlidersHorizontal, Sparkles, Trash2, Trophy, X, Share2,
 } from 'lucide-react'
+import { WorkoutTimerBar } from '@/components/workout/WorkoutTimerBar'
+import { WorkoutTimerStrip } from '@/components/workout/WorkoutTimerStrip'
 import { ShareModal } from '@/components/sharing/ShareModal'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -112,6 +114,19 @@ function formatAverageWorkoutTime(durationMin?: number) {
 
   if (hours > 0) return `${hours}h ${minutes}m`
   return `${minutes} min`
+}
+
+function formatElapsedSeconds(totalSeconds: number) {
+  const safeSeconds = Math.max(0, Math.floor(totalSeconds))
+  const hours = Math.floor(safeSeconds / 3600)
+  const minutes = Math.floor((safeSeconds % 3600) / 60)
+  const seconds = safeSeconds % 60
+
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+  }
+
+  return `${minutes}:${String(seconds).padStart(2, '0')}`
 }
 
 function isCardioExercise(exercise: WorkoutExercise['exercise']) {
@@ -1718,7 +1733,7 @@ function ActiveWorkoutModal({
   onClose: () => void
   onPause: () => void
   onSessionChange: (exercises: ActiveExercise[], startedAt?: string | null) => void
-  onComplete: (payload: { exercises: ActiveExercise[]; caloriesBurned: number; totalVolumeKg: number; durationMin: number }, options?: { saveAsTemplate?: boolean }) => void
+  onComplete: (payload: { exercises: ActiveExercise[]; caloriesBurned: number; totalVolumeKg: number; durationMin: number }, options?: { saveAsTemplate?: boolean; templateName?: string }) => void
 }) {
   // Build a lookup of most recent performance per exercise id
   const lastPerformance = useMemo(() => {
@@ -1748,6 +1763,10 @@ function ActiveWorkoutModal({
   const [timeUnits, setTimeUnits] = useState<Record<string, 'sec' | 'min'>>({})
   const [previewExercise, setPreviewExercise] = useState<Exercise | null>(null)
   const [startedAt, setStartedAt] = useState<string | null>(initialStartedAt ?? null)
+  const [nowMs, setNowMs] = useState(() => Date.now())
+  const [restEndsAtMs, setRestEndsAtMs] = useState<number | null>(null)
+  const [showSaveRoutineName, setShowSaveRoutineName] = useState(false)
+  const [saveRoutineName, setSaveRoutineName] = useState(`${workout.name} (${getTodayISO()})`)
 
   const getTimeUnit = (key: string, defaultUnit: 'sec' | 'min') => timeUnits[key] ?? defaultUnit
   const toggleTimeUnit = (key: string, defaultUnit: 'sec' | 'min') =>
@@ -1795,8 +1814,28 @@ function ActiveWorkoutModal({
     const hasCompletedSet = exercises.some((exercise) => exercise.sets.some((set) => set.completed))
     if (!hasCompletedSet) {
       setStartedAt(null)
+      setRestEndsAtMs(null)
     }
   }, [exercises])
+
+  useEffect(() => {
+    setSaveRoutineName(`${workout.name} (${getTodayISO()})`)
+    setShowSaveRoutineName(false)
+  }, [workout.id, workout.name])
+
+  useEffect(() => {
+    if (!startedAt && !restEndsAtMs) return
+    const timer = window.setInterval(() => {
+      setNowMs(Date.now())
+    }, 1000)
+    return () => window.clearInterval(timer)
+  }, [startedAt, restEndsAtMs])
+
+  useEffect(() => {
+    if (restEndsAtMs && restEndsAtMs <= nowMs) {
+      setRestEndsAtMs(null)
+    }
+  }, [nowMs, restEndsAtMs])
 
   useEffect(() => {
     onSessionChange(exercises, startedAt)
@@ -1805,6 +1844,13 @@ function ActiveWorkoutModal({
   const completedSets = exercises.flatMap((exercise) => exercise.sets).filter((set) => set.completed).length
   const totalSets = exercises.flatMap((exercise) => exercise.sets).length
   const progress = totalSets > 0 ? Math.round((completedSets / totalSets) * 100) : 0
+  const liveDurationSeconds = useMemo(() => {
+    if (!startedAt) return 0
+    const startedMs = new Date(startedAt).getTime()
+    if (Number.isNaN(startedMs)) return 0
+    return Math.max(0, Math.floor((nowMs - startedMs) / 1000))
+  }, [nowMs, startedAt])
+  const restRemainingSeconds = restEndsAtMs ? Math.max(0, Math.ceil((restEndsAtMs - nowMs) / 1000)) : 0
   const liveSuggestions = useMemo(() => {
     const query = exerciseSearch.trim()
     if (query.length < 1) return []
@@ -1998,6 +2044,7 @@ function ActiveWorkoutModal({
   const toggleSet = (exerciseIndex: number, setIndex: number) => {
     let toggledToCompleted = false
     let remainingCompletedSets = 0
+    let restSecondsForSet = 0
 
     setExercises((current) => {
       const next = current.map((exercise, currentExerciseIndex) =>
@@ -2008,6 +2055,7 @@ function ActiveWorkoutModal({
                 if (currentSetIndex !== setIndex) return set
                 const nextCompleted = !set.completed
                 toggledToCompleted = nextCompleted
+                restSecondsForSet = Math.max(0, Number(set.rest_seconds) || 0)
                 return { ...set, completed: nextCompleted }
               }),
             }
@@ -2021,6 +2069,12 @@ function ActiveWorkoutModal({
       setStartedAt(new Date().toISOString())
     } else if (!toggledToCompleted && remainingCompletedSets === 0) {
       setStartedAt(null)
+    }
+
+    if (toggledToCompleted && restSecondsForSet > 0) {
+      setRestEndsAtMs(Date.now() + restSecondsForSet * 1000)
+    } else if (!toggledToCompleted) {
+      setRestEndsAtMs(null)
     }
   }
 
@@ -2101,7 +2155,7 @@ function ActiveWorkoutModal({
     return 'weight training'
   }
 
-  const handleCompleteWorkout = async (options?: { saveAsTemplate?: boolean }) => {
+  const handleCompleteWorkout = async (options?: { saveAsTemplate?: boolean; templateName?: string }) => {
     if (exercises.length === 0) {
       toast.error('Add at least one exercise before completing this workout.')
       return
@@ -2244,13 +2298,21 @@ function ActiveWorkoutModal({
   )
 
   return (
-    <DialogContent className="max-h-[92vh] w-[calc(100vw-1rem)] max-w-3xl overflow-x-hidden overflow-y-auto p-3 sm:p-6">
-      <DialogHeader>
+    <DialogContent className="flex max-h-[92vh] w-[calc(100vw-1rem)] max-w-3xl flex-col overflow-hidden p-0">
+      <DialogHeader className="flex-shrink-0 px-3 pb-0 pt-3 sm:px-6 sm:pt-6">
         <DialogTitle>{workout.name}</DialogTitle>
       </DialogHeader>
 
-      <div className="space-y-5">
-        <div className="grid grid-cols-3 gap-2">
+      <div className="relative flex min-h-0 flex-1">
+        <WorkoutTimerStrip
+          durationSeconds={liveDurationSeconds}
+          restSeconds={restRemainingSeconds}
+          progress={progress}
+          onSkipRest={() => setRestEndsAtMs(null)}
+        />
+        <div className="min-w-0 flex-1 overflow-y-auto px-3 pb-3 sm:px-6 sm:pb-6">
+          <div className="space-y-5 pb-16 sm:pb-0">
+            <div className="grid grid-cols-2 gap-2">
           <div className="rounded-2xl border border-border/60 bg-card px-4 py-3">
             <p className="font-data text-2xl font-semibold">{progress}%</p>
             <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Progress</p>
@@ -2259,13 +2321,36 @@ function ActiveWorkoutModal({
             <p className="font-data text-2xl font-semibold">{summary.caloriesBurned}</p>
             <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Est. kcal</p>
           </div>
-          <div className="rounded-2xl border border-border/60 bg-card px-4 py-3">
-            <p className="font-data text-2xl font-semibold">{summary.durationMin}</p>
-            <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Est. min</p>
+          <div className="rounded-2xl border border-border/60 bg-card px-4 py-3 sm:hidden">
+            <p className="font-data text-2xl font-semibold">{formatElapsedSeconds(liveDurationSeconds)}</p>
+            <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Live timer</p>
+          </div>
+          <div className="rounded-2xl border border-border/60 bg-card px-4 py-3 sm:hidden">
+            <p className="font-data text-2xl font-semibold">{restRemainingSeconds > 0 ? formatElapsedSeconds(restRemainingSeconds) : '—'}</p>
+            <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Rest</p>
           </div>
         </div>
 
         <Progress value={progress} indicatorClassName="bg-emerald-500" className="h-1.5" />
+
+        {startedAt && (
+          <div className="rounded-2xl border border-border/60 bg-muted/10 px-4 py-3 sm:hidden">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="space-y-1">
+                <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Session timing</p>
+                <p className="text-sm text-foreground/90">
+                  Started {formatWorkoutTime(startedAt)}
+                  {restRemainingSeconds > 0 && <span className="text-muted-foreground"> · Rest ends in {formatElapsedSeconds(restRemainingSeconds)}</span>}
+                </p>
+              </div>
+              {restRemainingSeconds > 0 && (
+                <Button type="button" variant="outline" size="sm" onClick={() => setRestEndsAtMs(null)}>
+                  Skip Rest
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
 
         <div className="flex flex-col gap-2 sm:flex-row">
           <Button type="button" variant="outline" size="sm" onClick={() => setAllSetsCompletion(true)}>
@@ -2507,12 +2592,32 @@ function ActiveWorkoutModal({
 
         {renderExerciseAdder('Need one more?', 'Add another exercise here without scrolling back to the top.')}
 
+        <div className="rounded-2xl border border-border/60 bg-muted/10 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold">Saved workout name</p>
+              <p className="text-xs text-muted-foreground">Default keeps today&apos;s date, but you can rename it before saving.</p>
+            </div>
+            <Button type="button" variant="ghost" size="sm" onClick={() => setShowSaveRoutineName((current) => !current)}>
+              {showSaveRoutineName ? 'Hide' : 'Rename'}
+            </Button>
+          </div>
+          {showSaveRoutineName && (
+            <Input
+              className="mt-3"
+              value={saveRoutineName}
+              onChange={(e) => setSaveRoutineName(e.target.value)}
+              placeholder={`${workout.name} (${getTodayISO()})`}
+            />
+          )}
+        </div>
+
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
           <Button variant="outline" className="w-full sm:min-w-[80px] sm:flex-1" onClick={onPause}>Pause</Button>
           <Button
             variant="outline"
             className="w-full gap-2 sm:flex-1"
-            onClick={() => handleCompleteWorkout({ saveAsTemplate: true })}
+            onClick={() => handleCompleteWorkout({ saveAsTemplate: true, templateName: saveRoutineName.trim() || `${workout.name} (${getTodayISO()})` })}
             disabled={isCompleting}
           >
             {isCompleting ? <><span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" /> Saving…</> : <><Copy className="h-4 w-4" /> Complete & Save Routine</>}
@@ -2526,6 +2631,13 @@ function ActiveWorkoutModal({
             {isCompleting ? <><span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" /> Saving…</> : <><Trophy className="h-4 w-4" /> Complete Workout</>}
           </Button>
         </div>
+          </div>
+        </div>
+        <WorkoutTimerBar
+          durationSeconds={liveDurationSeconds}
+          restSeconds={restRemainingSeconds}
+          onSkipRest={() => setRestEndsAtMs(null)}
+        />
       </div>
       <ExercisePreviewDialog exercise={previewExercise} onClose={() => setPreviewExercise(null)} />
     </DialogContent>
@@ -3279,7 +3391,7 @@ export default function WorkoutsPage() {
       workout_id: workout.id,
       workout,
       date: getTodayISO(),
-      started_at: new Date().toISOString(),
+      started_at: new Date(Date.now() - Math.max(1, manualSummary.durationMin) * 60000).toISOString(),
       completed_at: new Date().toISOString(),
       duration_min: manualSummary.durationMin,
       calories_burned_kcal: manualSummary.caloriesBurned,
@@ -4724,10 +4836,11 @@ export default function WorkoutsPage() {
               })
 
               if (options?.saveAsTemplate) {
+                const resolvedTemplateName = options.templateName?.trim() || `${runningWorkout.name} (${getTodayISO()})`
                 const savedRoutine: Workout = {
                   ...performedWorkout,
                   id: `cw-${Date.now()}`,
-                  name: `${runningWorkout.name} (${getTodayISO()})`,
+                  name: resolvedTemplateName,
                   day_label: `Logged ${getTodayISO()}`,
                   description: 'Saved from a completed workout session.',
                   source: 'custom',
