@@ -243,6 +243,7 @@ function calculateActivityStreak(state: Pick<AppStore, 'weightHistory' | 'journa
 
 const pendingCloudWriteQueue: Array<() => Promise<void>> = []
 let flushingPendingCloudWrites = false
+let isHydratingFromCloud = false
 
 function isOfflineClient() {
   return typeof navigator !== 'undefined' && navigator.onLine === false
@@ -701,6 +702,12 @@ export const useAppStore = create<AppStore>()(
           return
         }
 
+        if (isHydratingFromCloud) {
+          console.log('⏭ Skipping hydration - already in progress')
+          return
+        }
+        isHydratingFromCloud = true
+
         try {
 
         set((state) => ({
@@ -847,6 +854,8 @@ export const useAppStore = create<AppStore>()(
         } catch (err) {
           console.error('Cloud hydration failed:', err)
           set({ syncStatus: 'error' })
+        } finally {
+          isHydratingFromCloud = false
         }
       },
 
@@ -1161,13 +1170,14 @@ export const useAppStore = create<AppStore>()(
           deletedSavedMealIds: state.deletedSavedMealIds.filter((id) => id !== meal.id),
         }))
 
-        const state = get()
-        if (state.user && !state.isDemoMode) {
+        const { user, isDemoMode } = get()
+        if (user && !isDemoMode) {
           enqueueCloudWrite(set, async () => {
-            await saveMetadataCloudState(state.user.id, {
-              savedMeals: state.savedMeals,
-              supplements: state.supplements,
-              calendarReminders: state.calendarReminders,
+            const s = get()
+            await saveMetadataCloudState(user.id, {
+              savedMeals: s.savedMeals,
+              supplements: s.supplements,
+              calendarReminders: s.calendarReminders,
             })
           })
         }
@@ -1183,13 +1193,14 @@ export const useAppStore = create<AppStore>()(
           deletedSavedMealIds: state.deletedSavedMealIds.filter((id) => id !== mealId),
         }))
 
-        const state = get()
-        if (state.user && !state.isDemoMode) {
+        const { user, isDemoMode } = get()
+        if (user && !isDemoMode) {
           enqueueCloudWrite(set, async () => {
-            await saveMetadataCloudState(state.user.id, {
-              savedMeals: state.savedMeals,
-              supplements: state.supplements,
-              calendarReminders: state.calendarReminders,
+            const s = get()
+            await saveMetadataCloudState(user.id, {
+              savedMeals: s.savedMeals,
+              supplements: s.supplements,
+              calendarReminders: s.calendarReminders,
             })
           })
         }
@@ -1512,13 +1523,14 @@ export const useAppStore = create<AppStore>()(
           supplements: [normalizedSupplement, ...state.supplements],
         }))
 
-        const state = get()
-        if (state.user && !state.isDemoMode) {
+        const { user, isDemoMode } = get()
+        if (user && !isDemoMode) {
           enqueueCloudWrite(set, async () => {
-            await saveMetadataCloudState(state.user.id, {
-              savedMeals: state.savedMeals,
-              supplements: state.supplements,
-              calendarReminders: state.calendarReminders,
+            const s = get()
+            await saveMetadataCloudState(user.id, {
+              savedMeals: s.savedMeals,
+              supplements: s.supplements,
+              calendarReminders: s.calendarReminders,
             })
           })
         }
@@ -1533,13 +1545,14 @@ export const useAppStore = create<AppStore>()(
           ),
         }))
 
-        const state = get()
-        if (state.user && !state.isDemoMode) {
+        const { user, isDemoMode } = get()
+        if (user && !isDemoMode) {
           enqueueCloudWrite(set, async () => {
-            await saveMetadataCloudState(state.user.id, {
-              savedMeals: state.savedMeals,
-              supplements: state.supplements,
-              calendarReminders: state.calendarReminders,
+            const s = get()
+            await saveMetadataCloudState(user.id, {
+              savedMeals: s.savedMeals,
+              supplements: s.supplements,
+              calendarReminders: s.calendarReminders,
             })
           })
         }
@@ -1550,13 +1563,14 @@ export const useAppStore = create<AppStore>()(
           supplements: state.supplements.filter((supplement) => supplement.id !== supplementId),
         }))
 
-        const state = get()
-        if (state.user && !state.isDemoMode) {
+        const { user, isDemoMode } = get()
+        if (user && !isDemoMode) {
           enqueueCloudWrite(set, async () => {
-            await saveMetadataCloudState(state.user.id, {
-              savedMeals: state.savedMeals,
-              supplements: state.supplements,
-              calendarReminders: state.calendarReminders,
+            const s = get()
+            await saveMetadataCloudState(user.id, {
+              savedMeals: s.savedMeals,
+              supplements: s.supplements,
+              calendarReminders: s.calendarReminders,
             })
           })
         }
@@ -1579,13 +1593,14 @@ export const useAppStore = create<AppStore>()(
           }),
         }))
 
-        const state = get()
-        if (state.user && !state.isDemoMode) {
+        const { user, isDemoMode } = get()
+        if (user && !isDemoMode) {
           enqueueCloudWrite(set, async () => {
-            await saveMetadataCloudState(state.user.id, {
-              savedMeals: state.savedMeals,
-              supplements: state.supplements,
-              calendarReminders: state.calendarReminders,
+            const s = get()
+            await saveMetadataCloudState(user.id, {
+              savedMeals: s.savedMeals,
+              supplements: s.supplements,
+              calendarReminders: s.calendarReminders,
             })
           })
         }
@@ -1595,13 +1610,14 @@ export const useAppStore = create<AppStore>()(
         const normalizedReminder = { ...reminder, id: ensureUuid(reminder.id) }
         set((state) => ({ calendarReminders: [normalizedReminder, ...state.calendarReminders] }))
 
-        const state = get()
-        if (state.user && !state.isDemoMode) {
+        const { user, isDemoMode } = get()
+        if (user && !isDemoMode) {
           enqueueCloudWrite(set, async () => {
-            await saveMetadataCloudState(state.user.id, {
-              savedMeals: state.savedMeals,
-              supplements: state.supplements,
-              calendarReminders: state.calendarReminders,
+            const s = get()
+            await saveMetadataCloudState(user.id, {
+              savedMeals: s.savedMeals,
+              supplements: s.supplements,
+              calendarReminders: s.calendarReminders,
             })
           })
         }
@@ -1612,13 +1628,14 @@ export const useAppStore = create<AppStore>()(
           calendarReminders: state.calendarReminders.map((r) => r.id === id ? { ...r, ...updates } : r),
         }))
 
-        const state = get()
-        if (state.user && !state.isDemoMode) {
+        const { user, isDemoMode } = get()
+        if (user && !isDemoMode) {
           enqueueCloudWrite(set, async () => {
-            await saveMetadataCloudState(state.user.id, {
-              savedMeals: state.savedMeals,
-              supplements: state.supplements,
-              calendarReminders: state.calendarReminders,
+            const s = get()
+            await saveMetadataCloudState(user.id, {
+              savedMeals: s.savedMeals,
+              supplements: s.supplements,
+              calendarReminders: s.calendarReminders,
             })
           })
         }
@@ -1627,13 +1644,14 @@ export const useAppStore = create<AppStore>()(
       removeCalendarReminder: (id) => {
         set((state) => ({ calendarReminders: state.calendarReminders.filter((r) => r.id !== id) }))
 
-        const state = get()
-        if (state.user && !state.isDemoMode) {
+        const { user, isDemoMode } = get()
+        if (user && !isDemoMode) {
           enqueueCloudWrite(set, async () => {
-            await saveMetadataCloudState(state.user.id, {
-              savedMeals: state.savedMeals,
-              supplements: state.supplements,
-              calendarReminders: state.calendarReminders,
+            const s = get()
+            await saveMetadataCloudState(user.id, {
+              savedMeals: s.savedMeals,
+              supplements: s.supplements,
+              calendarReminders: s.calendarReminders,
             })
           })
         }

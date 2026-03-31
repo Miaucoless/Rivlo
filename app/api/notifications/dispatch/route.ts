@@ -38,7 +38,7 @@ function normalizeSupplements(value: unknown) {
   return Array.isArray(value) ? (value as SupplementEntry[]) : []
 }
 
-export async function POST(request: Request) {
+export async function GET(request: Request) {
   const cronSecret = process.env.CRON_SECRET
 
   if (!cronSecret) {

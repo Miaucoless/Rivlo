@@ -289,7 +289,7 @@ async function fetchOpenFoodFacts(query: string) {
 
 async function fetchUsdaFoods(query: string) {
   try {
-    const apiKey = process.env.USDA_API_KEY || process.env.NEXT_PUBLIC_USDA_API_KEY
+    const apiKey = process.env.USDA_API_KEY
     if (!apiKey) return []
 
     const response = await createTimeoutPromise(
@@ -373,7 +373,12 @@ async function fetchFatSecretFoods(query: string) {
       }),
       3000 // 3 second timeout
     )
-    if (!response || !response.ok) return []
+    if (!response) return []
+    if (response.status === 401) {
+      fatSecretAccessToken = null
+      return []
+    }
+    if (!response.ok) return []
 
     const payload = await response.json() as FatSecretResponse
     const foods = payload.foods?.food

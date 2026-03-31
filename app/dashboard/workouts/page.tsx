@@ -2043,27 +2043,24 @@ function ActiveWorkoutModal({
 
   const toggleSet = (exerciseIndex: number, setIndex: number) => {
     let toggledToCompleted = false
-    let remainingCompletedSets = 0
     let restSecondsForSet = 0
 
-    setExercises((current) => {
-      const next = current.map((exercise, currentExerciseIndex) =>
-        currentExerciseIndex === exerciseIndex
-          ? {
-              ...exercise,
-              sets: exercise.sets.map((set, currentSetIndex) => {
-                if (currentSetIndex !== setIndex) return set
-                const nextCompleted = !set.completed
-                toggledToCompleted = nextCompleted
-                restSecondsForSet = Math.max(0, Number(set.rest_seconds) || 0)
-                return { ...set, completed: nextCompleted }
-              }),
-            }
-          : exercise
-      )
-      remainingCompletedSets = next.flatMap((exercise) => exercise.sets).filter((set) => set.completed).length
-      return next
-    })
+    const nextExercises = exercises.map((exercise, currentExerciseIndex) =>
+      currentExerciseIndex === exerciseIndex
+        ? {
+            ...exercise,
+            sets: exercise.sets.map((set, currentSetIndex) => {
+              if (currentSetIndex !== setIndex) return set
+              const nextCompleted = !set.completed
+              toggledToCompleted = nextCompleted
+              restSecondsForSet = Math.max(0, Number(set.rest_seconds) || 0)
+              return { ...set, completed: nextCompleted }
+            }),
+          }
+        : exercise
+    )
+    const remainingCompletedSets = nextExercises.flatMap((e) => e.sets).filter((s) => s.completed).length
+    setExercises(nextExercises)
 
     // Reset the duration timer if all sets are unchecked
     if (!toggledToCompleted && remainingCompletedSets === 0) {
