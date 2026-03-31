@@ -7,7 +7,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Flame, Zap, Apple, Dumbbell, TrendingUp, Plus, ChevronRight,
+  Flame, Zap, Apple, Dumbbell, TrendingUp, Plus, ScanLine, Search,
   ChevronDown, ChevronUp, Sparkles,
 } from 'lucide-react'
 import {
@@ -21,10 +21,16 @@ import { Progress } from '@/components/ui/progress'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useAppStore } from '@/store/useAppStore'
 import { WaterIntakeCard } from '@/components/dashboard/WaterIntakeCard'
 import { DailyQuoteCard } from '@/components/dashboard/DailyQuoteCard'
+import { CodeScannerDialog } from '@/components/meals/CodeScannerDialog'
+import { getKnownFoodCatalog, primeFoodSearchCache } from '@/lib/food-search'
 import { buildWeeklyReview } from '@/lib/weekly-review'
+import type { BarcodeFoodLookupResult } from '@/lib/barcode-food'
+import type { FoodCatalogItem } from '@/lib/food-search'
+import type { SavedMealTemplate } from '@/types'
 import { cn, percentage, getTodayISO, formatCalories, formatWeightDelta, formatWeightValue, getWeightUnitLabel } from '@/lib/utils'
 import { toast } from 'sonner'
 
@@ -64,69 +70,537 @@ function getWorkoutSetRowClass(set: { set_type?: 'standard' | 'drop' }) {
   )
 }
 
+const DASHBOARD_MEAL_TYPES = ['breakfast', 'lunch', 'dinner', 'snack', 'drink'] as const
+type DashboardMealType = (typeof DASHBOARD_MEAL_TYPES)[number]
+
+function dashboardMealTypeLabel(type: DashboardMealType) {
+  switch (type) {
+    case 'breakfast':
+      return 'Breakfast'
+    case 'lunch':
+      return 'Lunch'
+    case 'dinner':
+      return 'Dinner'
+    case 'snack':
+      return 'Snack'
+    default:
+      return 'Drink'
+  }
+}
+
+function formatScannedFoodName(item: BarcodeFoodLookupResult) {
+  if (item.brand && !item.name.toLowerCase().startsWith(item.brand.toLowerCase())) {
+    return `${item.brand} ${item.name}`
+  }
+  return item.name
+}
+
+type DashboardSearchResult =
+  | { kind: 'food'; item: FoodCatalogItem; score: number }
+  | { kind: 'saved'; item: SavedMealTemplate; score: number }
+
+function normalizeDashboardSearch(text: string) {
+  return text.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim()
+}
+
+function scoreDashboardSearch(name: string, aliases: string[], query: string) {
+  const normalizedQuery = normalizeDashboardSearch(query)
+  if (!normalizedQuery) return 0
+
+  const queryTokens = normalizedQuery.split(' ').filter(Boolean)
+  const candidates = [name, ...aliases].map(normalizeDashboardSearch).filter(Boolean)
+
+  let bestScore = 0
+
+  candidates.forEach((candidate) => {
+    let score = 0
+
+    if (candidate === normalizedQuery) score += 120
+    if (candidate.startsWith(normalizedQuery)) score += 80
+    if (candidate.includes(normalizedQuery)) score += 50
+
+    const candidateTokens = candidate.split(' ').filter(Boolean)
+    const overlap = queryTokens.filter((token) => candidateTokens.includes(token)).length
+    score += overlap * 14
+
+    bestScore = Math.max(bestScore, score)
+  })
+
+  return bestScore
+}
+
 // Quick Add Meal Dialog
 function QuickAddMealDialog() {
   const [open, setOpen] = useState(false)
+  const [mode, setMode] = useState<'search' | 'manual' | 'saved' | 'scan'>('search')
+  const [mealType, setMealType] = useState<DashboardMealType>('snack')
+  const [selectedSavedMealId, setSelectedSavedMealId] = useState('')
+  const [scannerOpen, setScannerOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<DashboardSearchResult[]>([])
+  const [searchLoading, setSearchLoading] = useState(false)
   const [name, setName] = useState('')
   const [calories, setCalories] = useState('')
   const [protein, setProtein] = useState('')
-  const { addMealEntry } = useAppStore()
+  const [carbs, setCarbs] = useState('')
+  const [fat, setFat] = useState('')
+  const { addMealEntry, savedMeals } = useAppStore()
 
-  const handleAdd = () => {
+  const selectedSavedMeal = savedMeals.find((meal) => meal.id === selectedSavedMealId) ?? null
+
+  useEffect(() => {
+    if (!open) return
+    if (!selectedSavedMealId && savedMeals.length > 0) {
+      setSelectedSavedMealId(savedMeals[0].id)
+    }
+  }, [open, savedMeals, selectedSavedMealId])
+
+  useEffect(() => {
+    if (!open || mode !== 'search') return
+
+    const query = searchQuery.trim()
+    if (query.length < 2) {
+      setSearchResults([])
+      setSearchLoading(false)
+      return
+    }
+
+    let cancelled = false
+    setSearchLoading(true)
+
+    const timer = setTimeout(async () => {
+      await primeFoodSearchCache(query)
+      if (cancelled) return
+
+      const savedMatches = savedMeals
+        .map((meal) => ({
+          kind: 'saved' as const,
+          item: meal,
+          score: scoreDashboardSearch(
+            meal.name,
+            meal.items.map((item) => item.matched_name),
+            query,
+          ),
+        }))
+        .filter((result) => result.score > 0)
+
+      const foodMatches = getKnownFoodCatalog()
+        .map((item) => ({
+          kind: 'food' as const,
+          item,
+          score: scoreDashboardSearch(item.name, item.aliases, query),
+        }))
+        .filter((result) => result.score > 0)
+
+      setSearchResults(
+        [...savedMatches, ...foodMatches]
+          .sort((a, b) => b.score - a.score)
+          .slice(0, 10),
+      )
+      setSearchLoading(false)
+    }, 250)
+
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [mode, open, savedMeals, searchQuery])
+
+  const resetState = () => {
+    setMode('search')
+    setMealType('snack')
+    setSelectedSavedMealId(savedMeals[0]?.id ?? '')
+    setSearchQuery('')
+    setSearchResults([])
+    setSearchLoading(false)
+    setName('')
+    setCalories('')
+    setProtein('')
+    setCarbs('')
+    setFat('')
+  }
+
+  const handleAddManual = () => {
     if (!name || !calories) {
       toast.error('Please fill in at least a name and calories')
       return
     }
     addMealEntry(getTodayISO(), {
       id: `meal-${Date.now()}`,
-      meal_type: 'snack',
+      meal_type: mealType,
       name,
       macros: {
         calories: Number(calories),
         protein_g: Number(protein) || 0,
-        carbs_g: 0,
-        fat_g: 0,
+        carbs_g: Number(carbs) || 0,
+        fat_g: Number(fat) || 0,
       },
       time: format(new Date(), 'h:mm a'),
       recipe: null,
     })
-    toast.success(`${name} logged! +${calories} kcal`)
+    toast.success(`${name} added to ${dashboardMealTypeLabel(mealType).toLowerCase()}.`)
     setOpen(false)
-    setName('')
-    setCalories('')
-    setProtein('')
+    resetState()
+  }
+
+  const handleAddSavedMeal = () => {
+    if (!selectedSavedMeal) {
+      toast.error('Pick a saved meal first.')
+      return
+    }
+
+    addMealEntry(getTodayISO(), {
+      id: `meal-${Date.now()}`,
+      meal_type: mealType,
+      name: selectedSavedMeal.name,
+      macros: selectedSavedMeal.macros,
+      time: format(new Date(), 'h:mm a'),
+      recipe: null,
+      meal_items: selectedSavedMeal.items.map((item) => ({
+        name: item.matched_name,
+        macros: item.macros ?? { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 },
+        amount: item.amount,
+        unit: item.unit,
+      })),
+      entry_source: 'saved',
+      saved_meal_template_id: selectedSavedMeal.id,
+    })
+
+    toast.success(`${selectedSavedMeal.name} added to ${dashboardMealTypeLabel(mealType).toLowerCase()}.`)
+    setOpen(false)
+    resetState()
+  }
+
+  const handleAddCatalogSearchResult = (item: FoodCatalogItem) => {
+    addMealEntry(getTodayISO(), {
+      id: `meal-${Date.now()}`,
+      meal_type: mealType,
+      name: item.name,
+      macros: item.macros_per_serving,
+      time: format(new Date(), 'h:mm a'),
+      recipe: null,
+      meal_items: [
+        {
+          name: item.name,
+          macros: item.macros_per_serving,
+          amount: item.default_serving_amount,
+          unit: item.default_serving_unit,
+        },
+      ],
+      entry_source: 'search',
+    })
+
+    toast.success(`${item.name} added to ${dashboardMealTypeLabel(mealType).toLowerCase()}.`)
+    setOpen(false)
+    resetState()
+  }
+
+  const handleAddSearchResult = (result: DashboardSearchResult) => {
+    if (result.kind === 'saved') {
+      addMealEntry(getTodayISO(), {
+        id: `meal-${Date.now()}`,
+        meal_type: mealType,
+        name: result.item.name,
+        macros: result.item.macros,
+        time: format(new Date(), 'h:mm a'),
+        recipe: null,
+        meal_items: result.item.items.map((item) => ({
+          name: item.matched_name,
+          macros: item.macros ?? { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 },
+          amount: item.amount,
+          unit: item.unit,
+        })),
+        entry_source: 'saved',
+        saved_meal_template_id: result.item.id,
+      })
+
+      toast.success(`${result.item.name} added to ${dashboardMealTypeLabel(mealType).toLowerCase()}.`)
+      setOpen(false)
+      resetState()
+      return
+    }
+
+    handleAddCatalogSearchResult(result.item)
+  }
+
+  const handleAddScannedMeal = (item: BarcodeFoodLookupResult, targetMealType: DashboardMealType) => {
+    const displayName = formatScannedFoodName(item)
+
+    addMealEntry(getTodayISO(), {
+      id: `meal-${Date.now()}`,
+      meal_type: targetMealType,
+      name: displayName,
+      macros: item.macros,
+      time: format(new Date(), 'h:mm a'),
+      recipe: null,
+      meal_items: [
+        {
+          name: displayName,
+          macros: item.macros,
+          amount: item.serving_amount,
+          unit: item.serving_unit,
+        },
+      ],
+      entry_source: 'search',
+    })
+
+    toast.success(`${displayName} added to ${dashboardMealTypeLabel(targetMealType).toLowerCase()}.`)
+    setScannerOpen(false)
+    setOpen(false)
+    resetState()
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button size="sm" variant="outline" className="gap-1.5 text-xs">
-          <Plus className="w-3.5 h-3.5" /> Log Meal
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="max-w-sm">
-        <DialogHeader>
-          <DialogTitle>Quick Add Meal</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4 pt-2">
-          <div className="space-y-1.5">
-            <Label>Food name</Label>
-            <Input placeholder="e.g. Chicken breast" value={name} onChange={(e) => setName(e.target.value)} />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label>Calories</Label>
-              <Input type="number" placeholder="kcal" value={calories} onChange={(e) => setCalories(e.target.value)} />
+    <>
+      <Dialog
+        open={open}
+        onOpenChange={(nextOpen) => {
+          setOpen(nextOpen)
+          if (!nextOpen) resetState()
+        }}
+      >
+        <DialogTrigger asChild>
+          <Button size="sm" variant="outline" className="gap-1.5 text-xs">
+            <Plus className="w-3.5 h-3.5" /> Log Meal
+          </Button>
+        </DialogTrigger>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Log Meal</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="flex flex-wrap gap-2">
+              {([
+                { value: 'search', label: 'Search' },
+                { value: 'manual', label: 'Manual' },
+                { value: 'saved', label: 'Saved' },
+                { value: 'scan', label: 'Scan' },
+              ] as const).map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setMode(option.value)}
+                  className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                    mode === option.value
+                      ? 'border-primary/50 bg-primary/10 text-primary'
+                      : 'border-border/60 bg-muted/20 text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
             </div>
+
             <div className="space-y-1.5">
-              <Label>Protein (g)</Label>
-              <Input type="number" placeholder="optional" value={protein} onChange={(e) => setProtein(e.target.value)} />
+              <Label>Meal type</Label>
+              <Select value={mealType} onValueChange={(value) => setMealType(value as DashboardMealType)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {DASHBOARD_MEAL_TYPES.map((type) => (
+                    <SelectItem key={type} value={type}>
+                      {dashboardMealTypeLabel(type)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
+
+            {mode === 'search' && (
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <Label>Search meals or foods</Label>
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      className="pl-9"
+                      placeholder="Search chicken bowl, greek yogurt, banana..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Results add a single serving to today&apos;s {dashboardMealTypeLabel(mealType).toLowerCase()}.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  {searchQuery.trim().length < 2 ? (
+                    <div className="rounded-xl border border-dashed border-border/60 bg-muted/15 px-4 py-5 text-sm text-muted-foreground">
+                      Start typing to search foods and saved meals.
+                    </div>
+                  ) : searchLoading ? (
+                    <div className="rounded-xl border border-border/60 bg-muted/20 px-4 py-5 text-sm text-muted-foreground">
+                      Searching foods and meals...
+                    </div>
+                  ) : searchResults.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-border/60 bg-muted/15 px-4 py-5 text-sm text-muted-foreground">
+                      No matches yet. Try a simpler food name like &quot;eggs&quot; or &quot;turkey sandwich&quot;.
+                    </div>
+                  ) : (
+                    searchResults.map((result) => {
+                      const macros = result.kind === 'saved' ? result.item.macros : result.item.macros_per_serving
+                      const meta = result.kind === 'saved'
+                        ? `${result.item.items.length} ingredient${result.item.items.length === 1 ? '' : 's'}`
+                        : result.item.default_serving_label
+
+                      return (
+                        <button
+                          key={`${result.kind}-${result.item.id}`}
+                          type="button"
+                          onClick={() => handleAddSearchResult(result)}
+                          className="w-full rounded-xl border border-border/60 bg-muted/15 px-4 py-3 text-left transition-colors hover:border-primary/40 hover:bg-primary/[0.06]"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <p className="truncate text-sm font-semibold">{result.item.name}</p>
+                                <span className="rounded-full border border-border/60 bg-background/70 px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                                  {result.kind === 'saved' ? 'Saved' : 'Food'}
+                                </span>
+                              </div>
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                {meta}
+                              </p>
+                            </div>
+                            <div className="shrink-0 text-right">
+                              <p className="text-sm font-semibold">{Math.round(macros.calories)} cal</p>
+                              <p className="text-xs text-muted-foreground">{Math.round(macros.protein_g * 10) / 10}g protein</p>
+                            </div>
+                          </div>
+                        </button>
+                      )
+                    })
+                  )}
+                </div>
+              </div>
+            )}
+
+            {mode === 'saved' && (
+              <div className="space-y-4">
+                {savedMeals.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-border/60 bg-muted/15 px-4 py-5 text-sm text-muted-foreground">
+                    No saved meals yet. Build one in Meals, or use Manual or Scan Code here.
+                  </div>
+                ) : (
+                  <>
+                    <div className="space-y-1.5">
+                      <Label>Pick a saved meal</Label>
+                      <Select
+                        value={selectedSavedMealId}
+                        onValueChange={(value) => {
+                          setSelectedSavedMealId(value)
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Choose a meal" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {savedMeals.map((meal) => (
+                            <SelectItem key={meal.id} value={meal.id}>
+                              {meal.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {selectedSavedMeal ? (
+                      <div className="rounded-xl border border-border/60 bg-muted/20 px-4 py-3">
+                        <p className="text-sm font-semibold">{selectedSavedMeal.name}</p>
+                        <p className="mt-1 text-xs text-muted-foreground capitalize">
+                          {selectedSavedMeal.meal_type} · {selectedSavedMeal.items.length} ingredient{selectedSavedMeal.items.length === 1 ? '' : 's'}
+                        </p>
+                        <div className="mt-3 grid grid-cols-4 gap-2">
+                          {[
+                            { label: 'Cal', value: selectedSavedMeal.macros.calories },
+                            { label: 'Pro', value: `${selectedSavedMeal.macros.protein_g}g` },
+                            { label: 'Carb', value: `${selectedSavedMeal.macros.carbs_g}g` },
+                            { label: 'Fat', value: `${selectedSavedMeal.macros.fat_g}g` },
+                          ].map((macro) => (
+                            <div key={macro.label} className="rounded-lg border border-border/40 bg-background/60 px-2 py-2 text-center">
+                              <p className="font-data text-xs font-semibold">{macro.value}</p>
+                              <p className="text-[9px] uppercase tracking-wide text-muted-foreground">{macro.label}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    <Button className="w-full" variant="brand" onClick={handleAddSavedMeal}>
+                      Add Saved Meal
+                    </Button>
+                  </>
+                )}
+              </div>
+            )}
+
+            {mode === 'manual' && (
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <Label>Food name</Label>
+                  <Input placeholder="e.g. Chicken breast" value={name} onChange={(e) => setName(e.target.value)} />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label>Calories</Label>
+                    <Input type="number" placeholder="kcal" value={calories} onChange={(e) => setCalories(e.target.value)} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Protein (g)</Label>
+                    <Input type="number" placeholder="0" value={protein} onChange={(e) => setProtein(e.target.value)} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Carbs (g)</Label>
+                    <Input type="number" placeholder="0" value={carbs} onChange={(e) => setCarbs(e.target.value)} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Fat (g)</Label>
+                    <Input type="number" placeholder="0" value={fat} onChange={(e) => setFat(e.target.value)} />
+                  </div>
+                </div>
+                <Button className="w-full" variant="brand" onClick={handleAddManual}>
+                  Add Manually
+                </Button>
+              </div>
+            )}
+
+            {mode === 'scan' && (
+              <div className="space-y-4">
+                <div className="rounded-xl border border-border/60 bg-muted/20 px-4 py-4">
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                      <ScanLine className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold">Scan a barcode or QR code</p>
+                      <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                        Use your camera to look up a packaged food, then drop it straight into today&apos;s {dashboardMealTypeLabel(mealType).toLowerCase()}.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <Button className="w-full gap-2" variant="brand" onClick={() => setScannerOpen(true)}>
+                  <ScanLine className="h-4 w-4" />
+                  Open Scanner
+                </Button>
+              </div>
+            )}
           </div>
-          <Button className="w-full" variant="brand" onClick={handleAdd}>Add to Today</Button>
-        </div>
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
+
+      <CodeScannerDialog
+        open={scannerOpen}
+        onOpenChange={setScannerOpen}
+        initialTarget="today"
+        initialMealType={mealType}
+        lockTarget
+        onAddToToday={(item, targetMealType) => handleAddScannedMeal(item, targetMealType as DashboardMealType)}
+        onSaveMeal={() => undefined}
+      />
+    </>
   )
 }
 
@@ -288,7 +762,7 @@ export default function DashboardPage() {
         className="flex flex-col sm:flex-row sm:items-center justify-between gap-4"
       >
         <div>
-          <h2 className="text-xl sm:text-2xl font-bold">Good {getGreeting()}, {user.name.split(' ')[0]} 👋</h2>
+          <h2 className="text-xl sm:text-2xl font-bold">Good {getGreeting()}, {user.name.split(' ')[0]}</h2>
           <div className="mt-0.5 flex flex-wrap items-center gap-2">
             <p className="text-muted-foreground text-sm">
               {streak > 0 ? `${streak}-day streak — you're on fire! 🔥` : 'Start your streak today!'}
@@ -1064,10 +1538,6 @@ export default function DashboardPage() {
                   </div>
                 ))}
               </div>
-              <Button variant="outline" className="w-full gap-2" onClick={() => router.push('/dashboard/check-in')}>
-                Review the full check-in
-                <ChevronRight className="h-4 w-4" />
-              </Button>
             </CardContent>
           </Card>
 

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { deleteRedisKeys } from '@/lib/redis'
 import { getAuthUser, getServiceClient } from '@/lib/supabase-server'
-import type { GroceryItem, GroceryList } from '@/types'
+import type { GroceryItem, GroceryList, SavedMealTemplate } from '@/types'
 
 function inboxCacheKeys(userId: string) {
   return [
@@ -56,6 +56,60 @@ function normalizeGroceryListRow(row: Record<string, unknown>, userId: string): 
       items.reduce((sum, item) => sum + item.estimated_price, 0)
     ),
     created_at: typeof row.created_at === 'string' ? row.created_at : new Date().toISOString(),
+  }
+}
+
+function normalizeSavedMealTemplate(raw: unknown, fallbackName: string): SavedMealTemplate {
+  const meal = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {}
+  const rawItems = Array.isArray(meal.items) ? meal.items : []
+
+  return {
+    id: typeof meal.id === 'string' && meal.id ? meal.id : crypto.randomUUID(),
+    name: typeof meal.name === 'string' && meal.name.trim() ? meal.name.trim() : fallbackName,
+    meal_type:
+      meal.meal_type === 'breakfast' ||
+      meal.meal_type === 'lunch' ||
+      meal.meal_type === 'dinner' ||
+      meal.meal_type === 'snack' ||
+      meal.meal_type === 'drink'
+        ? meal.meal_type
+        : 'lunch',
+    macros: {
+      calories: parseNumber((meal.macros as Record<string, unknown> | undefined)?.calories, 0),
+      protein_g: parseNumber((meal.macros as Record<string, unknown> | undefined)?.protein_g, 0),
+      carbs_g: parseNumber((meal.macros as Record<string, unknown> | undefined)?.carbs_g, 0),
+      fat_g: parseNumber((meal.macros as Record<string, unknown> | undefined)?.fat_g, 0),
+    },
+    items: rawItems.map((item) => {
+      const rawItem = item && typeof item === 'object' ? item as Record<string, unknown> : {}
+      const matchedName =
+        typeof rawItem.matched_name === 'string' && rawItem.matched_name.trim()
+          ? rawItem.matched_name.trim()
+          : typeof rawItem.name === 'string' && rawItem.name.trim()
+            ? rawItem.name.trim()
+            : typeof rawItem.input === 'string' && rawItem.input.trim()
+              ? rawItem.input.trim()
+              : 'Item'
+
+      return {
+        input:
+          typeof rawItem.input === 'string' && rawItem.input.trim()
+            ? rawItem.input.trim()
+            : matchedName,
+        matched_name: matchedName,
+        amount: parseNumber(rawItem.amount, 1),
+        unit: typeof rawItem.unit === 'string' && rawItem.unit.trim() ? rawItem.unit.trim() : 'serving',
+        macros: rawItem.macros && typeof rawItem.macros === 'object'
+          ? {
+              calories: parseNumber((rawItem.macros as Record<string, unknown>).calories, 0),
+              protein_g: parseNumber((rawItem.macros as Record<string, unknown>).protein_g, 0),
+              carbs_g: parseNumber((rawItem.macros as Record<string, unknown>).carbs_g, 0),
+              fat_g: parseNumber((rawItem.macros as Record<string, unknown>).fat_g, 0),
+            }
+          : undefined,
+      }
+    }),
+    updated_at: typeof meal.updated_at === 'string' && meal.updated_at ? meal.updated_at : new Date().toISOString(),
   }
 }
 
@@ -148,6 +202,32 @@ export async function POST(
 
   if (existing) {
     let existingImportedItem: Record<string, unknown> | null = null
+    if (item.item_type === 'saved_meal' && typeof existing.result_id === 'string') {
+      const { data: appStateRow } = await db
+        .from('user_app_state')
+        .select('saved_meals')
+        .eq('user_id', user.id)
+        .maybeSingle()
+
+      const existingSavedMeals = Array.isArray(appStateRow?.saved_meals) ? appStateRow.saved_meals : []
+      const matchingMeal = existingSavedMeals.find((meal) => (meal as { id?: string }).id === existing.result_id)
+      if (matchingMeal && typeof matchingMeal === 'object') {
+        existingImportedItem = normalizeSavedMealTemplate(matchingMeal, item.item_name) as unknown as Record<string, unknown>
+      }
+    }
+
+    if (item.item_type === 'workout' && typeof existing.result_id === 'string') {
+      const { data: existingWorkout } = await db
+        .from('workout_templates')
+        .select('id, name, description, day_label, muscle_groups, exercises, estimated_duration_min, difficulty, split_type, source, updated_at')
+        .eq('id', existing.result_id)
+        .maybeSingle()
+
+      if (existingWorkout && typeof existingWorkout === 'object') {
+        existingImportedItem = existingWorkout as Record<string, unknown>
+      }
+    }
+
     if (item.item_type === 'grocery_list' && typeof existing.result_id === 'string') {
       const { data: existingList } = await db
         .from('grocery_lists')
@@ -238,27 +318,18 @@ export async function POST(
       updated_at: inserted.updated_at,
     } : null
   } else if (item.item_type === 'saved_meal') {
-    const newMeal = {
+    const newMeal = normalizeSavedMealTemplate({
       ...data,
       id: crypto.randomUUID(),
-      name: typeof data.name === 'string' ? data.name : item.item_name,
-      meal_type: typeof data.meal_type === 'string' ? data.meal_type : 'lunch',
-      macros: typeof data.macros === 'object' && data.macros ? data.macros : {
-        calories: 0,
-        protein_g: 0,
-        carbs_g: 0,
-        fat_g: 0,
-      },
-      items: Array.isArray(data.items) ? data.items : [],
       updated_at: new Date().toISOString(),
-    }
+    }, item.item_name)
     try {
-      await mergeSavedMealIntoUserState(db, user.id, newMeal)
+      await mergeSavedMealIntoUserState(db, user.id, newMeal as unknown as Record<string, unknown>)
     } catch (error) {
       return NextResponse.json({ error: error instanceof Error ? error.message : 'Could not save imported meal' }, { status: 500 })
     }
-    resultId = newMeal.id as string
-    importedItem = newMeal
+    resultId = newMeal.id
+    importedItem = newMeal as unknown as Record<string, unknown>
   } else if (item.item_type === 'grocery_list') {
     const sharedItems = Array.isArray(data.items)
       ? data.items.map((sharedItem) => normalizeGroceryItem(sharedItem, true))

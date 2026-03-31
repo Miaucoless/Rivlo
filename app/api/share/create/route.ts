@@ -11,6 +11,7 @@ export async function POST(req: NextRequest) {
   }
 
   const db = getServiceClient()
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || req.nextUrl.origin
 
   // Retry up to 3x on token collision
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -21,7 +22,7 @@ export async function POST(req: NextRequest) {
       .single()
 
     if (!error && data) {
-      const url = `${process.env.NEXT_PUBLIC_APP_URL}/share/${data.share_token}`
+      const url = `${appUrl}/share/${data.share_token}`
       return NextResponse.json({ share_id: data.id, token: data.share_token, url })
     }
     // only retry on unique constraint violation

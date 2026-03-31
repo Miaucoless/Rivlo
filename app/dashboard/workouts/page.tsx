@@ -958,10 +958,12 @@ function SavedWorkoutCard({
 function WorkoutPreviewDialog({
   workout,
   averageDurationMin,
+  unitSystem,
   onClose,
 }: {
   workout: Workout | null
   averageDurationMin?: number
+  unitSystem: UnitSystem
   onClose: () => void
 }) {
   return (
@@ -1026,7 +1028,9 @@ function WorkoutPreviewDialog({
                           <span className={cn('font-medium', getDropSetLabelClass(set))}>{getSetDisplayName(set)}</span>
                           <span className="text-center font-data font-semibold tabular-nums">{set.reps}</span>
                           <span className="text-right font-data tabular-nums text-muted-foreground">
-                            {set.weight_kg && set.weight_kg > 0 ? `${Math.round(set.weight_kg)} kg` : 'BW'}
+                            {set.weight_kg && set.weight_kg > 0
+                              ? `${unitSystem === 'imperial' ? Math.round(kgToLbs(set.weight_kg)) : Math.round(set.weight_kg)} ${getWeightUnitLabel(unitSystem)}`
+                              : 'BW'}
                           </span>
                         </div>
                       ))}
@@ -4876,6 +4880,7 @@ export default function WorkoutsPage() {
       <WorkoutPreviewDialog
         workout={previewWorkout}
         averageDurationMin={previewWorkout ? averageDurationByWorkoutId.get(previewWorkout.id) : undefined}
+        unitSystem={unitSystem}
         onClose={() => setPreviewWorkout(null)}
       />
       <ExercisePreviewDialog exercise={previewExercise} onClose={() => setPreviewExercise(null)} />

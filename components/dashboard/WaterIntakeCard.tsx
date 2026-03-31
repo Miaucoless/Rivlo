@@ -35,14 +35,14 @@ function fmtUnit(ml: number, unit: WaterUnit): string {
 
 // ─── Quick-add presets per unit ──────────────────────────────────────────────
 
-const QUICK_ADDS: Record<WaterUnit, Array<{ label: string; ml: number }>> = {
+const QUICK_ADDS: Record<WaterUnit, Array<{ label: string; ml: number; sublabel?: string }>> = {
   ml: [
     { label: '+250', ml: 250 },
     { label: '+500', ml: 500 },
   ],
   oz: [
     { label: '+8 oz', ml: 237 },
-    { label: '+16 oz', ml: 473 },
+    { label: '+16.9 oz', sublabel: 'Water Bottle', ml: 500 },
   ],
   l: [
     { label: '+0.25 L', ml: 250 },
@@ -236,18 +236,23 @@ export function WaterIntakeCard() {
 
           {/* Quick-add buttons */}
           <div className="flex gap-1.5">
-            {quickAdds.map(({ label, ml }) => (
+            {quickAdds.map(({ label, sublabel, ml }) => (
               <button
                 key={label}
                 onClick={() => handleQuickAdd(ml)}
-                className="flex-1 text-xs py-1.5 rounded-lg border border-border bg-card text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                className="flex flex-1 flex-col items-center justify-center rounded-lg border border-border bg-card px-2 py-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               >
-                {label}
+                <span className="text-xs font-medium leading-tight">{label}</span>
+                {sublabel ? (
+                  <span className="mt-0.5 text-[9px] leading-tight text-muted-foreground/80">
+                    {sublabel}
+                  </span>
+                ) : null}
               </button>
             ))}
             <button
               onClick={() => setModalOpen(true)}
-              className="flex-1 text-xs py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-medium transition-colors"
+              className="flex flex-1 items-center justify-center rounded-lg bg-sky-600 px-2 py-1.5 text-xs font-medium text-white transition-colors hover:bg-sky-500"
             >
               + Custom
             </button>

@@ -13,6 +13,7 @@ import { motion } from 'framer-motion'
 import { useAppStore } from '@/store/useAppStore'
 import { formatDate } from '@/lib/utils'
 import { toast } from 'sonner'
+import { useIsMobile } from '@/hooks/useIsMobile'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -25,7 +26,7 @@ import {
 } from '@/components/ui/dialog'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { createClient } from '@/lib/supabase'
-import type { SavedMealTemplate } from '@/types'
+import type { GroceryList, SavedMealTemplate } from '@/types'
 
 type Friendship = {
   id: string
@@ -44,7 +45,6 @@ async function getToken(): Promise<string | null> {
 
 const PAGE_TITLES: Record<string, string> = {
   '/dashboard/dashboard': 'Dashboard',
-  '/dashboard/check-in': 'Weekly Check-In',
   '/dashboard/meals': 'Meal Planning',
   '/dashboard/workouts': 'Workouts',
   '/dashboard/tracking': 'Progress Tracking',
@@ -57,7 +57,6 @@ const PAGE_TITLES: Record<string, string> = {
 
 const SEARCH_ITEMS = [
   { href: '/dashboard/dashboard', title: 'Dashboard', description: 'See your daily overview, streaks, and progress snapshot.', keywords: ['home', 'overview', 'summary', 'stats'] },
-  { href: '/dashboard/check-in', title: 'Weekly Check-In', description: 'Review your week, see your best next move, and reset the plan when needed.', keywords: ['weekly review', 'reset', 'recap', 'recovery'] },
   { href: '/dashboard/meals', title: 'Meal Planning', description: 'Log meals, search foods, and manage saved meal templates.', keywords: ['food', 'nutrition', 'calories', 'macros'] },
   { href: '/dashboard/workouts', title: 'Workouts', description: 'Search exercises, run sessions, and manage custom routines.', keywords: ['training', 'exercise', 'lift', 'gym'] },
   { href: '/dashboard/tracking', title: 'Progress Tracking', description: 'Track body metrics, habits, and long-term trends.', keywords: ['progress', 'metrics', 'body', 'check-in'] },
@@ -70,9 +69,11 @@ const SEARCH_ITEMS = [
 export function TopBar() {
   const router = useRouter()
   const pathname = usePathname()
+  const isMobile = useIsMobile()
   const { resolvedTheme, setTheme } = useTheme()
   const {
     user,
+    sidebarCollapsed,
     notifications,
     markNotificationRead,
     markAllNotificationsRead,
@@ -85,6 +86,7 @@ export function TopBar() {
     pendingCloudWrites,
     flushPendingCloudWrites,
     addSavedMeal,
+    setGroceryList,
   } = useAppStore()
   const [isPending, startTransition] = useTransition()
   const [isSearchOpen, setIsSearchOpen] = useState(false)
@@ -209,6 +211,9 @@ export function TopBar() {
         if (data.item_type === 'saved_meal' && data.imported_item) {
           addSavedMeal(data.imported_item as SavedMealTemplate)
         }
+        if (data.item_type === 'grocery_list' && data.imported_item) {
+          setGroceryList(data.imported_item as GroceryList)
+        }
         setImportedIds((prev) => { const n = new Set(prev); n.add(notifId); return n })
         markNotificationRead(notifId)
         toast.success(data.already_imported ? 'Already saved to your account.' : 'Saved to your account!')
@@ -312,7 +317,9 @@ export function TopBar() {
 
   return (
     <>
-      <header
+      <motion.header
+        animate={{ left: isMobile ? 0 : sidebarCollapsed ? 64 : 240 }}
+        transition={{ duration: 0.25, ease: [0.22, 0.61, 0.36, 1] }}
         className="fixed top-0 left-0 right-0 z-30 border-b border-border bg-background/95 backdrop-blur-xl"
         style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
       >
@@ -400,7 +407,7 @@ export function TopBar() {
           )}
         </div>
         </div>
-      </header>
+      </motion.header>
 
       <Dialog open={isSearchOpen} onOpenChange={(open) => {
         setIsSearchOpen(open)
@@ -761,7 +768,6 @@ export function TopBar() {
             <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
               {[
                 { label: 'Dashboard',  href: '/dashboard/dashboard',   icon: LayoutDashboard },
-                { label: 'Check-In',   href: '/dashboard/check-in',    icon: Sparkles },
                 { label: 'Meals',      href: '/dashboard/meals',        icon: Apple },
                 { label: 'Workouts',   href: '/dashboard/workouts',     icon: Dumbbell },
                 { label: 'Tracking',   href: '/dashboard/tracking',     icon: BarChart3 },

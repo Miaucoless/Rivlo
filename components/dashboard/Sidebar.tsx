@@ -18,7 +18,6 @@ import {
   Trophy,
   Pill,
   Inbox,
-  Sparkles,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAppStore } from '@/store/useAppStore'
@@ -26,7 +25,6 @@ import { toast } from 'sonner'
 
 const NAV_ITEMS = [
   { label: 'Dashboard', href: '/dashboard/dashboard', icon: LayoutDashboard },
-  { label: 'Check-In', href: '/dashboard/check-in', icon: Sparkles },
   { label: 'Meals', href: '/dashboard/meals', icon: Apple },
   { label: 'Workouts', href: '/dashboard/workouts', icon: Dumbbell },
   { label: 'Tracking', href: '/dashboard/tracking', icon: BarChart3 },

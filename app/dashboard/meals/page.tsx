@@ -8,9 +8,10 @@ import { format, startOfWeek, subDays } from 'date-fns'
 import {
   ChefHat, ShoppingCart, Clock, Users, Flame,
   CheckCircle, Circle, Plus, Zap, Pencil, Trash2, X, CalendarDays,
-  Coffee, Soup, Moon, Cookie, GlassWater, Search, BookOpen, ChevronDown, Share2,
+  Coffee, Soup, Moon, Cookie, GlassWater, Search, BookOpen, ChevronDown, Share2, ScanLine,
 } from 'lucide-react'
 import { ShareModal } from '@/components/sharing/ShareModal'
+import { CodeScannerDialog } from '@/components/meals/CodeScannerDialog'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -23,6 +24,7 @@ import { useAppStore, type SavedMealTemplate } from '@/store/useAppStore'
 import { getTodayISO } from '@/lib/utils'
 import { RECIPES } from '@/lib/content-library'
 import type { Recipe, PlannedSlot, CustomMealIngredient } from '@/types'
+import type { BarcodeFoodLookupResult } from '@/lib/barcode-food'
 import { generateGroceryItems, categorizeIngredient, estimatePrice } from '@/lib/grocery-generator'
 import type { MealLogEntry } from '@/lib/content-library'
 import {
@@ -113,6 +115,13 @@ function buildItemMacros(calories: number, extras?: { protein_g?: number; carbs_
     ...(extras?.carbs_g !== undefined ? { carbs_g: Math.round(extras.carbs_g * 10) / 10 } : {}),
     ...(extras?.fat_g !== undefined ? { fat_g: Math.round(extras.fat_g * 10) / 10 } : {}),
   }
+}
+
+function formatScannedFoodName(item: BarcodeFoodLookupResult) {
+  if (item.brand && !item.name.toLowerCase().startsWith(item.brand.toLowerCase())) {
+    return `${item.brand} ${item.name}`
+  }
+  return item.name
 }
 
 function scaleMealLogEntry(entry: MealLogEntry, multiplier: number): MealLogEntry {
@@ -382,6 +391,14 @@ function mealTypeTheme(type: MealType) {
     text: 'text-rose-300',
     hint: 'Track shakes, coffees, and drinks.',
   }
+}
+
+function getSuggestedMealType(date = new Date()): MealType {
+  const hour = date.getHours()
+  if (hour < 11) return 'breakfast'
+  if (hour < 15) return 'lunch'
+  if (hour < 21) return 'dinner'
+  return 'snack'
 }
 
 function progressValue(consumed: number, target?: number) {
@@ -3865,6 +3882,9 @@ export default function MealsPage() {
   const [savedMealFilterType, setSavedMealFilterType] = useState<string>('all')
   const [savedMealFilterTag, setSavedMealFilterTag] = useState<string>('all')
   const [activeTab, setActiveTab] = useState('today')
+  const [scannerOpen, setScannerOpen] = useState(false)
+  const [scannerTarget, setScannerTarget] = useState<'today' | 'saved'>('today')
+  const [scannerMealType, setScannerMealType] = useState<MealType>('breakfast')
   // Recipe filter state
   const [recipeFilterType, setRecipeFilterType] = useState<string>('all')
   const [recipeFilterTag, setRecipeFilterTag] = useState<string>('all')
@@ -4180,6 +4200,12 @@ export default function MealsPage() {
     setEditSavedMealOpen(true)
   }
 
+  const openScanner = (target: 'today' | 'saved', mealType: MealType = getSuggestedMealType()) => {
+    setScannerTarget(target)
+    setScannerMealType(mealType)
+    setScannerOpen(true)
+  }
+
   const handleSaveMeal = (data: Omit<MealLogEntry, 'id'>) => {
     if (editingMeal) {
       updateMealEntry(today, editingMeal.id, data)
@@ -4206,6 +4232,54 @@ export default function MealsPage() {
       return
     }
     toast.success('Saved meal deleted.')
+  }
+
+  const handleAddScannedMealToToday = (item: BarcodeFoodLookupResult, mealType: MealType) => {
+    const displayName = formatScannedFoodName(item)
+
+    addMealEntry(today, {
+      id: `m-${Date.now()}`,
+      meal_type: mealType,
+      name: displayName,
+      macros: item.macros,
+      time: format(new Date(), 'h:mm a'),
+      recipe: null,
+      meal_items: [
+        {
+          name: displayName,
+          macros: item.macros,
+          amount: item.serving_amount,
+          unit: item.serving_unit,
+        },
+      ],
+      entry_source: 'search',
+    })
+
+    toast.success(`${displayName} added to ${mealTypeLabel(mealType).toLowerCase()}.`)
+  }
+
+  const handleSaveScannedMeal = (item: BarcodeFoodLookupResult, mealType: MealType) => {
+    const displayName = formatScannedFoodName(item)
+
+    addSavedMeal({
+      id: `sm-${Date.now()}`,
+      name: displayName,
+      meal_type: mealType,
+      macros: item.macros,
+      items: [
+        {
+          input: item.barcode,
+          matched_name: displayName,
+          amount: item.serving_amount,
+          unit: item.serving_unit,
+          macros: item.macros,
+        },
+      ],
+      updated_at: new Date().toISOString(),
+    })
+
+    setActiveTab('saved')
+    toast.success(`${displayName} saved for later.`)
   }
 
   const handleAddSavedMealToToday = (meal: SavedMealTemplate) => {
@@ -4268,6 +4342,10 @@ export default function MealsPage() {
               <Plus className="h-4 w-4" />
               Add Meal
             </Button>
+            <Button variant="outline" size="sm" className="h-10 gap-2 rounded-full px-4" onClick={() => openScanner('today')}>
+              <ScanLine className="h-4 w-4" />
+              Scan Code
+            </Button>
           </div>
         </div>
 
@@ -4323,6 +4401,10 @@ export default function MealsPage() {
             <Button variant="brand" size="sm" className="gap-1.5 shrink-0" onClick={openNewSavedMeal}>
               <Plus className="w-3.5 h-3.5" />
               New Saved Meal
+            </Button>
+            <Button variant="outline" size="sm" className="gap-1.5 shrink-0" onClick={() => openScanner('saved')}>
+              <ScanLine className="w-3.5 h-3.5" />
+              Scan & Save
             </Button>
           </div>
           {/* Filter dropdowns */}
@@ -5387,6 +5469,15 @@ export default function MealsPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <CodeScannerDialog
+        open={scannerOpen}
+        onOpenChange={setScannerOpen}
+        initialTarget={scannerTarget}
+        initialMealType={scannerMealType}
+        onAddToToday={handleAddScannedMealToToday}
+        onSaveMeal={handleSaveScannedMeal}
+      />
 
       {/* Recipe detail modal */}
       <Dialog open={!!selectedRecipe} onOpenChange={() => setSelectedRecipe(null)}>

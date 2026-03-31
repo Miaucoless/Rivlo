@@ -3,13 +3,93 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Dumbbell, UtensilsCrossed, BookOpen, CheckCircle, ExternalLink, Loader2, Inbox, ShoppingCart, Trash2, Sparkles } from 'lucide-react'
+import { Dumbbell, UtensilsCrossed, BookOpen, CheckCircle, ExternalLink, Loader2, Inbox, ShoppingCart, Trash2, Sparkles, Circle } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 import { useAppStore } from '@/store/useAppStore'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { formatDistanceToNow } from 'date-fns'
-import type { GroceryList, SavedMealTemplate } from '@/types'
+import type { GroceryList, SavedMealTemplate, Workout } from '@/types'
+
+const IMPORTED_FRIEND_SHARE_STORAGE_KEY = 'rivora-imported-friend-shares'
+
+function readStoredImportedFriendShareIds() {
+  if (typeof window === 'undefined') return new Set<string>()
+
+  try {
+    const raw = window.sessionStorage.getItem(IMPORTED_FRIEND_SHARE_STORAGE_KEY)
+    if (!raw) return new Set<string>()
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return new Set<string>()
+    return new Set(parsed.filter((value): value is string => typeof value === 'string'))
+  } catch {
+    return new Set<string>()
+  }
+}
+
+function persistImportedFriendShareId(friendShareId: string) {
+  if (typeof window === 'undefined') return
+
+  try {
+    const existingIds = Array.from(readStoredImportedFriendShareIds())
+    if (!existingIds.includes(friendShareId)) existingIds.push(friendShareId)
+    window.sessionStorage.setItem(IMPORTED_FRIEND_SHARE_STORAGE_KEY, JSON.stringify(existingIds))
+  } catch {
+    // Ignore storage issues and keep going
+  }
+}
+
+function normalizeImportedSavedMeal(raw: unknown): SavedMealTemplate | null {
+  if (!raw || typeof raw !== 'object') return null
+  const meal = raw as Record<string, unknown>
+  const rawItems = Array.isArray(meal.items) ? meal.items : []
+
+  return {
+    id: typeof meal.id === 'string' ? meal.id : crypto.randomUUID(),
+    name: typeof meal.name === 'string' && meal.name.trim() ? meal.name.trim() : 'Imported Meal',
+    meal_type:
+      meal.meal_type === 'breakfast' ||
+      meal.meal_type === 'lunch' ||
+      meal.meal_type === 'dinner' ||
+      meal.meal_type === 'snack' ||
+      meal.meal_type === 'drink'
+        ? meal.meal_type
+        : 'lunch',
+    macros: {
+      calories: Number((meal.macros as Record<string, unknown> | undefined)?.calories ?? 0) || 0,
+      protein_g: Number((meal.macros as Record<string, unknown> | undefined)?.protein_g ?? 0) || 0,
+      carbs_g: Number((meal.macros as Record<string, unknown> | undefined)?.carbs_g ?? 0) || 0,
+      fat_g: Number((meal.macros as Record<string, unknown> | undefined)?.fat_g ?? 0) || 0,
+    },
+    items: rawItems.map((item) => {
+      const rawItem = item && typeof item === 'object' ? item as Record<string, unknown> : {}
+      const matchedName =
+        typeof rawItem.matched_name === 'string' && rawItem.matched_name.trim()
+          ? rawItem.matched_name.trim()
+          : typeof rawItem.name === 'string' && rawItem.name.trim()
+            ? rawItem.name.trim()
+            : typeof rawItem.input === 'string' && rawItem.input.trim()
+              ? rawItem.input.trim()
+              : 'Item'
+
+      return {
+        input: typeof rawItem.input === 'string' && rawItem.input.trim() ? rawItem.input.trim() : matchedName,
+        matched_name: matchedName,
+        amount: Number(rawItem.amount ?? 1) || 1,
+        unit: typeof rawItem.unit === 'string' && rawItem.unit.trim() ? rawItem.unit.trim() : 'serving',
+        macros: rawItem.macros && typeof rawItem.macros === 'object'
+          ? {
+              calories: Number((rawItem.macros as Record<string, unknown>).calories ?? 0) || 0,
+              protein_g: Number((rawItem.macros as Record<string, unknown>).protein_g ?? 0) || 0,
+              carbs_g: Number((rawItem.macros as Record<string, unknown>).carbs_g ?? 0) || 0,
+              fat_g: Number((rawItem.macros as Record<string, unknown>).fat_g ?? 0) || 0,
+            }
+          : undefined,
+      }
+    }),
+    updated_at: typeof meal.updated_at === 'string' && meal.updated_at ? meal.updated_at : new Date().toISOString(),
+  }
+}
 
 type InboxItem = {
   friend_share_id: string
@@ -39,7 +119,7 @@ const TYPE_LABELS: Record<string, string> = {
   weekly_recap: 'Weekly Recap',
 }
 
-const TYPE_FILTERS = ['all', 'workout', 'saved_meal', 'recipe', 'grocery_list', 'weekly_recap'] as const
+const TYPE_FILTERS = ['all', 'workout', 'saved_meal', 'recipe', 'grocery_list'] as const
 type TypeFilter = typeof TYPE_FILTERS[number]
 
 async function getToken(): Promise<string | null> {
@@ -51,13 +131,18 @@ async function getToken(): Promise<string | null> {
 export function SharedInbox() {
   const router = useRouter()
   const addSavedMeal = useAppStore((state) => state.addSavedMeal)
+  const addCustomWorkout = useAppStore((state) => state.addCustomWorkout)
+  const savedMeals = useAppStore((state) => state.savedMeals)
+  const customWorkouts = useAppStore((state) => state.customWorkouts)
   const setGroceryList = useAppStore((state) => state.setGroceryList)
   const [items, setItems] = useState<InboxItem[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<TypeFilter>('all')
   const [importing, setImporting] = useState<string | null>(null)
+  const [bulkImporting, setBulkImporting] = useState(false)
   const [deleting, setDeleting] = useState<string | null>(null)
   const [importedIds, setImportedIds] = useState<Set<string>>(new Set())
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
   const loadInbox = useCallback(async () => {
     const token = await getToken()
@@ -70,6 +155,8 @@ export function SharedInbox() {
       setItems(data)
       // Pre-mark already imported
       const alreadyImported = new Set(data.filter((i) => !!i.imported_at).map((i) => i.friend_share_id))
+      const storedImported = readStoredImportedFriendShareIds()
+      storedImported.forEach((id) => alreadyImported.add(id))
       setImportedIds(alreadyImported)
     } finally {
       setLoading(false)
@@ -81,31 +168,130 @@ export function SharedInbox() {
     loadInbox()
   }, [loadInbox])
 
-  async function handleImport(item: InboxItem) {
-    setImporting(item.friend_share_id)
+  useEffect(() => {
+    const syncImportedFromStorage = () => {
+      const storedImported = readStoredImportedFriendShareIds()
+      if (storedImported.size === 0) return
+      setImportedIds((current) => {
+        const next = new Set(current)
+        storedImported.forEach((id) => next.add(id))
+        return next
+      })
+    }
+
+    syncImportedFromStorage()
+    window.addEventListener('focus', syncImportedFromStorage)
+    window.addEventListener('pageshow', syncImportedFromStorage)
+
+    return () => {
+      window.removeEventListener('focus', syncImportedFromStorage)
+      window.removeEventListener('pageshow', syncImportedFromStorage)
+    }
+  }, [])
+
+  useEffect(() => {
+    setSelectedIds((current) => {
+      const visibleIds = new Set(items.map((item) => item.friend_share_id))
+      return new Set(Array.from(current).filter((id) => visibleIds.has(id)))
+    })
+  }, [items])
+
+  async function importItem(item: InboxItem) {
     try {
       const token = await getToken()
-      if (!token) return
+      if (!token) return false
       const res = await fetch(`/api/share/${item.token}/import`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ friend_share_id: item.friend_share_id }),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error()
+      if (!res.ok) throw new Error(data?.error ?? 'Import failed')
       if (data.item_type === 'saved_meal' && data.imported_item) {
-        addSavedMeal(data.imported_item as SavedMealTemplate)
+        const importedMeal = normalizeImportedSavedMeal(data.imported_item)
+        if (importedMeal && !savedMeals.some((meal) => meal.id === importedMeal.id)) {
+          addSavedMeal(importedMeal)
+        }
+      }
+      if (data.item_type === 'workout' && data.imported_item) {
+        const importedWorkout = data.imported_item as Workout
+        if (!customWorkouts.some((workout) => workout.id === importedWorkout.id)) {
+          addCustomWorkout(importedWorkout)
+        }
       }
       if (data.item_type === 'grocery_list' && data.imported_item) {
         setGroceryList(data.imported_item as GroceryList)
       }
+      persistImportedFriendShareId(item.friend_share_id)
       setImportedIds((prev) => { const n = new Set(prev); n.add(item.friend_share_id); return n })
+      return true
+    } catch (err) {
+      throw err instanceof Error ? err : new Error('Import failed. Please try again.')
+    }
+  }
+
+  async function handleImport(item: InboxItem) {
+    setImporting(item.friend_share_id)
+    try {
+      await importItem(item)
       toast.success(`${item.item_name} added to your account!`)
-    } catch {
-      toast.error('Import failed. Please try again.')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Import failed. Please try again.')
     } finally {
       setImporting(null)
     }
+  }
+
+  function toggleSelected(friendShareId: string) {
+    setSelectedIds((current) => {
+      const next = new Set(current)
+      if (next.has(friendShareId)) next.delete(friendShareId)
+      else next.add(friendShareId)
+      return next
+    })
+  }
+
+  const importableItems = items.filter((item) => item.item_type !== 'weekly_recap' && !importedIds.has(item.friend_share_id))
+  const selectedImportableItems = importableItems.filter((item) => selectedIds.has(item.friend_share_id))
+
+  async function handleImportMany(targetItems: InboxItem[], mode: 'all' | 'selected') {
+    if (targetItems.length === 0) return
+
+    setBulkImporting(true)
+    let successCount = 0
+    let failureCount = 0
+
+    for (const item of targetItems) {
+      setImporting(item.friend_share_id)
+      try {
+        const imported = await importItem(item)
+        if (imported) successCount += 1
+      } catch {
+        failureCount += 1
+      }
+    }
+
+    setImporting(null)
+    setBulkImporting(false)
+    if (mode === 'selected') {
+      setSelectedIds((current) => {
+        const next = new Set(current)
+        targetItems.forEach((item) => next.delete(item.friend_share_id))
+        return next
+      })
+    }
+
+    if (successCount > 0 && failureCount === 0) {
+      toast.success(`${successCount} item${successCount === 1 ? '' : 's'} imported.`)
+      return
+    }
+
+    if (successCount > 0 && failureCount > 0) {
+      toast.success(`${successCount} item${successCount === 1 ? '' : 's'} imported. ${failureCount} failed.`)
+      return
+    }
+
+    toast.error(`Could not import ${mode === 'all' ? 'these items' : 'the selected items'}.`)
   }
 
   async function handleDelete(item: InboxItem) {
@@ -122,6 +308,11 @@ export function SharedInbox() {
 
       setItems((current) => current.filter((entry) => entry.friend_share_id !== item.friend_share_id))
       setImportedIds((current) => {
+        const next = new Set(current)
+        next.delete(item.friend_share_id)
+        return next
+      })
+      setSelectedIds((current) => {
         const next = new Set(current)
         next.delete(item.friend_share_id)
         return next
@@ -162,6 +353,36 @@ export function SharedInbox() {
         ))}
       </div>
 
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-8 rounded-full px-3 text-xs"
+          disabled={bulkImporting || importableItems.length === 0}
+          onClick={() => handleImportMany(importableItems, 'all')}
+        >
+          {bulkImporting ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
+          Import All
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-8 rounded-full px-3 text-xs"
+          disabled={bulkImporting || selectedImportableItems.length === 0}
+          onClick={() => handleImportMany(selectedImportableItems, 'selected')}
+        >
+          {bulkImporting ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
+          Import Selected
+        </Button>
+        {selectedImportableItems.length > 0 ? (
+          <span className="text-xs text-muted-foreground">
+            {selectedImportableItems.length} selected
+          </span>
+        ) : null}
+      </div>
+
       {items.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-12 text-center border border-dashed border-border/60 rounded-xl">
           <Inbox className="w-8 h-8 text-muted-foreground/40 mb-3" />
@@ -175,9 +396,26 @@ export function SharedInbox() {
             const isImporting = importing === item.friend_share_id
             const isDeleting = deleting === item.friend_share_id
             const isViewOnly = item.item_type === 'weekly_recap'
+            const isSelectable = !isImported && !isViewOnly
+            const isSelected = selectedIds.has(item.friend_share_id)
             return (
               <div key={item.friend_share_id} className="rounded-xl border border-border/50 bg-muted/20 p-3 space-y-2">
                 <div className="flex items-start gap-2">
+                  <button
+                    type="button"
+                    disabled={!isSelectable || isDeleting || bulkImporting}
+                    onClick={() => toggleSelected(item.friend_share_id)}
+                    className={`mt-0.5 shrink-0 rounded-full transition-colors ${
+                      isSelectable ? 'text-muted-foreground hover:text-foreground' : 'cursor-not-allowed text-muted-foreground/30'
+                    }`}
+                    aria-label={isSelected ? 'Deselect item' : 'Select item'}
+                  >
+                    {isSelected ? (
+                      <CheckCircle className="h-4 w-4 text-primary" />
+                    ) : (
+                      <Circle className="h-4 w-4" />
+                    )}
+                  </button>
                   <span className="mt-0.5 text-muted-foreground">{TYPE_ICONS[item.item_type]}</span>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium truncate">{item.item_name}</p>
@@ -199,8 +437,8 @@ export function SharedInbox() {
                     variant="outline"
                     size="sm"
                     className="h-7 px-2.5 text-xs gap-1"
-                    disabled={isDeleting}
-                    onClick={() => router.push(`/share/${item.token}`)}
+                    disabled={isDeleting || bulkImporting}
+                    onClick={() => router.push(`/share/${item.token}?friend_share_id=${item.friend_share_id}`)}
                   >
                     <ExternalLink className="w-3 h-3" />
                     View
@@ -219,7 +457,7 @@ export function SharedInbox() {
                     <Button
                       size="sm"
                       className="h-7 px-2.5 text-xs gap-1"
-                      disabled={isImporting || isDeleting}
+                      disabled={isImporting || isDeleting || bulkImporting}
                       onClick={() => handleImport(item)}
                     >
                       {isImporting ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
@@ -230,7 +468,7 @@ export function SharedInbox() {
                     variant="ghost"
                     size="sm"
                     className="h-7 px-2.5 text-xs gap-1 text-muted-foreground hover:text-destructive"
-                    disabled={isDeleting || isImporting}
+                    disabled={isDeleting || isImporting || bulkImporting}
                     onClick={() => handleDelete(item)}
                   >
                     {isDeleting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
