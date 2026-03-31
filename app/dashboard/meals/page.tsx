@@ -4268,7 +4268,7 @@ export default function MealsPage() {
       macros: item.macros,
       items: [
         {
-          input: item.barcode,
+          input: item.barcode || item.name,
           matched_name: displayName,
           amount: item.serving_amount,
           unit: item.serving_unit,
@@ -4344,7 +4344,7 @@ export default function MealsPage() {
             </Button>
             <Button variant="outline" size="sm" className="h-10 gap-2 rounded-full px-4" onClick={() => openScanner('today')}>
               <ScanLine className="h-4 w-4" />
-              Scan Code
+              Scan Food
             </Button>
           </div>
         </div>
@@ -4404,7 +4404,7 @@ export default function MealsPage() {
             </Button>
             <Button variant="outline" size="sm" className="gap-1.5 shrink-0" onClick={() => openScanner('saved')}>
               <ScanLine className="w-3.5 h-3.5" />
-              Scan & Save
+              Scan & Save Meal
             </Button>
           </div>
           {/* Filter dropdowns */}

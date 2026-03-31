@@ -481,7 +481,7 @@ function QuickAddMealDialog() {
               <div className="space-y-4">
                 {savedMeals.length === 0 ? (
                   <div className="rounded-xl border border-dashed border-border/60 bg-muted/15 px-4 py-5 text-sm text-muted-foreground">
-                    No saved meals yet. Build one in Meals, or use Manual or Scan Code here.
+                    No saved meals yet. Build one in Meals, or use Manual or Scan here.
                   </div>
                 ) : (
                   <>
@@ -574,16 +574,16 @@ function QuickAddMealDialog() {
                       <ScanLine className="h-4 w-4" />
                     </div>
                     <div>
-                      <p className="text-sm font-semibold">Scan a barcode or QR code</p>
+                      <p className="text-sm font-semibold">Scan a barcode or nutrition label</p>
                       <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                        Use your camera to look up a packaged food, then drop it straight into today&apos;s {dashboardMealTypeLabel(mealType).toLowerCase()}.
+                        Use your camera for a barcode, or upload a nutrition label photo, then drop it straight into today&apos;s {dashboardMealTypeLabel(mealType).toLowerCase()}.
                       </p>
                     </div>
                   </div>
                 </div>
                 <Button className="w-full gap-2" variant="brand" onClick={() => setScannerOpen(true)}>
                   <ScanLine className="h-4 w-4" />
-                  Open Scanner
+                  Open Food Scanner
                 </Button>
               </div>
             )}

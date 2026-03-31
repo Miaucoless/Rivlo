@@ -1,5 +1,5 @@
-export type BarcodeFoodLookupResult = {
-  barcode: string
+export type ScannedFoodResult = {
+  barcode: string | null
   name: string
   brand: string | null
   image_url: string | null
@@ -12,8 +12,11 @@ export type BarcodeFoodLookupResult = {
     carbs_g: number
     fat_g: number
   }
-  source: 'open_food_facts'
+  source: 'open_food_facts' | 'nutrition_label_ocr'
+  raw_text?: string | null
 }
+
+export type BarcodeFoodLookupResult = ScannedFoodResult
 
 type OpenFoodFactsResponse = {
   status?: number
