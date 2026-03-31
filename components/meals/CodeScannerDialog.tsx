@@ -77,6 +77,13 @@ export function CodeScannerDialog({
   const stopScanner = useCallback(() => {
     controlsRef.current?.stop()
     controlsRef.current = null
+    if (videoRef.current) {
+      try {
+        videoRef.current.srcObject = null
+      } catch {
+        // ignore cleanup issues
+      }
+    }
   }, [])
 
   const lookupCode = useCallback(async (rawCode: string) => {
@@ -131,47 +138,67 @@ export function CodeScannerDialog({
     try {
       const { BrowserMultiFormatReader } = await import('@zxing/browser')
       const reader = new BrowserMultiFormatReader()
+      let cameraStream: MediaStream | null = null
 
-      const controls = await reader.decodeFromConstraints(
-        {
+      try {
+        cameraStream = await navigator.mediaDevices.getUserMedia({
           audio: false,
           video: {
             facingMode: { ideal: 'environment' },
             width: { ideal: 1280 },
             height: { ideal: 720 },
           },
-        },
-        videoRef.current,
-        (result, error, activeControls) => {
-          if (result) {
-            const scannedText = result.getText().trim()
-            if (!scannedText || scannedText === lastScannedCodeRef.current || lookupInFlightRef.current) return
+        })
+      } catch {
+        cameraStream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: true,
+        })
+      }
 
-            lastScannedCodeRef.current = scannedText
-            activeControls.stop()
-            controlsRef.current = null
-            void lookupCode(scannedText)
-            return
-          }
+      const handleDecodeResult = (result: unknown, error: unknown, activeControls: ScannerControls) => {
+        if (result && typeof result === 'object' && 'getText' in result && typeof result.getText === 'function') {
+          const scannedText = result.getText().trim()
+          if (!scannedText || scannedText === lastScannedCodeRef.current || lookupInFlightRef.current) return
 
-          if (!error) return
-
-          const errorName = (error as { name?: string }).name
-          if (errorName === 'NotFoundException' || errorName === 'ChecksumException' || errorName === 'FormatException') {
-            return
-          }
-
-          setCameraState('error')
-          setCameraMessage('The camera started, but scanning hit an unexpected problem.')
+          lastScannedCodeRef.current = scannedText
+          activeControls.stop()
+          controlsRef.current = null
+          void lookupCode(scannedText)
+          return
         }
-      )
 
-      controlsRef.current = controls as ScannerControls
+        if (!error || typeof error !== 'object') return
+
+        const errorName = (error as { name?: string }).name
+        if (errorName === 'NotFoundException' || errorName === 'ChecksumException' || errorName === 'FormatException') {
+          return
+        }
+
+        setCameraState('error')
+        setCameraMessage('The camera started, but scanning hit an unexpected problem.')
+      }
+
+      const controls = await reader.decodeFromStream(
+        cameraStream,
+        videoRef.current,
+        handleDecodeResult,
+      ) as ScannerControls
+
+      controlsRef.current = controls
       setCameraState('ready')
       setCameraMessage('Point your camera at a barcode or QR code.')
     } catch (error) {
+      if (videoRef.current?.srcObject instanceof MediaStream) {
+        videoRef.current.srcObject.getTracks().forEach((track) => track.stop())
+        try {
+          videoRef.current.srcObject = null
+        } catch {
+          // ignore cleanup issues
+        }
+      }
       const message = error instanceof Error ? error.message : ''
-      const permissionBlocked = /permission|notallowed|denied/i.test(message)
+      const permissionBlocked = /permission|notallowed|denied|dismissed/i.test(message)
 
       setCameraState(permissionBlocked ? 'error' : 'unsupported')
       setCameraMessage(

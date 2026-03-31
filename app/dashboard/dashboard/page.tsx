@@ -1032,7 +1032,7 @@ export default function DashboardPage() {
                     </div>
                   </div>
 
-                  <div className="space-y-2">
+                  <div className="max-h-[25.5rem] space-y-2 overflow-y-auto pr-1">
                     {todayWorkoutLogs.map((workout) => {
                       const isExpanded = expandedDashboardLogId === workout.id
                       const totalSets = workout.exercises.reduce((s, e) => s + e.sets.length, 0)
