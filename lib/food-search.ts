@@ -6,9 +6,9 @@ export function parseFraction(input: string): number {
   // Handle mixed numbers like "1 1/2"
   const mixedMatch = trimmed.match(/^(\d+)\s+(\d+)\/(\d+)$/)
   if (mixedMatch) {
-    const whole = parseInt(mixedMatch[1])
-    const numerator = parseInt(mixedMatch[2])
-    const denominator = parseInt(mixedMatch[3])
+    const whole = parseInt(mixedMatch[1], 10)
+    const numerator = parseInt(mixedMatch[2], 10)
+    const denominator = parseInt(mixedMatch[3], 10)
     if (denominator !== 0) {
       return whole + (numerator / denominator)
     }
@@ -17,8 +17,8 @@ export function parseFraction(input: string): number {
   // Handle simple fractions like "1/3"
   const fractionMatch = trimmed.match(/^(\d+)\/(\d+)$/)
   if (fractionMatch) {
-    const numerator = parseInt(fractionMatch[1])
-    const denominator = parseInt(fractionMatch[2])
+    const numerator = parseInt(fractionMatch[1], 10)
+    const denominator = parseInt(fractionMatch[2], 10)
     if (denominator !== 0) {
       return numerator / denominator
     }
@@ -33,7 +33,7 @@ export function parseFraction(input: string): number {
   // Handle whole numbers
   const wholeMatch = trimmed.match(/^\d+$/)
   if (wholeMatch) {
-    return parseInt(trimmed)
+    return parseInt(trimmed, 10)
   }
   
   return 0
@@ -143,16 +143,19 @@ function splitFoodParts(text: string) {
 function parseAmountAndUnit(text: string): ParsedFoodLine {
   const normalizedRaw = text.trim()
   const inParensMatch = normalizedRaw.match(/^(.*)\(([^)]+)\)\s*$/)
+  const amountPattern = /((?:\d+\s+\d+\/\d+)|(?:\d+\/\d+)|(?:\d*\.?\d+))/
 
   let source = normalizedRaw
   let amount = 1
   let unit = 'serving'
 
   const parseChunk = (chunk: string) => {
-    const numberUnit = chunk.trim().match(/(\d+(?:\.\d+)?)\s*([a-zA-Z]+)?/)
+    const numberUnit = chunk.trim().match(new RegExp(`^${amountPattern.source}\\s*([a-zA-Z]+)?$`))
     if (!numberUnit) return null
+    const parsedAmount = parseFraction(numberUnit[1])
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) return null
     return {
-      amount: Number(numberUnit[1]),
+      amount: parsedAmount,
       unit: canonicalUnit(numberUnit[2] || 'serving'),
     }
   }
@@ -165,9 +168,9 @@ function parseAmountAndUnit(text: string): ParsedFoodLine {
       unit = parsed.unit
     }
   } else {
-    const leading = normalizedRaw.match(/^(\d+(?:\.\d+)?)\s*([a-zA-Z]+)?\s+(.+)$/)
+    const leading = normalizedRaw.match(new RegExp(`^${amountPattern.source}\\s*([a-zA-Z]+)?\\s+(.+)$`))
     if (leading) {
-      amount = Number(leading[1])
+      amount = parseFraction(leading[1])
       unit = canonicalUnit(leading[2] || 'serving')
       source = leading[3].trim()
     }
@@ -341,11 +344,11 @@ function parseServingSizeText(servingSize?: string) {
   }
 
   const cleaned = servingSize.trim()
-  const baseMatch = cleaned.match(/(\d+(?:\.\d+)?)\s*([a-zA-Z]+)/)
+  const baseMatch = cleaned.match(/((?:\d+\s+\d+\/\d+)|(?:\d+\/\d+)|(?:\d*\.?\d+))\s*([a-zA-Z]+)/)
   const gramsMatch = cleaned.match(/(\d+(?:\.\d+)?)\s*g/i)
 
   return {
-    amount: baseMatch ? Number(baseMatch[1]) : 1,
+    amount: baseMatch ? parseFraction(baseMatch[1]) : 1,
     unit: baseMatch ? canonicalUnit(baseMatch[2]) : 'serving',
     label: cleaned,
     gramsPerServing: gramsMatch ? Number(gramsMatch[1]) : undefined,
