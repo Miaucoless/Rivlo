@@ -10,7 +10,7 @@ import {
 } from 'date-fns'
 import {
   ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Dumbbell, Apple, Scale, BookOpen, Circle, Zap,
-  Flame, Clock, Pill, Plus, Trash2, Bell,
+  Flame, Clock, Pill, Plus, Trash2, Bell, CheckCircle2,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -73,6 +73,16 @@ function formatWorkoutDuration(startedAt?: string, completedAt?: string, duratio
   return `${Math.round((end - start) / 60000)}m`
 }
 
+function sortCalendarReminders(a: CalendarReminder, b: CalendarReminder) {
+  const completionDelta = Number(a.completed ?? false) - Number(b.completed ?? false)
+  if (completionDelta !== 0) return completionDelta
+
+  const timeComparison = (a.time || '99:99').localeCompare(b.time || '99:99')
+  if (timeComparison !== 0) return timeComparison
+
+  return (a.created_at || '').localeCompare(b.created_at || '')
+}
+
 export default function CalendarPage() {
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState<Date | null>(new Date())
@@ -81,12 +91,13 @@ export default function CalendarPage() {
   const [reminderDialogOpen, setReminderDialogOpen] = useState(false)
   const [editingReminder, setEditingReminder] = useState<CalendarReminder | null>(null)
   // reminder form state
+  const [rKind, setRKind] = useState<CalendarReminder['kind']>('reminder')
   const [rTitle, setRTitle] = useState('')
   const [rTime, setRTime] = useState('')
   const [rNotes, setRNotes] = useState('')
   const [rColor, setRColor] = useState<CalendarReminder['color']>('default')
 
-  const { getCalendarEvents, getDailyMeals, workoutLogs, supplements, calendarReminders, addCalendarReminder, updateCalendarReminder, removeCalendarReminder, user } = useAppStore()
+  const { getCalendarEvents, getDailyMeals, workoutLogs, supplements, calendarReminders, addCalendarReminder, updateCalendarReminder, toggleCalendarReminderComplete, removeCalendarReminder, user } = useAppStore()
   const unitSystem = user?.unit_system || 'imperial'
 
   const events = getCalendarEvents()
@@ -113,11 +124,12 @@ export default function CalendarPage() {
     : []
   const selectedWorkoutLogs = selectedDateStr ? workoutLogs.filter((log) => log.date === selectedDateStr) : []
   const selectedReminders = selectedDateStr
-    ? calendarReminders.filter((r) => r.date === selectedDateStr).sort((a, b) => (a.time || '').localeCompare(b.time || ''))
+    ? calendarReminders.filter((r) => r.date === selectedDateStr).sort(sortCalendarReminders)
     : []
 
   const openNewReminder = () => {
     setEditingReminder(null)
+    setRKind('reminder')
     setRTitle('')
     setRTime('')
     setRNotes('')
@@ -127,6 +139,7 @@ export default function CalendarPage() {
 
   const openEditReminder = (r: CalendarReminder) => {
     setEditingReminder(r)
+    setRKind(r.kind || 'reminder')
     setRTitle(r.title)
     setRTime(r.time || '')
     setRNotes(r.notes || '')
@@ -137,15 +150,23 @@ export default function CalendarPage() {
   const saveReminder = () => {
     if (!rTitle.trim() || !selectedDateStr) return
     if (editingReminder) {
-      updateCalendarReminder(editingReminder.id, { title: rTitle.trim(), time: rTime || undefined, notes: rNotes || undefined, color: rColor })
+      updateCalendarReminder(editingReminder.id, {
+        title: rTitle.trim(),
+        time: rKind === 'reminder' ? rTime || undefined : undefined,
+        notes: rNotes || undefined,
+        color: rColor,
+        kind: rKind,
+      })
     } else {
       addCalendarReminder({
         id: `rem-${Date.now()}`,
         date: selectedDateStr,
         title: rTitle.trim(),
-        time: rTime || undefined,
+        time: rKind === 'reminder' ? rTime || undefined : undefined,
         notes: rNotes || undefined,
+        kind: rKind,
         color: rColor,
+        completed: false,
         created_at: new Date().toISOString(),
       })
     }
@@ -304,7 +325,7 @@ export default function CalendarPage() {
                 {selectedDate && (
                   <Button variant="outline" size="sm" onClick={openNewReminder} className="gap-2">
                     <Bell className="w-4 h-4" />
-                    Add Reminder
+                    Add Item
                   </Button>
                 )}
               </div>
@@ -550,16 +571,35 @@ export default function CalendarPage() {
                     {selectedReminders.length > 0 && (
                       <div className="border-t border-border/40 last:border-0">
                         <div className="px-4 pt-3 pb-1 flex items-center justify-between">
-                          <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground font-medium">Reminders</p>
+                          <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground font-medium">Reminders & Notes</p>
                         </div>
                         <div className="space-y-0 divide-y divide-border/30">
                           {selectedReminders.map((r) => (
                             <div key={r.id} className="flex items-start gap-2.5 px-4 py-3 hover:bg-muted/10 group">
+                              <button
+                                type="button"
+                                onClick={() => toggleCalendarReminderComplete(r.id)}
+                                className="mt-0.5 shrink-0 rounded-full text-muted-foreground transition-colors hover:text-foreground"
+                                aria-label={r.completed ? 'Mark item as incomplete' : 'Mark item as complete'}
+                              >
+                                {r.completed ? (
+                                  <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                                ) : (
+                                  <Circle className="h-4 w-4" />
+                                )}
+                              </button>
                               <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${REMINDER_DOT_COLORS[r.color]}`} />
                               <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium">{r.title}</p>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <p className={cn('text-sm font-medium', r.completed && 'line-through text-muted-foreground')}>
+                                    {r.title}
+                                  </p>
+                                  <span className="rounded-full border border-border/60 bg-muted/20 px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                                    {r.kind === 'note' ? 'Note' : 'Reminder'}
+                                  </span>
+                                </div>
                                 {r.time && <p className="text-xs text-muted-foreground mt-0.5">{r.time}</p>}
-                                {r.notes && <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{r.notes}</p>}
+                                {r.notes && <p className={cn('text-xs text-muted-foreground mt-1 leading-relaxed', r.completed && 'line-through')}>{r.notes}</p>}
                               </div>
                               <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                                 <button type="button" onClick={() => openEditReminder(r)} className="p-1 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors">
@@ -638,20 +678,42 @@ export default function CalendarPage() {
       <Dialog open={reminderDialogOpen} onOpenChange={setReminderDialogOpen}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>{editingReminder ? 'Edit Reminder' : 'Add Reminder'}</DialogTitle>
+            <DialogTitle>{editingReminder ? 'Edit Item' : 'Add Reminder or Note'}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 pt-1">
             {selectedDate && (
               <p className="text-xs text-muted-foreground">{format(selectedDate, 'EEEE, MMMM d, yyyy')}</p>
             )}
+            <div className="flex gap-2">
+              {([
+                { value: 'reminder', label: 'Reminder' },
+                { value: 'note', label: 'Note' },
+              ] as const).map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setRKind(option.value)}
+                  className={cn(
+                    'rounded-full border px-3 py-1.5 text-xs font-medium transition-colors',
+                    rKind === option.value
+                      ? 'border-primary/50 bg-primary/10 text-primary'
+                      : 'border-border/60 bg-muted/20 text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
             <div className="space-y-1.5">
               <Label>Title</Label>
-              <Input value={rTitle} onChange={(e) => setRTitle(e.target.value)} placeholder="e.g. Doctor appointment" autoFocus />
+              <Input value={rTitle} onChange={(e) => setRTitle(e.target.value)} placeholder={rKind === 'note' ? 'e.g. Ask about new meal prep idea' : 'e.g. Doctor appointment'} autoFocus />
             </div>
-            <div className="space-y-1.5">
-              <Label>Time (optional)</Label>
-              <Input type="time" value={rTime} onChange={(e) => setRTime(e.target.value)} />
-            </div>
+            {rKind === 'reminder' && (
+              <div className="space-y-1.5">
+                <Label>Time (optional)</Label>
+                <Input type="time" value={rTime} onChange={(e) => setRTime(e.target.value)} />
+              </div>
+            )}
             <div className="space-y-1.5">
               <Label>Notes (optional)</Label>
               <Textarea value={rNotes} onChange={(e) => setRNotes(e.target.value)} placeholder="Any additional details..." className="min-h-[80px]" />
@@ -672,7 +734,7 @@ export default function CalendarPage() {
             <div className="flex gap-2 pt-1">
               <Button variant="outline" className="flex-1" onClick={() => setReminderDialogOpen(false)}>Cancel</Button>
               <Button variant="brand" className="flex-1" onClick={saveReminder} disabled={!rTitle.trim()}>
-                {editingReminder ? 'Update' : 'Add Reminder'}
+                {editingReminder ? 'Update' : `Add ${rKind === 'note' ? 'Note' : 'Reminder'}`}
               </Button>
             </div>
           </div>

@@ -27,6 +27,7 @@ import { EXERCISE_LIBRARY, WORKOUTS } from '@/lib/content-library'
 import { EXERCISE_CLASSIFICATIONS } from '@/lib/exercise-classifications'
 import type { Exercise, ExerciseLibraryItem, ExerciseSetMetric, Gender, MuscleGroup, UserProfile, Workout, WorkoutExercise, WorkoutSet, WorkoutSplit } from '@/types'
 import { cn, formatVolumeValue, getTodayISO, getWeightUnitLabel, kgToLbs, lbsToKg } from '@/lib/utils'
+import { getTodayWeekDay, getWorkoutsForDayType, SPLIT_DAY_LABELS, WEEK_DAY_LABELS } from '@/lib/split-schedule'
 import { createUserWorkoutTemplate, fetchUserWorkoutTemplates, updateUserWorkoutTemplate } from '@/lib/workout-templates'
 import { toast } from 'sonner'
 import type { UnitSystem } from '@/types'
@@ -951,6 +952,52 @@ function SavedWorkoutCard({
         itemName={workout.name}
         itemData={workout as unknown as Record<string, unknown>}
       />
+    </div>
+  )
+}
+
+function TodayWorkoutBanner({
+  workouts,
+  onStart,
+  onPreview,
+}: {
+  workouts: Workout[]
+  onStart: (workout: Workout) => void
+  onPreview: (workout: Workout) => void
+}) {
+  if (workouts.length === 0) return null
+  const saved = workouts.filter((w) => w.source !== 'premade')
+  const premade = workouts.filter((w) => w.source === 'premade')
+  const prioritized = [...saved, ...premade].slice(0, 4)
+
+  return (
+    <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-4 space-y-3">
+      <div className="flex items-center gap-2">
+        <Dumbbell className="w-4 h-4 text-emerald-400 shrink-0" />
+        <p className="text-sm font-semibold text-emerald-300">Recommended for today</p>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {prioritized.map((w) => (
+          <div key={w.id} className="flex items-center justify-between gap-2 rounded-xl border border-border/50 bg-background/60 px-3 py-2.5">
+            <div className="min-w-0">
+              <p className="text-sm font-medium truncate">{w.name}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {w.exercises.length} exercises · <span className="capitalize">{w.difficulty}</span>
+                {w.source !== 'premade' && <span className="ml-1.5 rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400">Saved</span>}
+              </p>
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <Button variant="ghost" size="icon-sm" onClick={() => onPreview(w)} title="Preview">
+                <Eye className="w-3.5 h-3.5" />
+              </Button>
+              <Button size="sm" className="h-7 px-2.5 text-xs gap-1" onClick={() => onStart(w)}>
+                <Play className="w-3 h-3" />
+                Start
+              </Button>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
@@ -2836,6 +2883,15 @@ export default function WorkoutsPage() {
 
   const workoutLibrary = useMemo(() => [...accountCustomWorkouts, ...WORKOUTS.map((workout) => ({ ...workout, source: 'premade' as const }))], [accountCustomWorkouts])
 
+  const todayRecommendedWorkouts = useMemo(() => {
+    const schedule = user?.split_schedule
+    if (!schedule) return []
+    const todayDay = getTodayWeekDay()
+    const dayType = schedule[todayDay]
+    if (!dayType || dayType === 'rest') return []
+    return getWorkoutsForDayType(dayType, workoutLibrary)
+  }, [user?.split_schedule, workoutLibrary])
+
   const filteredPremadeWorkouts = useMemo(() => {
     return WORKOUTS.filter((w) => {
       if (premadeSplit !== 'all' && w.split_type !== premadeSplit) return false
@@ -3567,6 +3623,23 @@ export default function WorkoutsPage() {
               </div>
             </div>
           )}
+
+        {todayRecommendedWorkouts.length > 0 && (() => {
+          const todayDay = getTodayWeekDay()
+          const dayType = user?.split_schedule?.[todayDay]
+          return (
+            <div className="space-y-1.5">
+              <p className="text-xs text-muted-foreground">
+                {WEEK_DAY_LABELS[todayDay]} · <span className="font-medium text-foreground">{dayType ? SPLIT_DAY_LABELS[dayType] : ''} Day</span>
+              </p>
+              <TodayWorkoutBanner
+                workouts={todayRecommendedWorkouts}
+                onStart={startWorkout}
+                onPreview={setPreviewWorkout}
+              />
+            </div>
+          )
+        })()}
 
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <div className="rounded-2xl border border-border/60 bg-card px-4 py-4">

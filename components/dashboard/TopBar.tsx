@@ -26,7 +26,9 @@ import {
 } from '@/components/ui/dialog'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { createClient } from '@/lib/supabase'
-import type { GroceryList, SavedMealTemplate } from '@/types'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import type { GroceryList, SavedMealTemplate, SplitDayType, SplitSchedule, WeekDay, WorkoutSplit } from '@/types'
+import { buildDefaultSchedule, SPLIT_DAY_LABELS, SPLIT_DAY_OPTIONS, WEEK_DAYS, WEEK_DAY_LABELS, getTodayWeekDay } from '@/lib/split-schedule'
 
 type Friendship = {
   id: string
@@ -87,6 +89,7 @@ export function TopBar() {
     flushPendingCloudWrites,
     addSavedMeal,
     setGroceryList,
+    updateProfile,
   } = useAppStore()
   const [isPending, startTransition] = useTransition()
   const [isSearchOpen, setIsSearchOpen] = useState(false)
@@ -105,6 +108,36 @@ export function TopBar() {
   const [friendSearching, setFriendSearching] = useState(false)
   const [friendSending, setFriendSending] = useState(false)
   const [friendsLoaded, setFriendsLoaded] = useState(false)
+
+  // Split schedule panel state
+  const [isSplitPanelOpen, setIsSplitPanelOpen] = useState(false)
+  const [draftSplit, setDraftSplit] = useState<WorkoutSplit>(user?.workout_split ?? 'ppl')
+  const [draftSchedule, setDraftSchedule] = useState<SplitSchedule>(
+    user?.split_schedule ?? buildDefaultSchedule(user?.workout_split ?? 'ppl')
+  )
+  const [splitSaving, setSplitSaving] = useState(false)
+
+  const openSplitPanel = () => {
+    setDraftSplit(user?.workout_split ?? 'ppl')
+    setDraftSchedule(user?.split_schedule ?? buildDefaultSchedule(user?.workout_split ?? 'ppl'))
+    setIsSplitPanelOpen(true)
+  }
+
+  const handleSplitSave = async () => {
+    setSplitSaving(true)
+    try {
+      await updateProfile({ workout_split: draftSplit, split_schedule: draftSchedule })
+      toast.success('Split schedule saved!')
+      setIsSplitPanelOpen(false)
+    } catch {
+      toast.error('Could not save split schedule.')
+    } finally {
+      setSplitSaving(false)
+    }
+  }
+
+  const todayWeekDay = getTodayWeekDay()
+  const todayDayType = user?.split_schedule?.[todayWeekDay] ?? null
 
   const loadFriends = useCallback(async () => {
     if (friendsLoading) return
@@ -339,6 +372,26 @@ export function TopBar() {
             <h1 className="text-lg font-semibold">{title}</h1>
             <div className="hidden sm:flex sm:items-center sm:gap-2">
               <p className="text-xs text-muted-foreground">{today}</p>
+              {todayDayType && (
+                <button
+                  type="button"
+                  onClick={openSplitPanel}
+                  className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-400 transition-colors hover:bg-emerald-500/20"
+                >
+                  <Zap className="w-2.5 h-2.5" />
+                  {SPLIT_DAY_LABELS[todayDayType]}
+                </button>
+              )}
+              {!todayDayType && (
+                <button
+                  type="button"
+                  onClick={openSplitPanel}
+                  className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-background/60 px-2 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:border-emerald-500/30 hover:bg-emerald-500/5 hover:text-emerald-400"
+                >
+                  <Zap className="w-2.5 h-2.5" />
+                  Set split
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => {
@@ -408,6 +461,98 @@ export function TopBar() {
         </div>
         </div>
       </motion.header>
+
+      {/* Split Schedule Panel */}
+      <Dialog open={isSplitPanelOpen} onOpenChange={setIsSplitPanelOpen}>
+        <DialogContent className="max-w-lg flex flex-col overflow-hidden border-border/60 bg-card/95 p-0 backdrop-blur sm:max-h-[85vh] max-h-[90dvh]">
+          <DialogHeader className="border-b border-border/60 px-5 py-4 flex-shrink-0">
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <Zap className="h-4 w-4 text-emerald-400" />
+              Workout Split Schedule
+            </DialogTitle>
+            <DialogDescription>
+              Choose your training split and assign a workout type to each day.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-y-auto overscroll-contain p-5 space-y-6">
+            {/* Split selector */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Training Split</label>
+              <Select
+                value={draftSplit}
+                onValueChange={(v) => {
+                  const split = v as WorkoutSplit
+                  setDraftSplit(split)
+                  setDraftSchedule(buildDefaultSchedule(split))
+                }}
+              >
+                <SelectTrigger className="bg-background border-border/60">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ppl">Push / Pull / Legs (PPL)</SelectItem>
+                  <SelectItem value="upper_lower">Upper / Lower</SelectItem>
+                  <SelectItem value="3day_fullbody">3-Day Full Body</SelectItem>
+                  <SelectItem value="4day">4-Day Split</SelectItem>
+                  <SelectItem value="5day">5-Day Split</SelectItem>
+                  <SelectItem value="6day">6-Day PPL</SelectItem>
+                  <SelectItem value="cardio_focus">Cardio Focus</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Weekly schedule grid */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Weekly Schedule</label>
+              <div className="grid gap-2">
+                {WEEK_DAYS.map((day) => (
+                  <div key={day} className="flex items-center gap-3">
+                    <span className={`w-10 text-xs font-medium shrink-0 ${day === todayWeekDay ? 'text-emerald-400' : 'text-muted-foreground'}`}>
+                      {WEEK_DAY_LABELS[day]}
+                      {day === todayWeekDay && <span className="ml-1 text-[9px]">•</span>}
+                    </span>
+                    <Select
+                      value={draftSchedule[day] ?? 'rest'}
+                      onValueChange={(v) => setDraftSchedule((prev) => ({ ...prev, [day]: v as SplitDayType }))}
+                    >
+                      <SelectTrigger className="h-8 bg-background border-border/60 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {SPLIT_DAY_OPTIONS[draftSplit].map((opt) => (
+                          <SelectItem key={opt} value={opt} className="text-xs">
+                            {SPLIT_DAY_LABELS[opt]}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t border-border/60 px-5 py-4 flex-shrink-0 flex items-center justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => setIsSplitPanelOpen(false)}
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleSplitSave}
+              disabled={splitSaving}
+              className="inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-600 disabled:opacity-50 transition-colors"
+            >
+              {splitSaving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              Save Schedule
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={isSearchOpen} onOpenChange={(open) => {
         setIsSearchOpen(open)

@@ -4,6 +4,9 @@ export type Gender = 'male' | 'female' | 'other'
 export type ActivityLevel = 'sedentary' | 'lightly_active' | 'moderately_active' | 'very_active' | 'extra_active'
 export type FitnessGoal = 'fat_loss' | 'muscle_gain' | 'maintenance' | 'athletic_performance'
 export type WorkoutSplit = 'ppl' | 'upper_lower' | '3day_fullbody' | '4day' | '5day' | '6day' | 'cardio_focus'
+export type SplitDayType = 'push' | 'pull' | 'legs' | 'upper' | 'lower' | 'full_body' | 'chest' | 'back' | 'shoulders' | 'arms' | 'cardio' | 'rest'
+export type WeekDay = 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday'
+export type SplitSchedule = Partial<Record<WeekDay, SplitDayType>>
 export type UnitSystem = 'imperial' | 'metric'
 export type PreferredWorkoutTime = 'early_morning' | 'morning' | 'afternoon' | 'evening' | 'late_night' | 'flexible'
 export type TrainingExperience = 'beginner' | 'intermediate' | 'advanced'
@@ -29,6 +32,7 @@ export interface UserProfile {
   goal_timeframe_weeks?: number
   preferred_workout_time?: PreferredWorkoutTime
   preferred_workout_days?: string[]
+  split_schedule?: SplitSchedule
   training_experience?: TrainingExperience
   dietary_style?: DietaryStyle
   biggest_challenge?: string
@@ -356,7 +360,10 @@ export interface CalendarReminder {
   time?: string      // 'HH:mm' 24h, optional
   title: string
   notes?: string
+  kind?: 'reminder' | 'note'
   color: 'default' | 'red' | 'blue' | 'green' | 'yellow' | 'purple'
+  completed?: boolean
+  completed_at?: string
   created_at: string
 }
 

@@ -159,6 +159,7 @@ interface AppStore {
   // Calendar reminders
   addCalendarReminder: (reminder: CalendarReminder) => void
   updateCalendarReminder: (id: string, updates: Partial<CalendarReminder>) => void
+  toggleCalendarReminderComplete: (id: string) => void
   removeCalendarReminder: (id: string) => void
 
   // Workouts
@@ -1607,7 +1608,13 @@ export const useAppStore = create<AppStore>()(
       },
 
       addCalendarReminder: (reminder) => {
-        const normalizedReminder = { ...reminder, id: ensureUuid(reminder.id) }
+        const normalizedReminder = {
+          ...reminder,
+          id: ensureUuid(reminder.id),
+          kind: reminder.kind || 'reminder',
+          completed: reminder.completed ?? false,
+          completed_at: reminder.completed ? reminder.completed_at || new Date().toISOString() : undefined,
+        }
         set((state) => ({ calendarReminders: [normalizedReminder, ...state.calendarReminders] }))
 
         const { user, isDemoMode } = get()
@@ -1625,7 +1632,49 @@ export const useAppStore = create<AppStore>()(
 
       updateCalendarReminder: (id, updates) => {
         set((state) => ({
-          calendarReminders: state.calendarReminders.map((r) => r.id === id ? { ...r, ...updates } : r),
+          calendarReminders: state.calendarReminders.map((r) => {
+            if (r.id !== id) return r
+
+            const nextCompleted = updates.completed ?? r.completed ?? false
+
+            return {
+              ...r,
+              ...updates,
+              kind: updates.kind ?? r.kind ?? 'reminder',
+              completed: nextCompleted,
+              completed_at: nextCompleted
+                ? updates.completed_at ?? r.completed_at ?? new Date().toISOString()
+                : undefined,
+            }
+          }),
+        }))
+
+        const { user, isDemoMode } = get()
+        if (user && !isDemoMode) {
+          enqueueCloudWrite(set, async () => {
+            const s = get()
+            await saveMetadataCloudState(user.id, {
+              savedMeals: s.savedMeals,
+              supplements: s.supplements,
+              calendarReminders: s.calendarReminders,
+            })
+          })
+        }
+      },
+
+      toggleCalendarReminderComplete: (id) => {
+        set((state) => ({
+          calendarReminders: state.calendarReminders.map((r) => {
+            if (r.id !== id) return r
+
+            const completed = !(r.completed ?? false)
+
+            return {
+              ...r,
+              completed,
+              completed_at: completed ? new Date().toISOString() : undefined,
+            }
+          }),
         }))
 
         const { user, isDemoMode } = get()

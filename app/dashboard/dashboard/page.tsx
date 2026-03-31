@@ -7,21 +7,21 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Flame, Zap, Apple, Dumbbell, TrendingUp, Plus, ScanLine, Search,
-  ChevronDown, ChevronUp, Sparkles,
+  Flame, Zap, Apple, Dumbbell, Plus, ScanLine, Search,
+  ChevronDown, ChevronUp, Sparkles, Bell, CheckCircle2, Circle,
 } from 'lucide-react'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell,
 } from 'recharts'
-import { format, parseISO, subDays } from 'date-fns'
+import { format, subDays } from 'date-fns'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Progress } from '@/components/ui/progress'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Textarea } from '@/components/ui/textarea'
 import { useAppStore } from '@/store/useAppStore'
 import { WaterIntakeCard } from '@/components/dashboard/WaterIntakeCard'
 import { DailyQuoteCard } from '@/components/dashboard/DailyQuoteCard'
@@ -30,8 +30,8 @@ import { getKnownFoodCatalog, primeFoodSearchCache } from '@/lib/food-search'
 import { buildWeeklyReview } from '@/lib/weekly-review'
 import type { BarcodeFoodLookupResult } from '@/lib/barcode-food'
 import type { FoodCatalogItem } from '@/lib/food-search'
-import type { SavedMealTemplate } from '@/types'
-import { cn, percentage, getTodayISO, formatCalories, formatWeightDelta, formatWeightValue, getWeightUnitLabel } from '@/lib/utils'
+import type { CalendarReminder, SavedMealTemplate } from '@/types'
+import { cn, percentage, getTodayISO, formatCalories, formatWeightValue } from '@/lib/utils'
 import { toast } from 'sonner'
 
 const stagger = {
@@ -127,6 +127,18 @@ function scoreDashboardSearch(name: string, aliases: string[], query: string) {
   })
 
   return bestScore
+}
+
+function sortDashboardReminders(a: CalendarReminder, b: CalendarReminder) {
+  const completionDelta = Number(a.completed ?? false) - Number(b.completed ?? false)
+  if (completionDelta !== 0) return completionDelta
+
+  const timeA = a.time || '99:99'
+  const timeB = b.time || '99:99'
+  const timeComparison = timeA.localeCompare(timeB)
+  if (timeComparison !== 0) return timeComparison
+
+  return (a.created_at || '').localeCompare(b.created_at || '')
 }
 
 // Quick Add Meal Dialog
@@ -604,6 +616,193 @@ function QuickAddMealDialog() {
   )
 }
 
+function TodayRemindersCard({
+  reminders,
+  onAdd,
+  onToggle,
+  onOpenCalendar,
+}: {
+  reminders: CalendarReminder[]
+  onAdd: (entry: { kind: 'reminder' | 'note'; title: string; time?: string; notes?: string }) => void
+  onToggle: (id: string) => void
+  onOpenCalendar: () => void
+}) {
+  const [entryKind, setEntryKind] = useState<'reminder' | 'note'>('reminder')
+  const [title, setTitle] = useState('')
+  const [time, setTime] = useState('')
+  const [notes, setNotes] = useState('')
+
+  const completedCount = reminders.filter((reminder) => reminder.completed).length
+  const summaryText = reminders.length > 0
+    ? `${completedCount}/${reminders.length} checked off`
+    : 'Nothing queued yet'
+
+  const resetComposer = () => {
+    setTitle('')
+    setTime('')
+    setNotes('')
+    setEntryKind('reminder')
+  }
+
+  const handleAdd = () => {
+    if (!title.trim()) {
+      toast.error(`Add a ${entryKind === 'note' ? 'note' : 'reminder'} title first.`)
+      return
+    }
+
+    onAdd({
+      kind: entryKind,
+      title: title.trim(),
+      time: entryKind === 'reminder' && time ? time : undefined,
+      notes: notes.trim() || undefined,
+    })
+    resetComposer()
+  }
+
+  return (
+    <Card className="overflow-hidden border-[#d8c7a4] bg-[#f3ead8] text-[#2d2418] shadow-[0_20px_42px_rgba(0,0,0,0.18)]">
+      <CardHeader className="border-b border-[#ddcfb4] pb-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle className="text-base font-semibold tracking-tight text-[#2d2418]">Today&apos;s Reminders</CardTitle>
+            <p className="mt-1 text-[11px] uppercase tracking-[0.18em] text-[#8b6d46]">{summaryText}</p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 shrink-0 rounded-full border-[#cdb892] bg-[#fff8e8] px-3 text-[11px] font-semibold text-[#5b472a] hover:bg-[#f8efd9]"
+            onClick={onOpenCalendar}
+          >
+            Calendar
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3 p-4">
+        <div className="space-y-2 rounded-[1.4rem] border border-[#deceb0] bg-[#fbf4e5] p-3">
+          <div className="flex flex-wrap items-center gap-2">
+            {([
+              { value: 'reminder', label: 'Reminder' },
+              { value: 'note', label: 'Note' },
+            ] as const).map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setEntryKind(option.value)}
+                className={cn(
+                  'rounded-full border px-3 py-1 text-[11px] font-semibold transition-colors',
+                  entryKind === option.value
+                    ? 'border-[#baa06f] bg-[#eadbb8] text-[#4f3f27]'
+                    : 'border-[#d7c8aa] bg-[#fffaf0] text-[#8b6d46] hover:text-[#4f3f27]'
+                )}
+              >
+                {option.label}
+              </button>
+            ))}
+            <div className="ml-auto flex items-center gap-1 text-[11px] text-[#8b6d46]">
+              <span>{reminders.length} item{reminders.length === 1 ? '' : 's'}</span>
+              <span className="text-[#c4b18d]">/</span>
+              <span>{completedCount} done</span>
+            </div>
+          </div>
+
+          <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+            <Input
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              className="h-10 rounded-xl border-[#d6c4a1] bg-[#fffaf0] text-[#2d2418] placeholder:text-[#9d8864]"
+              placeholder={entryKind === 'note' ? 'e.g. Talk to coach after training' : 'e.g. Evening walk'}
+            />
+            {entryKind === 'reminder' ? (
+              <Input
+                type="time"
+                value={time}
+                onChange={(event) => setTime(event.target.value)}
+                className="h-10 rounded-xl border-[#d6c4a1] bg-[#fffaf0] text-[#5b472a]"
+              />
+            ) : (
+              <Button
+                variant="outline"
+                className="h-10 rounded-xl border-[#baa06f] bg-[#eadbb8] px-4 text-[11px] font-semibold text-[#4f3f27] hover:bg-[#e2d2ad]"
+                onClick={handleAdd}
+              >
+                Add Note
+              </Button>
+            )}
+          </div>
+
+          <div className="flex items-end gap-2">
+            <Textarea
+              value={notes}
+              onChange={(event) => setNotes(event.target.value)}
+              placeholder={entryKind === 'note' ? 'Quick note details...' : 'Optional details...'}
+              className="min-h-[58px] rounded-xl border-[#d6c4a1] bg-[#fffaf0] text-[#2d2418] placeholder:text-[#9d8864]"
+            />
+            {entryKind === 'reminder' && (
+              <Button
+                variant="outline"
+                className="h-[58px] rounded-xl border-[#baa06f] bg-[#eadbb8] px-4 text-[11px] font-semibold text-[#4f3f27] hover:bg-[#e2d2ad]"
+                onClick={handleAdd}
+              >
+                Add
+              </Button>
+            )}
+          </div>
+        </div>
+
+        <div className="relative overflow-hidden rounded-[1.5rem] border border-[#decda9] bg-[#fffaf0] shadow-inner">
+          <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_bottom,transparent_0,transparent_31px,rgba(133,105,70,0.18)_31px,rgba(133,105,70,0.18)_32px)] bg-[length:100%_32px]" />
+          <div className="pointer-events-none absolute bottom-0 left-9 top-0 w-px bg-[#d8a6a4]" />
+          <div className="relative px-4 py-3 pl-12">
+            {reminders.length > 0 ? (
+              <div className="space-y-0">
+                {reminders.map((reminder) => (
+                  <div key={reminder.id} className="flex min-h-[32px] items-start gap-3 py-1.5">
+                    <button
+                      type="button"
+                      onClick={() => onToggle(reminder.id)}
+                      className="mt-0.5 shrink-0 rounded-full text-[#8a7551] transition-colors hover:text-[#4f3f27]"
+                      aria-label={reminder.completed ? 'Mark as incomplete' : 'Mark as complete'}
+                    >
+                      {reminder.completed ? (
+                        <CheckCircle2 className="h-[18px] w-[18px] text-emerald-600" />
+                      ) : (
+                        <Circle className="h-[18px] w-[18px]" />
+                      )}
+                    </button>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className={cn('text-sm font-medium text-[#2d2418]', reminder.completed && 'text-[#8d7a5a] line-through')}>
+                          {reminder.title}
+                        </p>
+                        {reminder.time && (
+                          <span className="text-[11px] font-medium text-[#8b6d46]">{reminder.time}</span>
+                        )}
+                        <span className="text-[10px] uppercase tracking-[0.14em] text-[#a1865d]">
+                          {reminder.kind === 'note' ? 'note' : 'reminder'}
+                        </span>
+                      </div>
+                      {reminder.notes && (
+                        <p className={cn('mt-0.5 text-xs leading-5 text-[#6b583b]', reminder.completed && 'text-[#9b8a6f] line-through')}>
+                          {reminder.notes}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex min-h-[92px] flex-col justify-center py-1 text-[#8b6d46]">
+                <p className="text-sm font-medium text-[#5b472a]">Nothing on today&apos;s page yet.</p>
+                <p className="mt-1 text-xs">Add a note or reminder above, or pull one in from the calendar.</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
 export default function DashboardPage() {
   const router = useRouter()
   const {
@@ -618,6 +817,9 @@ export default function DashboardPage() {
     journalEntries,
     supplements,
     notificationPreferences,
+    calendarReminders,
+    addCalendarReminder,
+    toggleCalendarReminderComplete,
   } = useAppStore()
   const [hasPausedWorkout, setHasPausedWorkout] = useState(false)
   const [expandedDashboardLogId, setExpandedDashboardLogId] = useState<string | null>(null)
@@ -645,8 +847,9 @@ export default function DashboardPage() {
   const today = getTodayISO()
   const todayTotals = getDailyTotals(today)
   const todayMeals = getDailyMeals(today)
-
-  const sortedWeightHistory = [...weightHistory].sort((a, b) => a.date.localeCompare(b.date))
+  const todayReminders = [...calendarReminders]
+    .filter((reminder) => reminder.date === today)
+    .sort(sortDashboardReminders)
 
   // Calorie progress
   const caloriePct = percentage(todayTotals.calories, user.calorie_target)
@@ -657,26 +860,6 @@ export default function DashboardPage() {
   // Remaining
   const caloriesLeft = Math.max(0, user.calorie_target - todayTotals.calories)
   const proteinLeft = Math.max(0, user.protein_target_g - todayTotals.protein_g)
-
-  // Weight data for chart
-  const weightChartData = sortedWeightHistory
-    .slice(-14)
-    .map((entry) => ({
-      date: format(parseISO(entry.date), 'MM/dd'),
-      weight: entry.weight_kg,
-    }))
-  const recentWeightChartData = weightChartData.slice(-7)
-  const recentWeightValues = recentWeightChartData.map((entry) => entry.weight)
-  const weightTrendDomain = recentWeightValues.length > 1
-    ? (() => {
-        const minWeight = Math.min(...recentWeightValues)
-        const maxWeight = Math.max(...recentWeightValues)
-        const spread = maxWeight - minWeight
-        const padding = Math.max(spread * 0.35, unitSystem === 'metric' ? 0.3 : 0.14)
-
-        return [Math.max(0, minWeight - padding), maxWeight + padding] as [number, number]
-      })()
-    : undefined
 
   const recentMealDays = Array.from({ length: 7 }, (_, i) => {
     const dayDate = subDays(new Date(), 6 - i)
@@ -731,6 +914,21 @@ export default function DashboardPage() {
     : 0
   const overCaloriesBy = Math.max(0, todayTotals.calories - user.calorie_target)
   const showMealSupportCard = expandedMealType === null
+  const handleAddTodayReminder = (entry: { kind: 'reminder' | 'note'; title: string; time?: string; notes?: string }) => {
+    addCalendarReminder({
+      id: `dashboard-reminder-${Date.now()}`,
+      date: today,
+      title: entry.title,
+      time: entry.time,
+      notes: entry.notes,
+      kind: entry.kind,
+      color: entry.kind === 'note' ? 'purple' : 'default',
+      completed: false,
+      created_at: new Date().toISOString(),
+    })
+    toast.success(`${entry.kind === 'note' ? 'Note' : 'Reminder'} added for today.`)
+  }
+
   const mealSupport = (() => {
     if (todayMeals.length === 0) {
       return {
@@ -884,12 +1082,6 @@ export default function DashboardPage() {
   const remainingWorkoutSlots = Math.max(0, weeklyReview.summary.target_workout_days - weeklyReview.summary.workouts_completed)
   const netCaloriesToday = Math.max(0, todayTotals.calories - todayWorkoutCalories)
   const netCaloriePct = percentage(netCaloriesToday, user.calorie_target)
-
-  // Stats
-  const hasWeightHistory = sortedWeightHistory.length > 0
-  const startWeight = sortedWeightHistory[0]?.weight_kg || user.weight_kg
-  const currentWeight = sortedWeightHistory[sortedWeightHistory.length - 1]?.weight_kg || user.weight_kg
-  const weightChange = currentWeight - startWeight
 
   return (
     <div className="space-y-6">
@@ -1593,100 +1785,17 @@ export default function DashboardPage() {
           )}
         </motion.div>
 
-        {/* AI Insight + recent journal */}
+        {/* Right rail */}
         <motion.div variants={stagger.item} initial="initial" animate="animate" className="space-y-4">
-          <Card>
-            <CardContent className="p-4 space-y-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <p className="text-xs font-semibold">Weekly Check-In</p>
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        'text-[10px]',
-                        weeklyReview.status === 'winning'
-                          ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
-                          : weeklyReview.status === 'steady'
-                            ? 'border-sky-500/30 bg-sky-500/10 text-sky-300'
-                            : 'border-amber-500/30 bg-amber-500/10 text-amber-300'
-                      )}
-                    >
-                      <Sparkles className="mr-1 h-3 w-3" />
-                      {weeklyReview.status === 'winning' ? 'Winning week' : weeklyReview.status === 'steady' ? 'Steady week' : 'Reset week'}
-                    </Badge>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {weeklyReview.week_label} · {weeklyReview.recovery_actions.length > 0
-                      ? `${weeklyReview.recovery_actions.length} recovery action${weeklyReview.recovery_actions.length === 1 ? '' : 's'} ready`
-                      : 'No reset needed right now'}
-                  </p>
-                </div>
-              </div>
-              <div className="rounded-xl border border-border/50 bg-muted/20 px-3.5 py-3">
-                <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">Next move</p>
-                <p className="mt-1.5 text-sm font-semibold leading-5">{weeklyReview.recommendation.title}</p>
-                <p className="mt-1 text-xs text-muted-foreground leading-5">{weeklyReview.recommendation.detail}</p>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                {[
-                  { label: 'Workouts', value: `${weeklyReview.summary.workouts_completed}/${weeklyReview.summary.target_workout_days}`, sub: 'planned days' },
-                  { label: 'Protein', value: `${weeklyReview.summary.protein_hit_days}/${weeklyReview.days.length}`, sub: 'goal-hit days' },
-                  { label: 'Hydration', value: `${weeklyReview.summary.hydration_hit_days}/${weeklyReview.days.length}`, sub: 'water-goal days' },
-                  { label: 'Tracked', value: `${weeklyReview.summary.days_tracked}/${weeklyReview.days.length}`, sub: 'days with data' },
-                ].map((item) => (
-                  <div key={item.label} className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">{item.label}</p>
-                      <p className="font-data text-lg font-semibold">{item.value}</p>
-                    </div>
-                    <p className="mt-1 text-[11px] text-muted-foreground">{item.sub}</p>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+          <TodayRemindersCard
+            reminders={todayReminders}
+            onAdd={handleAddTodayReminder}
+            onToggle={toggleCalendarReminderComplete}
+            onOpenCalendar={() => router.push('/dashboard/calendar')}
+          />
 
           {/* Daily quote */}
           <DailyQuoteCard />
-
-          {/* Weight trend card */}
-          {sortedWeightHistory.length > 0 && (
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-xs font-semibold">Weight Trend</p>
-                  <span className={`text-xs font-semibold ${weightChange < 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                    {weightChange < 0 ? '↓' : '↑'} {formatWeightValue(Math.abs(weightChange), unitSystem).replace(/\s(?:kg|lbs)$/, ` ${getWeightUnitLabel(unitSystem)}`)}
-                  </span>
-                </div>
-                <ResponsiveContainer width="100%" height={72}>
-                  <AreaChart data={recentWeightChartData} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="wt-area" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.2} />
-                        <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    {weightTrendDomain ? <YAxis domain={weightTrendDomain} hide /> : null}
-                    <Area
-                      type="monotone"
-                      dataKey="weight"
-                      stroke="#10b981"
-                      strokeWidth={2.5}
-                      fill="url(#wt-area)"
-                      dot={{ r: 2.5, fill: '#10b981', strokeWidth: 0 }}
-                      activeDot={{ r: 4, fill: '#10b981', strokeWidth: 0 }}
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-                <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                  <span>{formatWeightValue(sortedWeightHistory[0]?.weight_kg || startWeight, unitSystem)} start</span>
-                  <span>{formatWeightValue(currentWeight, unitSystem)} now</span>
-                </div>
-              </CardContent>
-            </Card>
-          )}
 
         </motion.div>
       </div>

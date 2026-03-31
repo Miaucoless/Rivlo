@@ -2,10 +2,11 @@
 
 import React from 'react'
 
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { Sidebar } from '@/components/dashboard/Sidebar'
+import { BottomNav } from '@/components/dashboard/BottomNav'
 import { TopBar } from '@/components/dashboard/TopBar'
 import { ExposeStore } from '@/components/ExposeStore'
 
@@ -22,6 +23,7 @@ export default function DashboardLayout({
   const isMobile = useIsMobile()
   const router = useRouter()
   const { loading } = useAuthInit()
+  const mainRef = useRef<HTMLElement>(null)
 
   useEffect(() => {
     if (loading) return
@@ -121,18 +123,19 @@ export default function DashboardLayout({
         {/* Spacer matching the fixed TopBar height (3.5rem) + safe area inset */}
         <div style={{ height: 'calc(3.5rem + env(safe-area-inset-top, 0px))' }} className="flex-shrink-0" />
 
-        <main className="flex-1 overflow-y-auto md:min-h-0">
+        <main ref={mainRef} className="flex-1 overflow-y-auto md:min-h-0">
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3, ease: [0.22, 0.61, 0.36, 1] }}
-            className="p-3 md:p-6 max-w-[1400px] mx-auto"
+            className="mx-auto max-w-[1400px] p-3 pb-[calc(env(safe-area-inset-bottom)+6.75rem)] md:p-6"
           >
             {children}
           </motion.div>
         </main>
       </motion.div>
 
+      <BottomNav scrollContainerRef={mainRef} />
     </div>
   )
 }
