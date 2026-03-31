@@ -432,3 +432,109 @@ export interface WaterEntry {
   amount_ml: number
   logged_at: string  // ISO timestamp
 }
+
+// ─── Weekly Review ─────────────────────────────────────────────────────────────
+
+export type WeeklyReviewStatus = 'winning' | 'steady' | 'needs_attention'
+export type WeeklyReviewFocusArea = 'workouts' | 'nutrition' | 'hydration' | 'recovery' | 'mindset' | 'weight_trend'
+export type WeeklyInsightTone = 'success' | 'neutral' | 'warning'
+export type WeeklyWeightTrend = 'down' | 'up' | 'flat' | 'insufficient_data'
+export type WeeklyRecoveryActionType = 'shift_workouts' | 'simplify_meals' | 'lighter_targets' | 'focused_reminders'
+
+export interface WeeklyReviewDay {
+  date: string
+  workouts_completed: number
+  meals_logged: number
+  calories: number
+  protein_g: number
+  carbs_g: number
+  fat_g: number
+  water_ml: number
+  protein_hit: boolean
+  hydration_hit: boolean
+  journal_entries: number
+  supplements_taken: number
+  mood?: MoodLevel
+  energy?: EnergyLevel
+  weight_kg?: number
+}
+
+export interface WeeklyInsight {
+  id: string
+  type: 'win' | 'focus'
+  area: WeeklyReviewFocusArea
+  tone: WeeklyInsightTone
+  title: string
+  detail: string
+  metric_label?: string
+  metric_value?: string
+}
+
+export interface WeeklyRecommendation {
+  area: WeeklyReviewFocusArea
+  title: string
+  detail: string
+  reason: string
+  confidence: 'high' | 'medium'
+}
+
+export interface WeeklyRecoveryAction {
+  id: string
+  type: WeeklyRecoveryActionType
+  priority: 'high' | 'medium' | 'low'
+  title: string
+  description: string
+  reason: string
+  cta_label: string
+  metadata?: Record<string, string | number | boolean | string[]>
+}
+
+export interface WeeklyReviewSummary {
+  days_tracked: number
+  workouts_completed: number
+  target_workout_days: number
+  meal_logging_days: number
+  protein_hit_days: number
+  hydration_hit_days: number
+  journal_days: number
+  supplement_logged_days: number
+  workout_completion_rate_pct: number
+  protein_hit_rate_pct: number
+  hydration_hit_rate_pct: number
+  meal_logging_rate_pct: number
+  average_calories: number
+  average_protein_g: number
+  average_mood?: number
+  average_energy?: number
+  consistency_score: number
+  weight_delta_kg?: number
+  weight_trend: WeeklyWeightTrend
+}
+
+export interface WeeklyReview {
+  range_start: string
+  range_end: string
+  week_label: string
+  generated_at: string
+  status: WeeklyReviewStatus
+  summary: WeeklyReviewSummary
+  days: WeeklyReviewDay[]
+  wins: WeeklyInsight[]
+  focus_areas: WeeklyInsight[]
+  recommendation: WeeklyRecommendation
+  recovery_actions: WeeklyRecoveryAction[]
+}
+
+export interface WeeklyRecapShareData {
+  week_label: string
+  status: WeeklyReviewStatus
+  headline: string
+  workouts_completed: number
+  target_workout_days: number
+  protein_hit_days: number
+  hydration_hit_days: number
+  consistency_score: number
+  weight_delta_kg?: number
+  highlight: string
+  recommendation: string
+}

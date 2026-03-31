@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { deleteRedisKeys } from '@/lib/redis'
 import { getAuthUser, getServiceClient } from '@/lib/supabase-server'
+import type { GroceryItem, GroceryList } from '@/types'
 
 function inboxCacheKeys(userId: string) {
   return [
@@ -9,7 +10,53 @@ function inboxCacheKeys(userId: string) {
     `share-inbox:v1:${userId}:workout`,
     `share-inbox:v1:${userId}:saved_meal`,
     `share-inbox:v1:${userId}:grocery_list`,
+    `share-inbox:v1:${userId}:weekly_recap`,
   ]
+}
+
+function parseNumber(value: unknown, fallback = 0) {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string') {
+    const parsed = Number(value)
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return fallback
+}
+
+function normalizeGroceryItem(raw: unknown, resetChecked = false): GroceryItem {
+  const item = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {}
+
+  return {
+    ingredient:
+      typeof item.ingredient === 'string' && item.ingredient.trim()
+        ? item.ingredient.trim()
+        : typeof item.name === 'string' && item.name.trim()
+          ? item.name.trim()
+          : 'Item',
+    amount: parseNumber(item.amount, 1),
+    unit: typeof item.unit === 'string' && item.unit.trim() ? item.unit.trim() : 'serving',
+    estimated_price: parseNumber(item.estimated_price, 0),
+    category: typeof item.category === 'string' && item.category.trim() ? item.category.trim() : 'Other',
+    checked: resetChecked ? false : Boolean(item.checked),
+  }
+}
+
+function normalizeGroceryListRow(row: Record<string, unknown>, userId: string): GroceryList {
+  const items = Array.isArray(row.items)
+    ? row.items.map((item) => normalizeGroceryItem(item))
+    : []
+
+  return {
+    id: typeof row.id === 'string' ? row.id : crypto.randomUUID(),
+    user_id: typeof row.user_id === 'string' ? row.user_id : userId,
+    week_start: typeof row.week_start === 'string' ? row.week_start : new Date().toISOString().split('T')[0],
+    items,
+    total_estimated_cost: parseNumber(
+      row.total_cost ?? row.total_estimated_cost,
+      items.reduce((sum, item) => sum + item.estimated_price, 0)
+    ),
+    created_at: typeof row.created_at === 'string' ? row.created_at : new Date().toISOString(),
+  }
 }
 
 async function mergeSavedMealIntoUserState(
@@ -100,6 +147,19 @@ export async function POST(
     .maybeSingle()
 
   if (existing) {
+    let existingImportedItem: Record<string, unknown> | null = null
+    if (item.item_type === 'grocery_list' && typeof existing.result_id === 'string') {
+      const { data: existingList } = await db
+        .from('grocery_lists')
+        .select('*')
+        .eq('id', existing.result_id)
+        .maybeSingle()
+
+      if (existingList) {
+        existingImportedItem = normalizeGroceryListRow(existingList as Record<string, unknown>, user.id) as unknown as Record<string, unknown>
+      }
+    }
+
     if (friend_share_id) {
       await db
         .from('friend_shares')
@@ -111,6 +171,7 @@ export async function POST(
     return NextResponse.json({
       result_id: existing.result_id,
       item_type: item.item_type,
+      imported_item: existingImportedItem,
       already_imported: true,
     })
   }
@@ -199,8 +260,10 @@ export async function POST(
     resultId = newMeal.id as string
     importedItem = newMeal
   } else if (item.item_type === 'grocery_list') {
-    // Merge shared items into user's existing grocery list (or create a new one)
-    const sharedItems = (data.items as unknown[]) ?? []
+    const sharedItems = Array.isArray(data.items)
+      ? data.items.map((sharedItem) => normalizeGroceryItem(sharedItem, true))
+      : []
+
     const { data: existingList } = await db
       .from('grocery_lists')
       .select('*')
@@ -210,21 +273,47 @@ export async function POST(
       .maybeSingle()
 
     const now = new Date().toISOString().split('T')[0]
-    const existingItems = Array.isArray(existingList?.items) ? existingList.items : []
+    const normalizedExistingList = existingList
+      ? normalizeGroceryListRow(existingList as Record<string, unknown>, user.id)
+      : null
+
+    const existingItems = normalizedExistingList?.items ?? []
     const mergedItems = [
       ...existingItems,
-      ...sharedItems.map((i: unknown) => ({ ...(i as object), checked: false })),
+      ...sharedItems,
     ]
 
-    const listId = existingList?.id ?? crypto.randomUUID()
-    await db.from('grocery_lists').upsert({
+    const listId = normalizedExistingList?.id ?? crypto.randomUUID()
+    const weekStart = normalizedExistingList?.week_start ?? now
+    const createdAt = normalizedExistingList?.created_at ?? new Date().toISOString()
+    const totalEstimatedCost = mergedItems.reduce((sum, groceryItem) => sum + groceryItem.estimated_price, 0)
+
+    const { error: groceryError } = await db.from('grocery_lists').upsert({
       id: listId,
       user_id: user.id,
-      week_start: existingList?.week_start ?? now,
+      week_start: weekStart,
       items: mergedItems,
-      updated_at: new Date().toISOString(),
+      total_cost: totalEstimatedCost,
+      created_at: createdAt,
     })
+
+    if (groceryError) {
+      return NextResponse.json({ error: groceryError.message }, { status: 500 })
+    }
+
+    const importedList: GroceryList = {
+      id: listId,
+      user_id: user.id,
+      week_start: weekStart,
+      items: mergedItems,
+      total_estimated_cost: totalEstimatedCost,
+      created_at: createdAt,
+    }
+
     resultId = listId
+    importedItem = importedList as unknown as Record<string, unknown>
+  } else if (item.item_type === 'weekly_recap') {
+    return NextResponse.json({ error: 'Weekly recaps are view-only.' }, { status: 422 })
   }
 
   if (!resultId) {

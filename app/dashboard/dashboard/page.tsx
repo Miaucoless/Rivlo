@@ -8,7 +8,7 @@ import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Flame, Zap, Apple, Dumbbell, TrendingUp, Plus, ChevronRight,
-  Target, Calendar, BookOpen, Trophy, BarChart3, ArrowUp, ArrowDown, ChevronDown, ChevronUp,
+  ChevronDown, ChevronUp, Sparkles,
 } from 'lucide-react'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell,
@@ -24,6 +24,7 @@ import { Label } from '@/components/ui/label'
 import { useAppStore } from '@/store/useAppStore'
 import { WaterIntakeCard } from '@/components/dashboard/WaterIntakeCard'
 import { DailyQuoteCard } from '@/components/dashboard/DailyQuoteCard'
+import { buildWeeklyReview } from '@/lib/weekly-review'
 import { cn, percentage, getTodayISO, formatCalories, formatWeightDelta, formatWeightValue, getWeightUnitLabel } from '@/lib/utils'
 import { toast } from 'sonner'
 
@@ -61,27 +62,6 @@ function getWorkoutSetRowClass(set: { set_type?: 'standard' | 'drop' }) {
     'grid grid-cols-3 items-center text-xs rounded px-2 py-1 bg-background/40',
     set.set_type === 'drop' && 'ml-4 w-[calc(100%-1rem)] border border-dashed border-primary/25 bg-primary/[0.05]'
   )
-}
-
-function calculateConsecutiveStreak(activeDates: Iterable<string>) {
-  const dateSet = new Set(Array.from(activeDates))
-  if (dateSet.size === 0) return 0
-
-  const today = getTodayISO()
-  const yesterday = format(subDays(new Date(), 1), 'yyyy-MM-dd')
-  const latestDate = Array.from(dateSet).sort().at(-1)
-
-  if (!latestDate || (latestDate !== today && latestDate !== yesterday)) return 0
-
-  let streak = 0
-  let cursor = latestDate
-
-  while (dateSet.has(cursor)) {
-    streak += 1
-    cursor = format(subDays(new Date(`${cursor}T12:00:00`), 1), 'yyyy-MM-dd')
-  }
-
-  return streak
 }
 
 // Quick Add Meal Dialog
@@ -152,7 +132,19 @@ function QuickAddMealDialog() {
 
 export default function DashboardPage() {
   const router = useRouter()
-  const { user, getDailyTotals, getDailyMeals, mealEntries, waterLogs, weightHistory, workoutLogs, streak } = useAppStore()
+  const {
+    user,
+    getDailyTotals,
+    getDailyMeals,
+    mealEntries,
+    waterLogs,
+    weightHistory,
+    workoutLogs,
+    streak,
+    journalEntries,
+    supplements,
+    notificationPreferences,
+  } = useAppStore()
   const [hasPausedWorkout, setHasPausedWorkout] = useState(false)
   const [expandedDashboardLogId, setExpandedDashboardLogId] = useState<string | null>(null)
   const [expandedMealType, setExpandedMealType] = useState<string | null>(null)
@@ -234,28 +226,30 @@ export default function DashboardPage() {
     }
   })
 
-  const workoutDateSet = new Set(workoutLogs.map((workout) => workout.date))
-  const proteinHitDateSet = new Set(
-    Object.entries(mealEntries)
-      .filter(([, meals]) => meals.reduce((sum, meal) => sum + meal.macros.protein_g, 0) >= user.protein_target_g)
-      .map(([date]) => date)
+  const weeklyReview = buildWeeklyReview({
+    user,
+    workoutLogs,
+    mealEntries,
+    waterLogs,
+    weightHistory,
+    journalEntries,
+    supplements,
+    notificationPreferences,
+  })
+  const workoutRecoveryAction = weeklyReview.recovery_actions.find((action) =>
+    action.type === 'shift_workouts' || action.type === 'lighter_targets'
   )
-  const hydrationDateSet = new Set(
-    Object.entries(waterLogs)
-      .filter(([, entries]) => entries.reduce((sum, entry) => sum + entry.amount_ml, 0) >= (user.water_goal_ml || 2500))
-      .map(([date]) => date)
-  )
-
-  const workoutStreak = calculateConsecutiveStreak(workoutDateSet)
-  const proteinStreak = calculateConsecutiveStreak(proteinHitDateSet)
-  const hydrationStreak = calculateConsecutiveStreak(hydrationDateSet)
-
-  const recentSevenDates = Array.from({ length: 7 }, (_, i) => format(subDays(new Date(), i), 'yyyy-MM-dd'))
-  const weeklyWorkoutCount = recentSevenDates.filter((date) => workoutDateSet.has(date)).length
-  const weeklyProteinHitCount = recentSevenDates.filter((date) => proteinHitDateSet.has(date)).length
-  const weeklyHydrationHitCount = recentSevenDates.filter((date) => hydrationDateSet.has(date)).length
-  const weeklyLoggingCount = recentSevenDates.filter((date) => (mealEntries[date] || []).length > 0).length
-  const consistencyScore = Math.round(((weeklyWorkoutCount + weeklyProteinHitCount + weeklyHydrationHitCount + weeklyLoggingCount) / 28) * 100)
+  const mealSlots = ['breakfast', 'lunch', 'dinner', 'snack'] as const
+  const openMealSlots = mealSlots.filter((slot) => !todayMeals.some((meal) => meal.meal_type === slot))
+  const proteinLeftCapped = Math.max(0, proteinLeft)
+  const caloriesRemainingText = caloriesLeft > 0
+    ? `${caloriesLeft} kcal left for the day`
+    : `${todayTotals.calories - user.calorie_target} kcal over target`
+  const mealFocusText = proteinLeftCapped > 0
+    ? `A protein-forward next meal is the fastest win. Aim for about ${Math.min(proteinLeftCapped, 35)}g.`
+    : caloriesLeft > 0
+      ? 'Protein is already covered. Keep the rest of the day light and easy to log.'
+      : 'Protein is covered, so the best move now is a lighter finish to the day.'
 
   const calorieChartData = recentMealDays
     .filter((day) => day.meals.length > 0)
@@ -546,9 +540,9 @@ export default function DashboardPage() {
                 </a>
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex h-full flex-col">
               {todayWorkoutLogs.length > 0 ? (
-                <div className="space-y-3">
+                <div className="flex flex-1 flex-col space-y-3">
                   <div className="grid grid-cols-3 gap-2">
                     <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5">
                       <p className="font-data text-lg font-semibold">{todayWorkoutLogs.length}</p>
@@ -647,11 +641,80 @@ export default function DashboardPage() {
                     })}
                   </div>
 
+                  <div className="mt-auto space-y-3 border-t border-border/60 pt-3">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5">
+                        <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Week pace</p>
+                        <p className="mt-1 font-data text-lg font-semibold">
+                          {weeklyReview.summary.workouts_completed}/{weeklyReview.summary.target_workout_days}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground">
+                          {Math.max(0, weeklyReview.summary.target_workout_days - weeklyReview.summary.workouts_completed)} left to place
+                        </p>
+                      </div>
+                      <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5">
+                        <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Logged days</p>
+                        <p className="mt-1 font-data text-lg font-semibold">
+                          {weeklyReview.summary.days_tracked}/{weeklyReview.days.length}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground">days with activity data</p>
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-border/50 bg-background/60 px-3 py-3">
+                      <div className="flex items-start gap-2.5">
+                        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                          <Sparkles className="h-4 w-4" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Next step</p>
+                          <p className="mt-1 text-xs font-medium leading-5">
+                            {workoutRecoveryAction?.title ?? weeklyReview.recommendation.title}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               ) : (
-                <div className="flex flex-col items-center justify-center h-40 text-muted-foreground text-sm text-center">
-                  <Dumbbell className="w-10 h-10 mb-3 opacity-20" />
-                  <p>No workouts logged yet today</p>
+                <div className="flex flex-1 flex-col">
+                  <div className="flex flex-1 flex-col items-center justify-center h-40 text-muted-foreground text-sm text-center">
+                    <Dumbbell className="w-10 h-10 mb-3 opacity-20" />
+                    <p>No workouts logged yet today</p>
+                  </div>
+
+                  <div className="mt-auto space-y-3 border-t border-border/60 pt-3">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5">
+                        <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Week pace</p>
+                        <p className="mt-1 font-data text-lg font-semibold">
+                          {weeklyReview.summary.workouts_completed}/{weeklyReview.summary.target_workout_days}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground">
+                          {Math.max(0, weeklyReview.summary.target_workout_days - weeklyReview.summary.workouts_completed)} workouts still open
+                        </p>
+                      </div>
+                      <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5">
+                        <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Reset ready</p>
+                        <p className="mt-1 font-data text-lg font-semibold">{weeklyReview.recovery_actions.length}</p>
+                        <p className="text-[11px] text-muted-foreground">recovery action{weeklyReview.recovery_actions.length === 1 ? '' : 's'}</p>
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-border/50 bg-background/60 px-3 py-3">
+                      <div className="flex items-start gap-2.5">
+                        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                          <Sparkles className="h-4 w-4" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Best next move</p>
+                          <p className="mt-1 text-xs font-medium leading-5">
+                            {workoutRecoveryAction?.title ?? 'Place your next workout on the day you are most likely to follow through.'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
             </CardContent>
@@ -667,9 +730,9 @@ export default function DashboardPage() {
                 <QuickAddMealDialog />
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex h-full flex-col">
               {todayMeals.length > 0 ? (
-                <div className="space-y-3">
+                <div className="flex flex-1 flex-col space-y-3">
                   {/* Macro stat grid */}
                   <div className="grid grid-cols-4 gap-2">
                     {[
@@ -876,12 +939,74 @@ export default function DashboardPage() {
                         : `${todayTotals.calories - user.calorie_target} kcal over target`}
                     </p>
                   </div>
+
+                  <div className="mt-auto space-y-3 border-t border-border/60 pt-3">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5">
+                        <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Open meal slots</p>
+                        <p className="mt-1 font-data text-lg font-semibold">{openMealSlots.length}</p>
+                        <p className="text-[11px] text-muted-foreground">
+                          {openMealSlots.length > 0 ? openMealSlots.join(' · ') : 'all major slots filled'}
+                        </p>
+                      </div>
+                      <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5">
+                        <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Protein left</p>
+                        <p className="mt-1 font-data text-lg font-semibold">
+                          {proteinLeftCapped > 0 ? `${proteinLeftCapped}g` : 'Hit'}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground">{caloriesRemainingText}</p>
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-border/50 bg-background/60 px-3 py-3">
+                      <div className="flex items-start gap-2.5">
+                        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                          <Sparkles className="h-4 w-4" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Fastest win</p>
+                          <p className="mt-1 text-xs font-medium leading-5">{mealFocusText}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                   </div>
                 </div>
               ) : (
-                <div className="flex flex-col items-center justify-center h-40 text-muted-foreground text-sm text-center">
-                  <Apple className="w-10 h-10 mb-3 opacity-20" />
-                  <p>No meals logged yet</p>
+                <div className="flex flex-1 flex-col">
+                  <div className="flex flex-1 flex-col items-center justify-center h-40 text-muted-foreground text-sm text-center">
+                    <Apple className="w-10 h-10 mb-3 opacity-20" />
+                    <p>No meals logged yet</p>
+                  </div>
+
+                  <div className="mt-auto space-y-3 border-t border-border/60 pt-3">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5">
+                        <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Open meal slots</p>
+                        <p className="mt-1 font-data text-lg font-semibold">{mealSlots.length}</p>
+                        <p className="text-[11px] text-muted-foreground">breakfast · lunch · dinner · snack</p>
+                      </div>
+                      <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5">
+                        <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Protein left</p>
+                        <p className="mt-1 font-data text-lg font-semibold">{user.protein_target_g}g</p>
+                        <p className="text-[11px] text-muted-foreground">target still open today</p>
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-border/50 bg-background/60 px-3 py-3">
+                      <div className="flex items-start gap-2.5">
+                        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                          <Sparkles className="h-4 w-4" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Fastest win</p>
+                          <p className="mt-1 text-xs font-medium leading-5">
+                            Log one protein-forward meal first, then let the rest of the day build around it.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
             </CardContent>
@@ -894,29 +1019,41 @@ export default function DashboardPage() {
             <CardContent className="p-4 space-y-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-xs font-semibold">Consistency Score</p>
-                  <p className="text-xs text-muted-foreground mt-1">Last 7 days across workouts, logging, protein, and hydration.</p>
-                </div>
-                <div className="text-right">
-                  <p className="font-data text-2xl font-bold">{consistencyScore}%</p>
-                  <p className="text-[11px] text-muted-foreground">weekly score</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs font-semibold">Weekly Check-In</p>
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        'text-[10px]',
+                        weeklyReview.status === 'winning'
+                          ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+                          : weeklyReview.status === 'steady'
+                            ? 'border-sky-500/30 bg-sky-500/10 text-sky-300'
+                            : 'border-amber-500/30 bg-amber-500/10 text-amber-300'
+                      )}
+                    >
+                      <Sparkles className="mr-1 h-3 w-3" />
+                      {weeklyReview.status === 'winning' ? 'Winning week' : weeklyReview.status === 'steady' ? 'Steady week' : 'Reset week'}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {weeklyReview.week_label} · {weeklyReview.recovery_actions.length > 0
+                      ? `${weeklyReview.recovery_actions.length} recovery action${weeklyReview.recovery_actions.length === 1 ? '' : 's'} ready`
+                      : 'No reset needed right now'}
+                  </p>
                 </div>
               </div>
-              <div className="progress-track">
-                <div
-                  className={cn(
-                    'progress-fill',
-                    consistencyScore >= 80 ? 'bg-emerald-500' : consistencyScore >= 55 ? 'bg-amber-500' : 'bg-rose-500'
-                  )}
-                  style={{ width: `${consistencyScore}%` }}
-                />
+              <div className="rounded-xl border border-border/50 bg-muted/20 px-3.5 py-3">
+                <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">Next move</p>
+                <p className="mt-1.5 text-sm font-semibold leading-5">{weeklyReview.recommendation.title}</p>
+                <p className="mt-1 text-xs text-muted-foreground leading-5">{weeklyReview.recommendation.detail}</p>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 {[
-                  { label: 'Overall', value: `${streak}d`, sub: 'any activity' },
-                  { label: 'Workouts', value: `${workoutStreak}d`, sub: `${weeklyWorkoutCount}/7 days` },
-                  { label: 'Protein', value: `${proteinStreak}d`, sub: `${weeklyProteinHitCount}/7 days` },
-                  { label: 'Hydration', value: `${hydrationStreak}d`, sub: `${weeklyHydrationHitCount}/7 days` },
+                  { label: 'Workouts', value: `${weeklyReview.summary.workouts_completed}/${weeklyReview.summary.target_workout_days}`, sub: 'planned days' },
+                  { label: 'Protein', value: `${weeklyReview.summary.protein_hit_days}/${weeklyReview.days.length}`, sub: 'goal-hit days' },
+                  { label: 'Hydration', value: `${weeklyReview.summary.hydration_hit_days}/${weeklyReview.days.length}`, sub: 'water-goal days' },
+                  { label: 'Tracked', value: `${weeklyReview.summary.days_tracked}/${weeklyReview.days.length}`, sub: 'days with data' },
                 ].map((item) => (
                   <div key={item.label} className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5">
                     <div className="flex items-center justify-between gap-2">
@@ -927,6 +1064,10 @@ export default function DashboardPage() {
                   </div>
                 ))}
               </div>
+              <Button variant="outline" className="w-full gap-2" onClick={() => router.push('/dashboard/check-in')}>
+                Review the full check-in
+                <ChevronRight className="h-4 w-4" />
+              </Button>
             </CardContent>
           </Card>
 
@@ -971,35 +1112,6 @@ export default function DashboardPage() {
             </Card>
           )}
 
-          <Card>
-            <CardContent className="p-4">
-              <p className="text-xs font-semibold mb-3">Quick Actions</p>
-              <div className="grid grid-cols-2 gap-2">
-                {[
-                  { label: 'Meal Plan', icon: Apple, href: '/dashboard/meals', color: 'text-emerald-500 bg-emerald-500/10' },
-                  { label: 'Log Weight', icon: BarChart3, href: '/dashboard/tracking', color: 'text-emerald-500 bg-emerald-500/10' },
-                  { label: 'Calendar', icon: Calendar, href: '/dashboard/calendar', color: 'text-emerald-500 bg-emerald-500/10' },
-                  { label: 'Journal', icon: BookOpen, href: '/dashboard/journal', color: 'text-emerald-500 bg-emerald-500/10' },
-                ].map((item) => {
-                  const Icon = item.icon
-                  return (
-                    <a
-                      key={item.label}
-                      href={item.href}
-                      className="flex items-center gap-2 p-2.5 rounded-lg hover:bg-muted transition-colors group"
-                    >
-                      <div className={`w-6 h-6 rounded-md flex items-center justify-center ${item.color}`}>
-                        <Icon className="w-3.5 h-3.5" />
-                      </div>
-                      <span className="text-xs font-medium group-hover:text-foreground text-muted-foreground">
-                        {item.label}
-                      </span>
-                    </a>
-                  )
-                })}
-              </div>
-            </CardContent>
-          </Card>
         </motion.div>
       </div>
     </div>

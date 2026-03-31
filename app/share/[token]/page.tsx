@@ -8,14 +8,14 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
-import { Dumbbell, UtensilsCrossed, BookOpen, CheckCircle, Loader2, AlertCircle, ArrowLeft, ShoppingCart, Flame, Heart, MessageSquare, Sparkles } from 'lucide-react'
+import { Dumbbell, UtensilsCrossed, BookOpen, CheckCircle, Loader2, AlertCircle, ArrowLeft, ShoppingCart, Flame, Heart, MessageSquare, Sparkles, CalendarRange, Droplets, Target, TrendingUp, Circle } from 'lucide-react'
 import { toast } from 'sonner'
 import { formatDistanceToNow } from 'date-fns'
-import type { SavedMealTemplate } from '@/types'
+import type { GroceryItem, GroceryList, SavedMealTemplate, WeeklyRecapShareData } from '@/types'
 
 type SharedItem = {
   share_id: string
-  item_type: 'workout' | 'saved_meal' | 'recipe' | 'grocery_list'
+  item_type: 'workout' | 'saved_meal' | 'recipe' | 'grocery_list' | 'weekly_recap'
   item_name: string
   item_data: Record<string, unknown>
   owner_name: string
@@ -42,6 +42,7 @@ const TYPE_LABELS: Record<string, string> = {
   saved_meal: 'Saved Meal',
   recipe: 'Recipe',
   grocery_list: 'Grocery List',
+  weekly_recap: 'Weekly Recap',
 }
 
 const TYPE_ICONS: Record<string, React.ReactNode> = {
@@ -49,6 +50,7 @@ const TYPE_ICONS: Record<string, React.ReactNode> = {
   saved_meal: <UtensilsCrossed className="w-5 h-5" />,
   recipe: <BookOpen className="w-5 h-5" />,
   grocery_list: <ShoppingCart className="w-5 h-5" />,
+  weekly_recap: <Sparkles className="w-5 h-5" />,
 }
 
 const REACTION_OPTIONS: Array<{
@@ -72,11 +74,17 @@ function getExerciseName(ex: Record<string, unknown>): string {
   return 'Exercise'
 }
 
+function formatGroceryAmount(item: GroceryItem): string | null {
+  if (!(item.amount > 0)) return null
+  return `${item.amount}${item.unit ? ` ${item.unit}` : ''}`
+}
+
 export default function SharePage() {
   const params = useParams()
   const router = useRouter()
   const token = params.token as string
   const addSavedMeal = useAppStore((state) => state.addSavedMeal)
+  const setGroceryList = useAppStore((state) => state.setGroceryList)
 
   const [item, setItem] = useState<SharedItem | null>(null)
   const [loading, setLoading] = useState(true)
@@ -151,6 +159,9 @@ export default function SharePage() {
       if (!res.ok) throw new Error('Import failed')
       if (data.item_type === 'saved_meal' && data.imported_item) {
         addSavedMeal(data.imported_item as SavedMealTemplate)
+      }
+      if (data.item_type === 'grocery_list' && data.imported_item) {
+        setGroceryList(data.imported_item as GroceryList)
       }
       setImported(true)
       toast.success(`${item?.item_name} added to your account!`)
@@ -267,9 +278,21 @@ export default function SharePage() {
   }
 
   const macros = item.item_data?.macros as Record<string, number> | undefined
+  const recap = item.item_type === 'weekly_recap' ? item.item_data as unknown as WeeklyRecapShareData : null
+  const isViewOnly = item.item_type === 'weekly_recap'
 
   const exercises = item.item_data?.exercises as Record<string, unknown>[] | undefined
-  const groceryItems = item.item_data?.items as { name: string; amount?: number; unit?: string; category?: string }[] | undefined
+  const sharedGroceryList = item.item_type === 'grocery_list' ? item.item_data as unknown as GroceryList : null
+  const groceryItems = Array.isArray(sharedGroceryList?.items) ? sharedGroceryList.items : []
+  const groceryByCategory = groceryItems.reduce<Record<string, GroceryItem[]>>((acc, groceryItem) => {
+    const category = groceryItem.category || 'Other'
+    if (!acc[category]) acc[category] = []
+    acc[category].push(groceryItem)
+    return acc
+  }, {})
+  const groceryProgress = groceryItems.length > 0
+    ? Math.round((groceryItems.filter((groceryItem) => groceryItem.checked).length / groceryItems.length) * 100)
+    : 0
   const ingredients = item.item_data?.ingredients as { name: string; amount?: number; unit?: string }[] | undefined
   const mealItems = item.item_data?.items as { matched_name?: string; input?: string; amount?: number; unit?: string }[] | undefined
 
@@ -301,6 +324,63 @@ export default function SharePage() {
             <CardContent className="space-y-4">
               {item.message && (
                 <p className="rounded-xl border border-white/30 bg-white/45 px-3 py-2 text-sm italic text-muted-foreground dark:border-white/10 dark:bg-white/5">&ldquo;{item.message}&rdquo;</p>
+              )}
+
+              {recap && (
+                <div className="space-y-4 rounded-2xl border border-white/25 bg-white/35 p-4 backdrop-blur-sm dark:border-white/10 dark:bg-white/5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="outline" className="border-white/30 bg-white/45 dark:border-white/10 dark:bg-white/5">
+                      <CalendarRange className="mr-1.5 h-3.5 w-3.5" />
+                      {recap.week_label}
+                    </Badge>
+                    <Badge variant="outline" className="border-emerald-500/20 bg-emerald-500/10 text-emerald-400">
+                      <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+                      {recap.status === 'winning' ? 'Winning week' : recap.status === 'steady' ? 'Steady week' : 'Reset week'}
+                    </Badge>
+                  </div>
+
+                  <div>
+                    <p className="text-lg font-semibold">{recap.headline}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">{recap.highlight}</p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    {[
+                      { label: 'Workouts', value: `${recap.workouts_completed}/${recap.target_workout_days}`, icon: Dumbbell },
+                      { label: 'Protein', value: `${recap.protein_hit_days}/7`, icon: UtensilsCrossed },
+                      { label: 'Hydration', value: `${recap.hydration_hit_days}/7`, icon: Droplets },
+                      {
+                        label: 'Weight',
+                        value: typeof recap.weight_delta_kg === 'number'
+                          ? `${recap.weight_delta_kg > 0 ? '+' : ''}${recap.weight_delta_kg.toFixed(1)} kg`
+                          : 'No change',
+                        icon: TrendingUp,
+                      },
+                    ].map(({ label, value, icon: Icon }) => (
+                      <div key={label} className="rounded-xl border border-white/20 bg-white/40 p-3 text-center dark:border-white/10 dark:bg-white/[0.04]">
+                        <div className="mb-2 flex justify-center">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/70 dark:bg-white/[0.08]">
+                            <Icon className="h-4 w-4 text-muted-foreground" />
+                          </div>
+                        </div>
+                        <p className="font-data text-sm font-semibold">{value}</p>
+                        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="rounded-xl border border-white/20 bg-white/40 p-3 dark:border-white/10 dark:bg-white/[0.04]">
+                    <div className="flex items-start gap-2.5">
+                      <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-400">
+                        <Target className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Recommended next move</p>
+                        <p className="mt-1 text-sm text-foreground/90">{recap.recommendation}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               )}
 
               {macros && (
@@ -363,14 +443,70 @@ export default function SharePage() {
                 </div>
               )}
 
-              {item.item_type === 'grocery_list' && groceryItems && groceryItems.length > 0 && (
-                <div className="space-y-1.5 rounded-2xl border border-white/25 bg-white/35 p-3 backdrop-blur-sm dark:border-white/10 dark:bg-white/5">
-                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{groceryItems.length} items</p>
-                  <div className="space-y-1 max-h-52 overflow-y-auto">
-                    {groceryItems.map((gi, i) => (
-                      <div key={i} className="flex items-center justify-between text-sm py-0.5">
-                        <span className="truncate">{gi.name}</span>
-                        {gi.amount && <span className="text-xs text-muted-foreground shrink-0 ml-2">{gi.amount}{gi.unit ? ` ${gi.unit}` : ''}</span>}
+              {item.item_type === 'grocery_list' && groceryItems.length > 0 && (
+                <div className="space-y-3 rounded-2xl border border-white/25 bg-white/35 p-3 backdrop-blur-sm dark:border-white/10 dark:bg-white/5">
+                  <div className="rounded-xl border border-white/20 bg-white/40 p-3 dark:border-white/10 dark:bg-white/[0.04]">
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <div>
+                        <p className="font-semibold text-sm">Shopping Progress</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          <span className="font-data text-foreground">{groceryItems.filter((groceryItem) => groceryItem.checked).length}</span> of <span className="font-data">{groceryItems.length}</span> items checked off
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-data text-2xl font-bold text-emerald-400">{groceryProgress}%</p>
+                        {sharedGroceryList && sharedGroceryList.total_estimated_cost > 0 ? (
+                          <p className="text-[11px] text-muted-foreground">${sharedGroceryList.total_estimated_cost.toFixed(2)} est.</p>
+                        ) : null}
+                      </div>
+                    </div>
+                    <div className="h-1.5 overflow-hidden rounded-full bg-white/50 dark:bg-white/[0.08]">
+                      <div className="h-full rounded-full bg-emerald-500 transition-all duration-700" style={{ width: `${groceryProgress}%` }} />
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {Object.entries(groceryByCategory).map(([category, entries]) => (
+                      <div key={category} className="overflow-hidden rounded-xl border border-white/20 bg-white/40 dark:border-white/10 dark:bg-white/[0.04]">
+                        <div className="flex items-center justify-between border-b border-white/15 px-4 py-3 dark:border-white/10">
+                          <span className="font-semibold text-sm">{category}</span>
+                          <span className="font-data text-[10px] text-muted-foreground">
+                            {entries.filter((entry) => entry.checked).length}/{entries.length}
+                          </span>
+                        </div>
+                        <div>
+                          {entries.map((groceryItem, index) => {
+                            const amountLabel = formatGroceryAmount(groceryItem)
+
+                            return (
+                              <div
+                                key={`${category}-${groceryItem.ingredient}-${index}`}
+                                className={`flex items-start gap-2 px-3 py-2.5 ${index < entries.length - 1 ? 'border-b border-white/10 dark:border-white/[0.08]' : ''}`}
+                              >
+                                <span className="mt-0.5 shrink-0 text-muted-foreground">
+                                  {groceryItem.checked ? (
+                                    <CheckCircle className="h-4 w-4 text-emerald-400" />
+                                  ) : (
+                                    <Circle className="h-4 w-4" />
+                                  )}
+                                </span>
+                                <div className="min-w-0 flex-1">
+                                  <p className={`truncate text-sm ${groceryItem.checked ? 'text-muted-foreground line-through' : 'text-foreground/90'}`}>
+                                    {groceryItem.ingredient}
+                                  </p>
+                                  {amountLabel ? (
+                                    <p className="text-xs text-muted-foreground">{amountLabel}</p>
+                                  ) : null}
+                                </div>
+                                {groceryItem.estimated_price > 0 ? (
+                                  <span className="shrink-0 text-xs text-muted-foreground">
+                                    ${groceryItem.estimated_price.toFixed(2)}
+                                  </span>
+                                ) : null}
+                              </div>
+                            )
+                          })}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -453,7 +589,12 @@ export default function SharePage() {
                 </div>
               </div>
 
-              {imported ? (
+              {isViewOnly ? (
+                <div className="flex items-center gap-2 justify-center py-2 text-sm text-muted-foreground">
+                  <Sparkles className="w-4 h-4" />
+                  Weekly recaps are view-only shares
+                </div>
+              ) : imported ? (
                 <div className="flex items-center gap-2 justify-center py-2 text-emerald-500 font-medium text-sm">
                   <CheckCircle className="w-4 h-4" />
                   Added to your account

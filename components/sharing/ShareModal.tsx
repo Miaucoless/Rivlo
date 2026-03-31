@@ -30,7 +30,7 @@ type FriendshipRow = {
 type ShareModalProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
-  itemType: 'workout' | 'saved_meal' | 'recipe' | 'grocery_list'
+  itemType: 'workout' | 'saved_meal' | 'recipe' | 'grocery_list' | 'weekly_recap'
   itemName: string
   itemData: Record<string, unknown>
 }
@@ -150,14 +150,14 @@ export function ShareModal({ open, onOpenChange, itemType, itemName, itemData }:
       const res = await fetch('/api/share/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ share_id: result.share_id, recipient_ids: [...selectedIds] }),
+        body: JSON.stringify({ share_id: result.share_id, recipient_ids: Array.from(selectedIds) }),
       })
       if (!res.ok) {
         const err = await res.json()
         toast.error(err.error ?? 'Could not send to some friends.')
         return
       }
-      setSentTo(new Set([...sentTo, ...selectedIds]))
+      setSentTo(new Set([...Array.from(sentTo), ...Array.from(selectedIds)]))
       setSelectedIds(new Set())
       toast.success(`Sent to ${selectedIds.size} friend${selectedIds.size !== 1 ? 's' : ''}!`)
     } catch {
@@ -207,7 +207,11 @@ export function ShareModal({ open, onOpenChange, itemType, itemName, itemData }:
                 <><Copy className="w-4 h-4" />Copy link</>
               )}
             </Button>
-            <p className="text-xs text-muted-foreground text-center">Anyone with the link can view and import this {itemType === 'grocery_list' ? 'grocery list' : itemType.replace('_', ' ')}.</p>
+            <p className="text-xs text-muted-foreground text-center">
+              {itemType === 'weekly_recap'
+                ? 'Anyone with the link can view this weekly recap.'
+                : `Anyone with the link can view and import this ${itemType === 'grocery_list' ? 'grocery list' : itemType.replace('_', ' ')}.`}
+            </p>
           </TabsContent>
 
           {/* ── Friends tab ── */}

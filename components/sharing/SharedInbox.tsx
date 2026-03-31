@@ -3,18 +3,18 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Dumbbell, UtensilsCrossed, BookOpen, CheckCircle, ExternalLink, Loader2, Inbox, ShoppingCart, Trash2 } from 'lucide-react'
+import { Dumbbell, UtensilsCrossed, BookOpen, CheckCircle, ExternalLink, Loader2, Inbox, ShoppingCart, Trash2, Sparkles } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 import { useAppStore } from '@/store/useAppStore'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { formatDistanceToNow } from 'date-fns'
-import type { SavedMealTemplate } from '@/types'
+import type { GroceryList, SavedMealTemplate } from '@/types'
 
 type InboxItem = {
   friend_share_id: string
   share_id: string
-  item_type: 'workout' | 'saved_meal' | 'recipe' | 'grocery_list'
+  item_type: 'workout' | 'saved_meal' | 'recipe' | 'grocery_list' | 'weekly_recap'
   item_name: string
   token: string
   message?: string
@@ -28,6 +28,7 @@ const TYPE_ICONS: Record<string, React.ReactNode> = {
   saved_meal: <UtensilsCrossed className="w-4 h-4 shrink-0" />,
   recipe: <BookOpen className="w-4 h-4 shrink-0" />,
   grocery_list: <ShoppingCart className="w-4 h-4 shrink-0" />,
+  weekly_recap: <Sparkles className="w-4 h-4 shrink-0" />,
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -35,9 +36,10 @@ const TYPE_LABELS: Record<string, string> = {
   saved_meal: 'Saved Meal',
   recipe: 'Recipe',
   grocery_list: 'Grocery List',
+  weekly_recap: 'Weekly Recap',
 }
 
-const TYPE_FILTERS = ['all', 'workout', 'saved_meal', 'recipe', 'grocery_list'] as const
+const TYPE_FILTERS = ['all', 'workout', 'saved_meal', 'recipe', 'grocery_list', 'weekly_recap'] as const
 type TypeFilter = typeof TYPE_FILTERS[number]
 
 async function getToken(): Promise<string | null> {
@@ -49,6 +51,7 @@ async function getToken(): Promise<string | null> {
 export function SharedInbox() {
   const router = useRouter()
   const addSavedMeal = useAppStore((state) => state.addSavedMeal)
+  const setGroceryList = useAppStore((state) => state.setGroceryList)
   const [items, setItems] = useState<InboxItem[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<TypeFilter>('all')
@@ -92,6 +95,9 @@ export function SharedInbox() {
       if (!res.ok) throw new Error()
       if (data.item_type === 'saved_meal' && data.imported_item) {
         addSavedMeal(data.imported_item as SavedMealTemplate)
+      }
+      if (data.item_type === 'grocery_list' && data.imported_item) {
+        setGroceryList(data.imported_item as GroceryList)
       }
       setImportedIds((prev) => { const n = new Set(prev); n.add(item.friend_share_id); return n })
       toast.success(`${item.item_name} added to your account!`)
@@ -168,6 +174,7 @@ export function SharedInbox() {
             const isImported = importedIds.has(item.friend_share_id)
             const isImporting = importing === item.friend_share_id
             const isDeleting = deleting === item.friend_share_id
+            const isViewOnly = item.item_type === 'weekly_recap'
             return (
               <div key={item.friend_share_id} className="rounded-xl border border-border/50 bg-muted/20 p-3 space-y-2">
                 <div className="flex items-start gap-2">
@@ -198,7 +205,12 @@ export function SharedInbox() {
                     <ExternalLink className="w-3 h-3" />
                     View
                   </Button>
-                  {isImported ? (
+                  {isViewOnly ? (
+                    <div className="flex items-center gap-1 text-muted-foreground text-xs font-medium px-1">
+                      <Sparkles className="w-3.5 h-3.5" />
+                      View only
+                    </div>
+                  ) : isImported ? (
                     <div className="flex items-center gap-1 text-emerald-500 text-xs font-medium px-1">
                       <CheckCircle className="w-3.5 h-3.5" />
                       Imported

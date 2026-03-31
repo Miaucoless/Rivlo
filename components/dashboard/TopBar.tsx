@@ -43,19 +43,21 @@ async function getToken(): Promise<string | null> {
 }
 
 const PAGE_TITLES: Record<string, string> = {
-  '/dashboard': 'Dashboard',
-  '/meals': 'Meal Planning',
-  '/workouts': 'Workouts',
-  '/tracking': 'Progress Tracking',
-  '/calendar': 'Calendar',
-  '/journal': 'Journal',
-  '/supplements': 'Supplements',
-  '/settings': 'Settings',
-  '/shared': 'Shared With Me',
+  '/dashboard/dashboard': 'Dashboard',
+  '/dashboard/check-in': 'Weekly Check-In',
+  '/dashboard/meals': 'Meal Planning',
+  '/dashboard/workouts': 'Workouts',
+  '/dashboard/tracking': 'Progress Tracking',
+  '/dashboard/calendar': 'Calendar',
+  '/dashboard/journal': 'Journal',
+  '/dashboard/supplements': 'Supplements',
+  '/dashboard/settings': 'Settings',
+  '/dashboard/shared': 'Shared With Me',
 }
 
 const SEARCH_ITEMS = [
   { href: '/dashboard/dashboard', title: 'Dashboard', description: 'See your daily overview, streaks, and progress snapshot.', keywords: ['home', 'overview', 'summary', 'stats'] },
+  { href: '/dashboard/check-in', title: 'Weekly Check-In', description: 'Review your week, see your best next move, and reset the plan when needed.', keywords: ['weekly review', 'reset', 'recap', 'recovery'] },
   { href: '/dashboard/meals', title: 'Meal Planning', description: 'Log meals, search foods, and manage saved meal templates.', keywords: ['food', 'nutrition', 'calories', 'macros'] },
   { href: '/dashboard/workouts', title: 'Workouts', description: 'Search exercises, run sessions, and manage custom routines.', keywords: ['training', 'exercise', 'lift', 'gym'] },
   { href: '/dashboard/tracking', title: 'Progress Tracking', description: 'Track body metrics, habits, and long-term trends.', keywords: ['progress', 'metrics', 'body', 'check-in'] },
@@ -759,6 +761,7 @@ export function TopBar() {
             <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
               {[
                 { label: 'Dashboard',  href: '/dashboard/dashboard',   icon: LayoutDashboard },
+                { label: 'Check-In',   href: '/dashboard/check-in',    icon: Sparkles },
                 { label: 'Meals',      href: '/dashboard/meals',        icon: Apple },
                 { label: 'Workouts',   href: '/dashboard/workouts',     icon: Dumbbell },
                 { label: 'Tracking',   href: '/dashboard/tracking',     icon: BarChart3 },
