@@ -4091,6 +4091,679 @@ const CUSTOM_FOOD_CATALOG: FoodCatalogItem[] = [
     carbs_g: 5,
     fat_g: 1
   }
+},
+{
+  id: "halal-beef-lean",
+  name: "Beef (Lean, Halal)",
+  aliases: ["halal beef", "lean beef", "zabiha beef", "halal red meat"],
+  default_serving_amount: 113,
+  default_serving_unit: "g",
+  default_serving_label: "4 oz cooked",
+  grams_per_serving: 113,
+  macros_per_serving: {
+    calories: 200,
+    protein_g: 23,
+    carbs_g: 0,
+    fat_g: 12
+  }
+},
+{
+  id: "halal-bison",
+  name: "Bison (Halal)",
+  aliases: ["halal bison", "buffalo meat", "lean buffalo", "zabiha bison"],
+  default_serving_amount: 113,
+  default_serving_unit: "g",
+  default_serving_label: "4 oz cooked",
+  grams_per_serving: 113,
+  macros_per_serving: {
+    calories: 170,
+    protein_g: 24,
+    carbs_g: 0,
+    fat_g: 8
+  }
+},
+{
+  id: "halal-lamb",
+  name: "Lamb (Halal)",
+  aliases: ["halal lamb", "zabiha lamb", "mutton", "halal red meat lamb"],
+  default_serving_amount: 113,
+  default_serving_unit: "g",
+  default_serving_label: "4 oz cooked",
+  grams_per_serving: 113,
+  macros_per_serving: {
+    calories: 170,
+    protein_g: 23,
+    carbs_g: 0,
+    fat_g: 9
+  }
+},
+{
+  id: "halal-chicken-thigh",
+  name: "Chicken Thigh (Halal)",
+  aliases: ["halal chicken", "zabiha chicken thigh", "dark meat chicken"],
+  default_serving_amount: 113,
+  default_serving_unit: "g",
+  default_serving_label: "4 oz cooked",
+  grams_per_serving: 113,
+  macros_per_serving: {
+    calories: 150,
+    protein_g: 19,
+    carbs_g: 0,
+    fat_g: 9
+  }
+},
+{
+  id: "halal-seitan",
+  name: "Seitan (Halal)",
+  aliases: ["halal seitan", "wheat protein", "vital wheat gluten"],
+  default_serving_amount: 113,
+  default_serving_unit: "g",
+  default_serving_label: "4 oz prepared",
+  grams_per_serving: 113,
+  macros_per_serving: {
+    calories: 120,
+    protein_g: 24,
+    carbs_g: 4,
+    fat_g: 1
+  }
+},
+{
+  id: "halal-edamame",
+  name: "Edamame",
+  aliases: ["soybeans", "green soybeans", "edamame beans", "halal plant protein"],
+  default_serving_amount: 113,
+  default_serving_unit: "g",
+  default_serving_label: "4 oz cooked",
+  grams_per_serving: 113,
+  macros_per_serving: {
+    calories: 160,
+    protein_g: 17,
+    carbs_g: 14,
+    fat_g: 7
+  }
+},
+{
+  id: "halal-greek-yogurt",
+  name: "Greek Yogurt (Low-Fat)",
+  aliases: ["halal greek yogurt", "strained yogurt", "protein yogurt"],
+  default_serving_amount: 113,
+  default_serving_unit: "g",
+  default_serving_label: "4 oz",
+  grams_per_serving: 113,
+  macros_per_serving: {
+    calories: 70,
+    protein_g: 12,
+    carbs_g: 4,
+    fat_g: 0
+  }
+},
+{
+  id: "halal-cottage-cheese",
+  name: "Cottage Cheese (Low-Fat)",
+  aliases: ["halal cottage cheese", "curds", "low-fat curds"],
+  default_serving_amount: 113,
+  default_serving_unit: "g",
+  default_serving_label: "4 oz",
+  grams_per_serving: 113,
+  macros_per_serving: {
+    calories: 90,
+    protein_g: 14,
+    carbs_g: 4,
+    fat_g: 2
+  }
+},
+{
+  id: "halal-tofu",
+  name: "Tofu (Firm)",
+  aliases: ["soy tofu", "halal tofu", "firm soybean curd", "plant protein tofu"],
+  default_serving_amount: 113,
+  default_serving_unit: "g",
+  default_serving_label: "4 oz",
+  grams_per_serving: 113,
+  macros_per_serving: {
+    calories: 86,
+    protein_g: 9,
+    carbs_g: 3,
+    fat_g: 5
+  }
+},
+{
+  id: "halal-turkey",
+  name: "Turkey (Halal)",
+  aliases: ["halal turkey", "zabiha turkey", "lean turkey"],
+  default_serving_amount: 113,
+  default_serving_unit: "g",
+  default_serving_label: "4 oz cooked",
+  grams_per_serving: 113,
+  macros_per_serving: {
+    calories: 135,
+    protein_g: 24,
+    carbs_g: 0,
+    fat_g: 3
+  }
+},
+{
+  id: "halal-lowfat-cheese",
+  name: "Low-Fat Cheese",
+  aliases: ["reduced-fat cheese", "halal cheese", "low-fat dairy cheese"],
+  default_serving_amount: 28,
+  default_serving_unit: "g",
+  default_serving_label: "1 oz",
+  grams_per_serving: 28,
+  macros_per_serving: {
+    calories: 50,
+    protein_g: 7,
+    carbs_g: 1,
+    fat_g: 2
+  }
+},
+{
+  id: "halal-beef-ground-90",
+  name: "Ground Beef 90% Lean (Halal)",
+  aliases: ["halal ground beef", "lean halal beef", "zabiha ground beef", "minced beef halal"],
+  default_serving_amount: 113,
+  default_serving_unit: "g",
+  default_serving_label: "4 oz cooked",
+  grams_per_serving: 113,
+  macros_per_serving: {
+    calories: 200,
+    protein_g: 23,
+    carbs_g: 0,
+    fat_g: 12
+  }
+},
+{
+  id: "halal-beef-steak",
+  name: "Beef Steak (Halal, Lean Cut)",
+  aliases: ["halal steak", "zabiha steak", "halal sirloin", "lean steak halal"],
+  default_serving_amount: 113,
+  default_serving_unit: "g",
+  default_serving_label: "4 oz cooked",
+  grams_per_serving: 113,
+  macros_per_serving: {
+    calories: 200,
+    protein_g: 23,
+    carbs_g: 0,
+    fat_g: 12
+  }
+},
+{
+  id: "halal-lamb-chops",
+  name: "Lamb Chops (Halal)",
+  aliases: ["halal lamb chops", "zabiha lamb chops", "mutton chops", "halal lamb cut"],
+  default_serving_amount: 113,
+  default_serving_unit: "g",
+  default_serving_label: "4 oz cooked",
+  grams_per_serving: 113,
+  macros_per_serving: {
+    calories: 170,
+    protein_g: 23,
+    carbs_g: 0,
+    fat_g: 9
+  }
+},
+{
+  id: "halal-lamb-ground",
+  name: "Ground Lamb (Halal)",
+  aliases: ["halal ground lamb", "minced lamb halal", "mutton ground", "halal lamb mince"],
+  default_serving_amount: 113,
+  default_serving_unit: "g",
+  default_serving_label: "4 oz cooked",
+  grams_per_serving: 113,
+  macros_per_serving: {
+    calories: 170,
+    protein_g: 23,
+    carbs_g: 0,
+    fat_g: 9
+  }
+},
+{
+  id: "halal-bison-steak",
+  name: "Bison Steak (Halal)",
+  aliases: ["halal bison steak", "buffalo steak", "zabiha bison steak", "lean halal bison"],
+  default_serving_amount: 113,
+  default_serving_unit: "g",
+  default_serving_label: "4 oz cooked",
+  grams_per_serving: 113,
+  macros_per_serving: {
+    calories: 170,
+    protein_g: 24,
+    carbs_g: 0,
+    fat_g: 8
+  }
+},
+{
+  id: "halal-chicken-leg",
+  name: "Chicken Leg (Halal)",
+  aliases: ["halal chicken drumstick", "zabiha chicken leg", "halal dark meat chicken"],
+  default_serving_amount: 113,
+  default_serving_unit: "g",
+  default_serving_label: "4 oz cooked",
+  grams_per_serving: 113,
+  macros_per_serving: {
+    calories: 150,
+    protein_g: 19,
+    carbs_g: 0,
+    fat_g: 9
+  }
+},
+{
+  id: "halal-chicken-dark-meat",
+  name: "Chicken Dark Meat (Halal)",
+  aliases: ["halal dark chicken", "zabiha chicken dark", "halal chicken thighs and legs"],
+  default_serving_amount: 113,
+  default_serving_unit: "g",
+  default_serving_label: "4 oz cooked",
+  grams_per_serving: 113,
+  macros_per_serving: {
+    calories: 150,
+    protein_g: 19,
+    carbs_g: 0,
+    fat_g: 9
+  }
+},
+{
+  id: "halal-greek-yogurt-plain",
+  name: "Greek Yogurt (Plain, Low-Fat)",
+  aliases: ["halal greek yogurt plain", "lowfat yogurt", "strained yogurt plain"],
+  default_serving_amount: 113,
+  default_serving_unit: "g",
+  default_serving_label: "4 oz",
+  grams_per_serving: 113,
+  macros_per_serving: {
+    calories: 70,
+    protein_g: 12,
+    carbs_g: 4,
+    fat_g: 0
+  }
+},
+{
+  id: "halal-greek-yogurt-vanilla",
+  name: "Greek Yogurt (Vanilla, Low-Fat)",
+  aliases: ["halal vanilla greek yogurt", "vanilla yogurt", "flavored yogurt halal"],
+  default_serving_amount: 113,
+  default_serving_unit: "g",
+  default_serving_label: "4 oz",
+  grams_per_serving: 113,
+  macros_per_serving: {
+    calories: 90,
+    protein_g: 11,
+    carbs_g: 12,
+    fat_g: 0
+  }
+},
+{
+  id: "halal-cottage-cheese-lowfat",
+  name: "Cottage Cheese (Low-Fat, Halal)",
+  aliases: ["halal cottage cheese lowfat", "curds lowfat", "protein cottage cheese"],
+  default_serving_amount: 113,
+  default_serving_unit: "g",
+  default_serving_label: "4 oz",
+  grams_per_serving: 113,
+  macros_per_serving: {
+    calories: 90,
+    protein_g: 14,
+    carbs_g: 4,
+    fat_g: 2
+  }
+},
+{
+  id: "halal-tofu-extra-firm",
+  name: "Tofu (Extra Firm, Halal)",
+  aliases: ["extra firm tofu", "halal tofu extra firm", "soybean curd"],
+  default_serving_amount: 113,
+  default_serving_unit: "g",
+  default_serving_label: "4 oz",
+  grams_per_serving: 113,
+  macros_per_serving: {
+    calories: 86,
+    protein_g: 9,
+    carbs_g: 3,
+    fat_g: 5
+  }
+},
+{
+  id: "halal-seitan-chunks",
+  name: "Seitan Chunks",
+  aliases: ["wheat protein chunks", "halal seitan bites", "vegetarian halal protein"],
+  default_serving_amount: 113,
+  default_serving_unit: "g",
+  default_serving_label: "4 oz",
+  grams_per_serving: 113,
+  macros_per_serving: {
+    calories: 120,
+    protein_g: 24,
+    carbs_g: 4,
+    fat_g: 1
+  }
+},
+{
+  id: "halal-edamame-shelled",
+  name: "Edamame (Shelled)",
+  aliases: ["shelled soybeans", "halal edamame beans", "plant protein soybeans"],
+  default_serving_amount: 113,
+  default_serving_unit: "g",
+  default_serving_label: "4 oz cooked",
+  grams_per_serving: 113,
+  macros_per_serving: {
+    calories: 160,
+    protein_g: 17,
+    carbs_g: 14,
+    fat_g: 7
+  }
+},
+{
+  id: "halal-lowfat-cheese-slices",
+  name: "Low-Fat Cheese Slices",
+  aliases: ["reduced fat cheese slices", "halal cheese slices", "light cheese"],
+  default_serving_amount: 28,
+  default_serving_unit: "g",
+  default_serving_label: "1 oz slice",
+  grams_per_serving: 28,
+  macros_per_serving: {
+    calories: 50,
+    protein_g: 7,
+    carbs_g: 1,
+    fat_g: 2
+  }
+},
+{
+  id: "halal-turkey-breast-sliced",
+  name: "Turkey Breast Slices (Halal)",
+  aliases: ["halal turkey slices", "lean sliced turkey", "zabiha turkey breast"],
+  default_serving_amount: 113,
+  default_serving_unit: "g",
+  default_serving_label: "4 oz sliced",
+  grams_per_serving: 113,
+  macros_per_serving: {
+    calories: 135,
+    protein_g: 24,
+    carbs_g: 0,
+    fat_g: 3
+  }
+},
+{
+  id: "arab-chicken-shawarma",
+  name: "Chicken Shawarma",
+  aliases: [
+    "shawarma",
+    "shaurma",
+    "arab chicken wrap",
+    "middle eastern shawarma",
+    "shawrma"
+  ],
+  default_serving_amount: 200,
+  default_serving_unit: "g",
+  default_serving_label: "1 wrap (no fries)",
+  grams_per_serving: 200,
+  macros_per_serving: {
+    calories: 420,
+    protein_g: 32,
+    carbs_g: 38,
+    fat_g: 16
+  }
+},
+{
+  id: "arab-beef-shawarma",
+  name: "Beef Shawarma",
+  aliases: [
+    "shawarma beef",
+    "beef shaurma",
+    "arab beef wrap",
+    "middle eastern beef shawarma"
+  ],
+  default_serving_amount: 200,
+  default_serving_unit: "g",
+  default_serving_label: "1 wrap",
+  grams_per_serving: 200,
+  macros_per_serving: {
+    calories: 480,
+    protein_g: 30,
+    carbs_g: 38,
+    fat_g: 22
+  }
+},
+{
+  id: "arab-falafel",
+  name: "Falafel",
+  aliases: [
+    "felafel",
+    "arab falafel",
+    "middle eastern falafel",
+    "fried chickpea balls"
+  ],
+  default_serving_amount: 100,
+  default_serving_unit: "g",
+  default_serving_label: "3–4 pieces",
+  grams_per_serving: 100,
+  macros_per_serving: {
+    calories: 330,
+    protein_g: 13,
+    carbs_g: 31,
+    fat_g: 17
+  }
+},
+{
+  id: "arab-hummus",
+  name: "Hummus",
+  aliases: [
+    "humus",
+    "houmous",
+    "chickpea dip",
+    "arab hummus",
+    "middle eastern hummus"
+  ],
+  default_serving_amount: 100,
+  default_serving_unit: "g",
+  default_serving_label: "1 small bowl",
+  grams_per_serving: 100,
+  macros_per_serving: {
+    calories: 166,
+    protein_g: 8,
+    carbs_g: 14,
+    fat_g: 9
+  }
+},
+{
+  id: "arab-mujadara",
+  name: "Mujadara (Lentils & Rice)",
+  aliases: [
+    "mjaddara",
+    "mujaddara",
+    "lentils and rice",
+    "arab lentil rice",
+    "middle eastern mujadara"
+  ],
+  default_serving_amount: 200,
+  default_serving_unit: "g",
+  default_serving_label: "1 plate",
+  grams_per_serving: 200,
+  macros_per_serving: {
+    calories: 350,
+    protein_g: 12,
+    carbs_g: 62,
+    fat_g: 6
+  }
+},
+{
+  id: "arab-tabouli",
+  name: "Tabouli",
+  aliases: [
+    "taboulah",
+    "tabbouleh",
+    "arab salad",
+    "lebanese tabouli"
+  ],
+  default_serving_amount: 150,
+  default_serving_unit: "g",
+  default_serving_label: "1 bowl",
+  grams_per_serving: 150,
+  macros_per_serving: {
+    calories: 210,
+    protein_g: 4,
+    carbs_g: 22,
+    fat_g: 12
+  }
+},
+{
+  id: "arab-mansaf",
+  name: "Mansaf",
+  aliases: [
+    "jordanian mansaf",
+    "lamb mansaf",
+    "arab lamb yogurt rice",
+    "jameed mansaf"
+  ],
+  default_serving_amount: 300,
+  default_serving_unit: "g",
+  default_serving_label: "1 full plate",
+  grams_per_serving: 300,
+  macros_per_serving: {
+    calories: 650,
+    protein_g: 38,
+    carbs_g: 55,
+    fat_g: 30
+  }
+},
+{
+  id: "arab-maqluba",
+  name: "Maqluba",
+  aliases: [
+    "makloubeh",
+    "maqlouba",
+    "arab upside down rice",
+    "rice eggplant chicken dish"
+  ],
+  default_serving_amount: 300,
+  default_serving_unit: "g",
+  default_serving_label: "1 plate",
+  grams_per_serving: 300,
+  macros_per_serving: {
+    calories: 520,
+    protein_g: 26,
+    carbs_g: 62,
+    fat_g: 18
+  }
+},
+{
+  id: "arab-kabsa",
+  name: "Kabsa",
+  aliases: [
+    "kabseh",
+    "ksa kabsa",
+    "saudi kabsa",
+    "arab rice chicken kabsa"
+  ],
+  default_serving_amount: 300,
+  default_serving_unit: "g",
+  default_serving_label: "1 plate",
+  grams_per_serving: 300,
+  macros_per_serving: {
+    calories: 560,
+    protein_g: 32,
+    carbs_g: 65,
+    fat_g: 18
+  }
+},
+{
+  id: "arab-biryani",
+  name: "Chicken Biryani",
+  aliases: [
+    "arab biryani",
+    "middle eastern biryani",
+    "gulf biryani",
+    "spiced rice chicken"
+  ],
+  default_serving_amount: 300,
+  default_serving_unit: "g",
+  default_serving_label: "1 plate",
+  grams_per_serving: 300,
+  macros_per_serving: {
+    calories: 600,
+    protein_g: 30,
+    carbs_g: 72,
+    fat_g: 22
+  }
+},
+{
+  id: "arab-shish-tawook",
+  name: "Shish Tawook",
+  aliases: [
+    "shish taouk",
+    "grilled chicken skewers",
+    "arab chicken skewers",
+    "lebanese tawook"
+  ],
+  default_serving_amount: 180,
+  default_serving_unit: "g",
+  default_serving_label: "2 skewers",
+  grams_per_serving: 180,
+  macros_per_serving: {
+    calories: 330,
+    protein_g: 42,
+    carbs_g: 4,
+    fat_g: 14
+  }
+},
+{
+  id: "arab-kofta",
+  name: "Beef Kofta",
+  aliases: [
+    "kofta kebab",
+    "kefta",
+    "arab minced beef kebab",
+    "ground beef skewers"
+  ],
+  default_serving_amount: 180,
+  default_serving_unit: "g",
+  default_serving_label: "2 skewers",
+  grams_per_serving: 180,
+  macros_per_serving: {
+    calories: 420,
+    protein_g: 32,
+    carbs_g: 6,
+    fat_g: 30
+  }
+},
+{
+  id: "arab-baba-ganoush",
+  name: "Baba Ganoush",
+  aliases: [
+    "baba ghanouj",
+    "eggplant dip",
+    "arab eggplant spread",
+    "ghanouj"
+  ],
+  default_serving_amount: 100,
+  default_serving_unit: "g",
+  default_serving_label: "1 small bowl",
+  grams_per_serving: 100,
+  macros_per_serving: {
+    calories: 170,
+    protein_g: 3,
+    carbs_g: 10,
+    fat_g: 13
+  }
+},
+{
+  id: "arab-fattoush",
+  name: "Fattoush",
+  aliases: [
+    "fattush",
+    "arab salad fattoush",
+    "lebanese fattoush",
+    "pita salad"
+  ],
+  default_serving_amount: 150,
+  default_serving_unit: "g",
+  default_serving_label: "1 bowl",
+  grams_per_serving: 150,
+  macros_per_serving: {
+    calories: 190,
+    protein_g: 4,
+    carbs_g: 22,
+    fat_g: 9
+  }
 }
 
   // 👆 PASTE YOUR FOODS HERE 👆

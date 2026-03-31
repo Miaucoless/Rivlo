@@ -1,25 +1,18 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import {
   Apple,
   ArrowLeft,
-  BarChart3,
-  BookOpen,
-  CalendarDays,
-  CheckCircle2,
+  Clock3,
   Dumbbell,
   Eye,
   EyeOff,
-  LayoutDashboard,
-  LineChart,
   NotebookPen,
-  Pill,
-  ShieldCheck,
-  Settings,
+  Sparkles,
   TrendingUp,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -29,150 +22,27 @@ import { useAppStore } from '@/store/useAppStore'
 import { signInWithEmail } from '@/lib/auth'
 import { toast } from 'sonner'
 
-const productSections = [
+const dailyFlowSteps = [
   {
-    label: 'Dashboard',
-    icon: LayoutDashboard,
-    detail: 'See your main overview with progress, streaks, and the day’s key fitness data.',
-    accent: 'from-emerald-400/20 via-teal-400/10 to-transparent',
-    eyebrow: 'Overview',
-    highlights: ['Progress snapshot', 'Daily totals', 'Streak visibility'],
-    previewIcon: TrendingUp,
-    previewStats: [
-      { label: 'Focus', value: 'Today' },
-      { label: 'View', value: 'Overview' },
-    ],
-    previewRows: [
-      { title: 'Daily totals', meta: 'Meals, workouts, hydration' },
-      { title: 'Progress cards', meta: 'Trends and recent activity' },
-      { title: 'Consistency streak', meta: 'Visible from your overview' },
-    ],
-  },
-  {
-    label: 'Meals',
-    icon: Apple,
-    detail: 'Plan meals, browse recipes, and work from a grocery list in one place.',
-    accent: 'from-lime-400/20 via-emerald-400/10 to-transparent',
-    eyebrow: 'Nutrition',
-    highlights: ['Meal planning', 'Recipes', 'Grocery list'],
-    previewIcon: Apple,
-    previewStats: [
-      { label: 'Tabs', value: 'Today' },
-      { label: 'Tools', value: 'Plan' },
-    ],
-    previewRows: [
-      { title: 'Today’s meals', meta: 'Track intake and saved items' },
-      { title: 'Recipe library', meta: 'Browse and add recipes' },
-      { title: 'Grocery list', meta: 'Generated from planned meals' },
-    ],
-  },
-  {
-    label: 'Workouts',
+    title: 'Today’s workout',
+    detail: 'See the session that matters today and move straight into it.',
+    time: '6:15 AM',
     icon: Dumbbell,
-    detail: 'Follow workout plans, log sessions, and move through your active training flow.',
     accent: 'from-cyan-400/20 via-sky-400/10 to-transparent',
-    eyebrow: 'Training',
-    highlights: ['Workout plans', 'Session logging', 'Active flow'],
-    previewIcon: Dumbbell,
-    previewStats: [
-      { label: 'Mode', value: 'Active' },
-      { label: 'Library', value: 'Saved' },
-    ],
-    previewRows: [
-      { title: 'Premade workouts', meta: 'Browse by split and difficulty' },
-      { title: 'Active session flow', meta: 'Move through your workout log' },
-      { title: 'Saved workouts', meta: 'Keep reusable training templates' },
-    ],
   },
   {
-    label: 'Tracking',
-    icon: LineChart,
-    detail: 'Review weight, nutrition, and workout trends with progress-focused charts.',
-    accent: 'from-blue-400/20 via-indigo-400/10 to-transparent',
-    eyebrow: 'Progress',
-    highlights: ['Weight trends', 'Nutrition history', 'Workout charts'],
-    previewIcon: BarChart3,
-    previewStats: [
-      { label: 'Charts', value: 'Weight' },
-      { label: 'History', value: 'Nutrition' },
-    ],
-    previewRows: [
-      { title: 'Weight trends', meta: 'Track change over time' },
-      { title: 'Calorie and protein history', meta: 'Built from logged meals' },
-      { title: 'Workout performance', meta: 'Reflects logged sessions and PRs' },
-    ],
+    title: 'Meals in one place',
+    detail: 'Meals, saved options, and hydration stay tied to the same day.',
+    time: '12:30 PM',
+    icon: Apple,
+    accent: 'from-lime-400/20 via-emerald-400/10 to-transparent',
   },
   {
-    label: 'Journal',
+    title: 'Weekly check-in closes the loop',
+    detail: 'The app helps you adjust the week instead of just showing a pile of data.',
+    time: '8:45 PM',
     icon: NotebookPen,
-    detail: 'Capture daily notes, prompts, and check-ins for your routine.',
     accent: 'from-amber-400/20 via-orange-400/10 to-transparent',
-    eyebrow: 'Reflection',
-    highlights: ['Daily notes', 'Prompts', 'Check-ins'],
-    previewIcon: BookOpen,
-    previewStats: [
-      { label: 'Format', value: 'Daily' },
-      { label: 'Flow', value: 'Prompts' },
-    ],
-    previewRows: [
-      { title: 'Daily entries', meta: 'Write notes tied to your routine' },
-      { title: 'Prompt-based reflection', meta: 'Structured check-in support' },
-      { title: 'Check-in history', meta: 'Keep your entries organized' },
-    ],
-  },
-  {
-    label: 'Calendar',
-    icon: CalendarDays,
-    detail: 'View workouts, meals, and check-ins together on a shared calendar.',
-    accent: 'from-fuchsia-400/20 via-pink-400/10 to-transparent',
-    eyebrow: 'Schedule',
-    highlights: ['Unified calendar', 'Meals and workouts', 'Check-in view'],
-    previewIcon: CalendarDays,
-    previewStats: [
-      { label: 'Layout', value: 'Monthly' },
-      { label: 'Events', value: 'Unified' },
-    ],
-    previewRows: [
-      { title: 'Calendar view', meta: 'See activity across the month' },
-      { title: 'Meals and workouts', meta: 'Displayed in one timeline' },
-      { title: 'Check-ins and reminders', meta: 'Visible alongside scheduled items' },
-    ],
-  },
-  {
-    label: 'Supplements',
-    icon: Pill,
-    detail: 'Manage supplement entries alongside the rest of your health routine.',
-    accent: 'from-violet-400/20 via-indigo-400/10 to-transparent',
-    eyebrow: 'Routine',
-    highlights: ['Supplement log', 'Daily tracking', 'Organized entries'],
-    previewIcon: Pill,
-    previewStats: [
-      { label: 'Status', value: 'Daily' },
-      { label: 'Reminders', value: 'Optional' },
-    ],
-    previewRows: [
-      { title: 'Supplement entries', meta: 'Track name, amount, and frequency' },
-      { title: 'Taken today', meta: 'Mark items as completed' },
-      { title: 'Reminder settings', meta: 'Enable or mute per item' },
-    ],
-  },
-  {
-    label: 'Settings',
-    icon: Settings,
-    detail: 'Adjust profile, goals, and account preferences from your settings area.',
-    accent: 'from-zinc-300/20 via-zinc-400/10 to-transparent',
-    eyebrow: 'Account',
-    highlights: ['Profile settings', 'Goals', 'Preferences'],
-    previewIcon: ShieldCheck,
-    previewStats: [
-      { label: 'Profile', value: 'Editable' },
-      { label: 'Goals', value: 'Personal' },
-    ],
-    previewRows: [
-      { title: 'Account preferences', meta: 'Manage personal app settings' },
-      { title: 'Goal configuration', meta: 'Adjust targets and preferences' },
-      { title: 'Profile details', meta: 'Keep your setup current' },
-    ],
   },
 ] as const
 
@@ -183,10 +53,6 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [activeSection, setActiveSection] = useState<(typeof productSections)[number]['label'] | null>(null)
-  const activeSectionData = productSections.find((section) => section.label === activeSection) ?? null
-  const isFeatureExpanded = activeSection !== null
-  const expandedCardRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     document.documentElement.style.overflowY = 'auto'
@@ -205,17 +71,6 @@ export default function LoginPage() {
       document.body.style.pointerEvents = ''
     }
   }, [])
-
-  useEffect(() => {
-    if (!activeSection || !expandedCardRef.current) return
-
-    requestAnimationFrame(() => {
-      expandedCardRef.current?.scrollIntoView({
-        behavior: 'smooth',
-        block: 'start',
-      })
-    })
-  }, [activeSection])
 
   const handleDemoLogin = () => {
     loginDemo()
@@ -246,19 +101,20 @@ export default function LoginPage() {
 
   return (
     <div
-      className="relative h-[100dvh] overflow-y-auto overflow-x-hidden bg-[#06100f] text-white"
+      className="relative h-[100dvh] overflow-y-auto overflow-x-hidden bg-[#06100f] text-white lg:overflow-hidden"
       style={{ paddingTop: 'env(safe-area-inset-top)' }}
     >
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.18),_transparent_28%),radial-gradient(circle_at_80%_18%,_rgba(45,212,191,0.12),_transparent_25%),linear-gradient(140deg,_#06100f_0%,_#0b1715_55%,_#060908_100%)]" />
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:88px_88px] opacity-[0.06]" />
+      <div className="pointer-events-none absolute inset-y-0 left-[46%] hidden w-[32rem] -translate-x-1/2 bg-[radial-gradient(circle,_rgba(16,185,129,0.16),_transparent_65%)] blur-3xl lg:block" />
 
-      <div className={`relative lg:grid lg:grid-cols-[minmax(0,1.02fr)_minmax(320px,0.98fr)] ${isFeatureExpanded ? 'min-h-[100svh] items-start' : 'min-h-[100svh]'}`}>
-        <main className={`flex items-center justify-center px-4 py-4 sm:px-6 sm:py-6 lg:px-8 xl:px-10 ${isFeatureExpanded ? 'lg:sticky lg:top-0 lg:h-[100svh]' : 'min-h-[100svh]'}`}>
+      <div className="relative min-h-[100svh] lg:grid lg:h-[100svh] lg:grid-cols-[minmax(0,1.02fr)_minmax(340px,0.98fr)]">
+        <main className="flex min-h-[100svh] items-center justify-center px-4 py-4 sm:px-6 sm:py-6 lg:h-[100svh] lg:px-8 lg:py-5 xl:px-10 xl:py-6">
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.35 }}
-            className="w-full max-w-[560px]"
+            className="w-full max-w-[540px]"
           >
             <div className="rounded-[2rem] border border-white/10 bg-[rgba(8,18,17,0.88)] p-5 shadow-[0_30px_100px_rgba(0,0,0,0.45)] backdrop-blur-2xl sm:p-6">
               <div className="flex items-start justify-between gap-4">
@@ -373,15 +229,17 @@ export default function LoginPage() {
           </motion.div>
         </main>
 
-        <aside className={`hidden border-l border-white/8 lg:flex ${isFeatureExpanded ? 'lg:min-h-[100svh]' : 'h-full'}`}>
+        <aside className="relative hidden overflow-hidden lg:flex lg:h-[100svh]">
           <motion.div
             initial={{ opacity: 0, x: 18 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.4 }}
-            className={`flex w-full flex-col justify-between px-8 py-8 xl:px-10 xl:py-10 ${isFeatureExpanded ? '' : 'h-full'}`}
+            className="flex h-full w-full flex-col justify-center px-7 py-5 xl:px-8 xl:py-6"
           >
-            <div className="space-y-8">
-              <div className="space-y-4">
+            <div className="relative space-y-6">
+              <div className="pointer-events-none absolute inset-x-10 top-20 h-56 rounded-full bg-emerald-400/10 blur-3xl" />
+
+              <div className="relative space-y-3">
                 <Link href="/" className="inline-flex items-center gap-2 text-sm font-medium text-zinc-400 transition-colors hover:text-white">
                   <ArrowLeft className="h-4 w-4" />
                   Back to home
@@ -391,127 +249,83 @@ export default function LoginPage() {
                   <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-emerald-200/80">
                     Rivora
                   </p>
-                  <h1 className="mt-3 max-w-sm text-[clamp(1.9rem,2.4vw,2.9rem)] font-black leading-[1] tracking-tight text-white">
-                    A calmer way back into your routine.
+                  <h1 className="mt-2.5 max-w-md text-[clamp(1.75rem,2.3vw,2.75rem)] font-black leading-[0.96] tracking-tight text-white">
+                    Everything you need today, in one rhythm.
                   </h1>
+                  <p className="mt-3 max-w-[32rem] text-[14px] leading-6 text-zinc-300">
+                    Rivora keeps meals, workouts, hydration, and your weekly check-in in sync so getting back on track feels calm instead of chaotic.
+                  </p>
                 </div>
               </div>
 
-              <div className="rounded-[1.75rem] border border-white/10 bg-white/[0.045] p-5 backdrop-blur-2xl">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-zinc-500">
-                  Included areas
-                </p>
-                <div className="mt-4 grid grid-cols-2 gap-3">
-                  {productSections.map((section) => {
-                    const Icon = section.icon
-                    const isActive = activeSection === section.label
-                    return (
-                      <button
-                        key={section.label}
-                        type="button"
-                        onClick={() => setActiveSection((current) => (current === section.label ? null : section.label))}
-                        className={`flex items-center gap-3 rounded-2xl border px-3 py-3 text-left transition-all ${
-                          isActive
-                            ? 'border-emerald-400/30 bg-emerald-400/10 shadow-[0_12px_30px_rgba(16,185,129,0.08)]'
-                            : 'border-white/8 bg-black/20 hover:border-white/15 hover:bg-white/[0.04]'
-                        }`}
-                      >
-                        <div className={`flex h-9 w-9 items-center justify-center rounded-xl ${
-                          isActive ? 'bg-emerald-400/16 text-emerald-100' : 'bg-emerald-400/10 text-emerald-200'
-                        }`}>
-                          <Icon className="h-4 w-4" />
-                        </div>
-                        <span className="text-sm font-medium text-zinc-200">{section.label}</span>
-                      </button>
-                    )
-                  })}
-                </div>
+              <div className="relative overflow-hidden rounded-[1.85rem] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.055),rgba(255,255,255,0.02))] p-5 shadow-[0_30px_100px_rgba(0,0,0,0.35)] backdrop-blur-2xl">
+                <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.16),_transparent_38%),linear-gradient(180deg,rgba(255,255,255,0.03),transparent_36%)]" />
+                <div className="pointer-events-none absolute left-[2.2rem] top-20 bottom-14 w-px bg-[linear-gradient(rgba(16,185,129,0),rgba(52,211,153,0.55),rgba(45,212,191,0.35),rgba(16,185,129,0))]" />
 
-                {activeSectionData && (
-                  <motion.div
-                    key={activeSection}
-                    ref={expandedCardRef}
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.24 }}
-                    className="relative mt-4 overflow-hidden rounded-[1.6rem] border border-white/10 bg-[rgba(3,10,10,0.72)] p-5"
-                  >
-                    <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${activeSectionData.accent}`} />
-                    <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:52px_52px] opacity-40" />
-
-                    <div className="relative">
-                      <div className="flex items-start justify-between gap-4">
-                        <div>
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-emerald-200/85">
-                            {activeSectionData.eyebrow}
-                          </p>
-                          <p className="mt-2 text-lg font-semibold text-white">{activeSectionData.label}</p>
-                        </div>
-                        <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/10 text-white shadow-[0_10px_30px_rgba(0,0,0,0.18)]">
-                          <activeSectionData.previewIcon className="h-5 w-5" />
-                        </div>
-                      </div>
-
-                      <p className="mt-4 max-w-md text-sm leading-6 text-zinc-300">
-                        {activeSectionData.detail}
+                <div className="relative">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-emerald-200/80">
+                        Your day, in sync
                       </p>
-
-                      <div className="mt-4 flex flex-wrap gap-2">
-                        {activeSectionData.highlights.map((highlight) => (
-                          <div
-                            key={highlight}
-                            className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-3 py-1.5 text-xs font-medium text-zinc-200"
-                          >
-                            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-300" />
-                            {highlight}
-                          </div>
-                        ))}
-                      </div>
-
-                      <div className="mt-5 overflow-hidden rounded-[1.35rem] border border-white/10 bg-black/30">
-                        <div className="flex items-center justify-between border-b border-white/8 px-4 py-3">
-                          <div>
-                            <p className="text-[10px] uppercase tracking-[0.18em] text-zinc-500">Preview</p>
-                            <p className="mt-1 text-sm font-medium text-white">{activeSectionData.label} workspace</p>
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <span className="h-2.5 w-2.5 rounded-full bg-rose-400/80" />
-                            <span className="h-2.5 w-2.5 rounded-full bg-amber-400/80" />
-                            <span className="h-2.5 w-2.5 rounded-full bg-emerald-400/80" />
-                          </div>
-                        </div>
-
-                        <div className="space-y-4 p-4">
-                          <div className="grid grid-cols-2 gap-3">
-                            {activeSectionData.previewStats.map((stat) => (
-                              <div key={stat.label} className="rounded-2xl border border-white/8 bg-white/[0.04] p-3">
-                                <p className="text-[10px] uppercase tracking-[0.16em] text-zinc-500">{stat.label}</p>
-                                <p className="mt-2 text-sm font-semibold text-white">{stat.value}</p>
-                              </div>
-                            ))}
-                          </div>
-
-                          <div className="space-y-2">
-                            {activeSectionData.previewRows.map((row, index) => (
-                              <div
-                                key={row.title}
-                                className="flex items-start gap-3 rounded-2xl border border-white/8 bg-white/[0.04] px-3 py-3"
-                              >
-                                <div className="mt-0.5 flex h-7 w-7 items-center justify-center rounded-xl bg-emerald-400/12 text-[11px] font-semibold text-emerald-200">
-                                  0{index + 1}
-                                </div>
-                                <div className="min-w-0">
-                                  <p className="text-sm font-medium text-white">{row.title}</p>
-                                  <p className="mt-1 text-xs leading-5 text-zinc-400">{row.meta}</p>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
+                      <p className="mt-1.5 text-[1.05rem] font-semibold text-white">
+                        One calm flow from morning plan to evening reset.
+                      </p>
                     </div>
-                  </motion.div>
-                )}
+                    <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/10 text-emerald-100">
+                      <Sparkles className="h-5 w-5" />
+                    </div>
+                  </div>
+
+                  <div className="mt-5 space-y-4">
+                    {dailyFlowSteps.map((step, index) => {
+                      const Icon = step.icon
+                      return (
+                        <div key={step.title} className="relative pl-12">
+                          <div className="absolute left-0 top-1 flex h-9 w-9 items-center justify-center rounded-2xl border border-white/10 bg-[#0d1b18] text-emerald-200 shadow-[0_12px_30px_rgba(0,0,0,0.2)]">
+                            <Icon className="h-4 w-4" />
+                          </div>
+                          <div className="relative overflow-hidden rounded-[1.45rem] border border-white/10 bg-[rgba(5,12,12,0.72)]">
+                            <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${step.accent}`} />
+                            <div className="relative flex items-start justify-between gap-4 px-4 py-4">
+                              <div className="min-w-0">
+                                <p className="text-sm font-semibold text-white">{step.title}</p>
+                                <p className="mt-1 text-[13px] leading-5 text-zinc-300">{step.detail}</p>
+                              </div>
+                              <div className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.16em] text-zinc-300">
+                                <Clock3 className="h-3.5 w-3.5 text-emerald-300" />
+                                {step.time}
+                              </div>
+                            </div>
+                          </div>
+                          {index === 1 && (
+                            <div className="mt-3 ml-1 flex flex-wrap gap-2 text-[11px] font-medium text-zinc-200">
+                              <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1.5">Breakfast logged</span>
+                              <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1.5">Water on track</span>
+                              <span className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1.5 text-emerald-100">Saved meals ready</span>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+
+                  <div className="mt-5 flex items-center justify-between gap-4 rounded-[1.35rem] border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-[13px] text-emerald-50">
+                    <div className="flex items-center gap-3">
+                      <TrendingUp className="h-4 w-4 shrink-0 text-emerald-200" />
+                      <p className="leading-5">
+                        Everything stays in one daily rhythm once you’re in.
+                      </p>
+                    </div>
+                    <div className="hidden items-center gap-2 text-[11px] font-medium uppercase tracking-[0.18em] text-emerald-100/80 xl:inline-flex">
+                      Calm
+                      <span className="h-1 w-1 rounded-full bg-emerald-200/60" />
+                      Clear
+                      <span className="h-1 w-1 rounded-full bg-emerald-200/60" />
+                      Consistent
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </motion.div>

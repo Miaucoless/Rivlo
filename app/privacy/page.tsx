@@ -9,8 +9,11 @@ export const metadata: Metadata = {
 
 export default function PrivacyPage() {
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-white">
-      <div className="max-w-3xl mx-auto px-6 py-16">
+    <div
+      className="min-h-[100dvh] overflow-y-auto bg-[#0a0a0a] text-white touch-pan-y"
+      style={{ WebkitOverflowScrolling: 'touch' }}
+    >
+      <div className="max-w-3xl mx-auto px-6 py-16 pb-24">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2 mb-12">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center">

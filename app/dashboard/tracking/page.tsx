@@ -499,18 +499,582 @@ export default function TrackingPage() {
     }))
 
   const handleExport = () => {
-    const data = {
-      weight_history: weightHistory,
-      calorie_history: calorieHistory,
-      workout_logs: workoutLogs,
+    const escapeHtml = (value: string) =>
+      value
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;')
+
+    const createLineChartSvg = ({
+      data,
+      stroke,
+      fillId,
+      fillFrom,
+      fillTo,
+      ySuffix = '',
+    }: {
+      data: Array<{ label: string; value: number }>
+      stroke: string
+      fillId: string
+      fillFrom: string
+      fillTo: string
+      ySuffix?: string
+    }) => {
+      if (data.length < 2) {
+        return '<div class="chart-empty">Not enough data to draw this chart yet.</div>'
+      }
+
+      const width = 760
+      const height = 270
+      const padding = { top: 18, right: 18, bottom: 38, left: 48 }
+      const rawValues = data.map((point) => point.value)
+      const rawMin = Math.min(...rawValues)
+      const rawMax = Math.max(...rawValues)
+      const spread = rawMax - rawMin
+      const yPadding = spread === 0 ? Math.max(rawMax * 0.08, 1) : spread * 0.18
+      const min = Math.max(0, rawMin - yPadding)
+      const max = rawMax + yPadding
+      const xRange = width - padding.left - padding.right
+      const yRange = height - padding.top - padding.bottom
+      const toX = (index: number) =>
+        padding.left + (data.length === 1 ? xRange / 2 : (index / (data.length - 1)) * xRange)
+      const toY = (value: number) =>
+        padding.top + (max === min ? yRange / 2 : ((max - value) / (max - min)) * yRange)
+
+      const points = data.map((point, index) => ({
+        ...point,
+        x: toX(index),
+        y: toY(point.value),
+      }))
+
+      const linePath = points
+        .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`)
+        .join(' ')
+      const areaPath = `${linePath} L ${points[points.length - 1].x.toFixed(2)} ${(height - padding.bottom).toFixed(2)} L ${points[0].x.toFixed(2)} ${(height - padding.bottom).toFixed(2)} Z`
+
+      const ticks = Array.from({ length: 4 }, (_, index) => {
+        const value = min + ((max - min) / 3) * index
+        const y = toY(value)
+        return { value, y }
+      })
+
+      return `
+        <svg viewBox="0 0 ${width} ${height}" class="chart-svg" role="img" aria-label="Trend chart">
+          <defs>
+            <linearGradient id="${fillId}" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="${fillFrom}" stop-opacity="0.30" />
+              <stop offset="100%" stop-color="${fillTo}" stop-opacity="0.02" />
+            </linearGradient>
+          </defs>
+          ${ticks.map((tick) => `
+            <g>
+              <line x1="${padding.left}" y1="${tick.y.toFixed(2)}" x2="${width - padding.right}" y2="${tick.y.toFixed(2)}" stroke="rgba(255,255,255,0.08)" stroke-dasharray="4 6" />
+              <text x="${padding.left - 10}" y="${(tick.y + 4).toFixed(2)}" text-anchor="end" fill="rgba(245,247,246,0.48)" font-size="11">${Math.round(tick.value)}${ySuffix}</text>
+            </g>
+          `).join('')}
+          <path d="${areaPath}" fill="url(#${fillId})" />
+          <path d="${linePath}" fill="none" stroke="${stroke}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+          ${points.map((point) => `
+            <g>
+              <text
+                x="${point.x.toFixed(2)}"
+                y="${(point.y - 14).toFixed(2)}"
+                text-anchor="middle"
+                fill="#f5f7f6"
+                font-size="11"
+                font-weight="700"
+              >${point.value % 1 === 0 ? point.value.toFixed(0) : point.value.toFixed(1)}${ySuffix}</text>
+              <circle cx="${point.x.toFixed(2)}" cy="${point.y.toFixed(2)}" r="4.5" fill="${stroke}" />
+              <circle cx="${point.x.toFixed(2)}" cy="${point.y.toFixed(2)}" r="8" fill="${stroke}" fill-opacity="0.16" />
+              <text x="${point.x.toFixed(2)}" y="${height - 12}" text-anchor="middle" fill="rgba(245,247,246,0.58)" font-size="11">${escapeHtml(point.label)}</text>
+            </g>
+          `).join('')}
+        </svg>
+      `
     }
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+
+    const createBarChartSvg = ({
+      data,
+      barColor,
+      targetColor,
+    }: {
+      data: Array<{ label: string; value: number; target: number }>
+      barColor: string
+      targetColor: string
+    }) => {
+      if (data.length === 0) {
+        return '<div class="chart-empty">No nutrition history has been logged yet.</div>'
+      }
+
+      const width = 760
+      const height = 270
+      const padding = { top: 18, right: 18, bottom: 38, left: 48 }
+      const max = Math.max(...data.map((point) => Math.max(point.value, point.target)), 1) * 1.12
+      const chartWidth = width - padding.left - padding.right
+      const chartHeight = height - padding.top - padding.bottom
+      const groupWidth = chartWidth / data.length
+      const barWidth = Math.min(34, groupWidth * 0.58)
+      const toY = (value: number) => padding.top + ((max - value) / max) * chartHeight
+
+      const ticks = Array.from({ length: 4 }, (_, index) => {
+        const value = (max / 3) * index
+        const y = toY(value)
+        return { value, y }
+      })
+
+      return `
+        <svg viewBox="0 0 ${width} ${height}" class="chart-svg" role="img" aria-label="Bar chart">
+          ${ticks.map((tick) => `
+            <g>
+              <line x1="${padding.left}" y1="${tick.y.toFixed(2)}" x2="${width - padding.right}" y2="${tick.y.toFixed(2)}" stroke="rgba(255,255,255,0.08)" stroke-dasharray="4 6" />
+              <text x="${padding.left - 10}" y="${(tick.y + 4).toFixed(2)}" text-anchor="end" fill="rgba(245,247,246,0.48)" font-size="11">${Math.round(tick.value)}</text>
+            </g>
+          `).join('')}
+          ${data.map((point, index) => {
+            const centerX = padding.left + groupWidth * index + groupWidth / 2
+            const barHeight = Math.max(6, ((point.value / max) * chartHeight))
+            const barY = height - padding.bottom - barHeight
+            const targetY = toY(point.target)
+            return `
+              <g>
+                <text
+                  x="${centerX.toFixed(2)}"
+                  y="${Math.max(padding.top + 12, barY - 8).toFixed(2)}"
+                  text-anchor="middle"
+                  fill="#f5f7f6"
+                  font-size="11"
+                  font-weight="700"
+                >${Math.round(point.value)}</text>
+                <rect x="${(centerX - barWidth / 2).toFixed(2)}" y="${barY.toFixed(2)}" width="${barWidth.toFixed(2)}" height="${barHeight.toFixed(2)}" rx="10" fill="${barColor}" />
+                <line x1="${(centerX - barWidth / 2 - 6).toFixed(2)}" y1="${targetY.toFixed(2)}" x2="${(centerX + barWidth / 2 + 6).toFixed(2)}" y2="${targetY.toFixed(2)}" stroke="${targetColor}" stroke-width="2.5" stroke-linecap="round" />
+                <text x="${centerX.toFixed(2)}" y="${height - 12}" text-anchor="middle" fill="rgba(245,247,246,0.58)" font-size="11">${escapeHtml(point.label)}</text>
+              </g>
+            `
+          }).join('')}
+        </svg>
+      `
+    }
+
+    const weightRows = [...filteredWeight]
+      .reverse()
+      .map((entry) => `
+        <tr>
+          <td>${escapeHtml(format(new Date(entry.date), 'MMM d, yyyy'))}</td>
+          <td>${escapeHtml(formatWeightValue(entry.weight_kg, unitSystem))}</td>
+          <td>${entry.body_fat_pct != null ? `${entry.body_fat_pct}%` : '—'}</td>
+          <td>${entry.notes ? escapeHtml(entry.notes) : '—'}</td>
+        </tr>
+      `)
+      .join('')
+
+    const calorieRows = calorieHistory
+      .map((day) => `
+        <tr>
+          <td>${escapeHtml(day.date)}</td>
+          <td>${day.calories.toLocaleString()} kcal</td>
+          <td>${day.protein}g</td>
+          <td>${day.target.toLocaleString()} kcal</td>
+          <td>${day.protein_target}g</td>
+        </tr>
+      `)
+      .join('')
+
+    const workoutRows = [...workoutLogs]
+      .sort((a, b) => b.date.localeCompare(a.date))
+      .map((workout) => {
+        const totalSets = workout.exercises.reduce((sum, exercise) => sum + exercise.sets.length, 0)
+        return `
+          <tr>
+            <td>${escapeHtml(format(new Date(workout.date), 'MMM d, yyyy'))}</td>
+            <td>${escapeHtml(workout.workout.name)}</td>
+            <td>${workout.exercises.length}</td>
+            <td>${totalSets}</td>
+            <td>${workout.duration_min || 0} min</td>
+            <td>${workout.calories_burned_kcal || 0} kcal</td>
+          </tr>
+        `
+      })
+      .join('')
+
+    const prRows = prs
+      .map((pr) => `
+        <tr>
+          <td>${escapeHtml(pr.exercise)}</td>
+          <td>${escapeHtml(pr.weight)}</td>
+          <td>${escapeHtml(pr.date)}</td>
+          <td>${pr.new ? 'New this week' : 'Tracked PR'}</td>
+        </tr>
+      `)
+      .join('')
+
+    const weightTrendChart = createLineChartSvg({
+      data: weightChartData.map((point) => ({ label: point.date, value: point.weight })),
+      stroke: '#21c58f',
+      fillId: 'weightTrendFill',
+      fillFrom: '#21c58f',
+      fillTo: '#21c58f',
+      ySuffix: unitSystem === 'metric' ? 'kg' : 'lb',
+    })
+
+    const calorieTrendChart = createBarChartSvg({
+      data: calorieHistory.map((point) => ({
+        label: point.date,
+        value: point.calories,
+        target: point.target,
+      })),
+      barColor: '#21c58f',
+      targetColor: '#fbbf24',
+    })
+
+    const proteinTrendChart = createLineChartSvg({
+      data: calorieHistory.map((point) => ({
+        label: point.date,
+        value: point.protein,
+      })),
+      stroke: '#60a5fa',
+      fillId: 'proteinTrendFill',
+      fillFrom: '#60a5fa',
+      fillTo: '#60a5fa',
+      ySuffix: 'g',
+    })
+
+    const reportHtml = `
+      <!doctype html>
+      <html lang="en">
+        <head>
+          <meta charset="utf-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
+          <title>Rivora Progress Report</title>
+          <style>
+            :root {
+              color-scheme: dark;
+            }
+            * {
+              box-sizing: border-box;
+            }
+            body {
+              margin: 0;
+              padding: 32px;
+              font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+              background: #07110f;
+              color: #f5f7f6;
+            }
+            .report {
+              max-width: 1100px;
+              margin: 0 auto;
+            }
+            .hero {
+              padding: 28px;
+              border: 1px solid rgba(255,255,255,0.1);
+              border-radius: 24px;
+              background: linear-gradient(135deg, rgba(16,185,129,0.12), rgba(255,255,255,0.03));
+            }
+            .eyebrow {
+              margin: 0 0 12px;
+              font-size: 12px;
+              letter-spacing: 0.26em;
+              text-transform: uppercase;
+              color: #7ee7c4;
+            }
+            h1, h2, h3, p {
+              margin: 0;
+            }
+            h1 {
+              font-size: 36px;
+              line-height: 1;
+              margin-bottom: 12px;
+            }
+            .hero-meta {
+              margin-top: 18px;
+              display: grid;
+              grid-template-columns: repeat(4, minmax(0, 1fr));
+              gap: 12px;
+            }
+            .stat {
+              padding: 16px;
+              border: 1px solid rgba(255,255,255,0.08);
+              border-radius: 18px;
+              background: rgba(7, 12, 11, 0.65);
+            }
+            .stat-label {
+              font-size: 11px;
+              text-transform: uppercase;
+              letter-spacing: 0.18em;
+              color: rgba(245,247,246,0.58);
+            }
+            .stat-value {
+              margin-top: 10px;
+              font-size: 28px;
+              font-weight: 700;
+            }
+            .sections {
+              display: grid;
+              gap: 18px;
+              margin-top: 20px;
+            }
+            .chart-grid {
+              display: grid;
+              grid-template-columns: repeat(2, minmax(0, 1fr));
+              gap: 14px;
+            }
+            .chart-panel {
+              padding: 16px;
+              border: 1px solid rgba(255,255,255,0.08);
+              border-radius: 18px;
+              background: rgba(7,12,11,0.55);
+            }
+            .chart-panel.wide {
+              grid-column: 1 / -1;
+            }
+            .chart-title {
+              font-size: 15px;
+              font-weight: 700;
+              margin-bottom: 4px;
+            }
+            .chart-sub {
+              color: rgba(245,247,246,0.58);
+              font-size: 13px;
+              line-height: 1.5;
+              margin-bottom: 12px;
+            }
+            .chart-svg {
+              width: 100%;
+              height: auto;
+              display: block;
+            }
+            .chart-empty {
+              padding: 22px;
+              border: 1px dashed rgba(255,255,255,0.12);
+              border-radius: 16px;
+              color: rgba(245,247,246,0.58);
+              text-align: center;
+              font-size: 13px;
+            }
+            .card {
+              padding: 22px;
+              border: 1px solid rgba(255,255,255,0.08);
+              border-radius: 22px;
+              background: rgba(255,255,255,0.03);
+            }
+            .card h2 {
+              font-size: 20px;
+              margin-bottom: 6px;
+            }
+            .card-sub {
+              color: rgba(245,247,246,0.66);
+              margin-bottom: 16px;
+              line-height: 1.6;
+            }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+            }
+            th, td {
+              text-align: left;
+              padding: 12px 10px;
+              border-bottom: 1px solid rgba(255,255,255,0.08);
+              vertical-align: top;
+            }
+            th {
+              font-size: 11px;
+              text-transform: uppercase;
+              letter-spacing: 0.18em;
+              color: rgba(245,247,246,0.58);
+            }
+            td {
+              font-size: 14px;
+              color: #f5f7f6;
+            }
+            .bullets {
+              margin: 14px 0 0;
+              padding-left: 18px;
+              color: rgba(245,247,246,0.76);
+            }
+            .bullets li + li {
+              margin-top: 8px;
+            }
+            .empty {
+              padding: 18px;
+              border: 1px dashed rgba(255,255,255,0.12);
+              border-radius: 18px;
+              color: rgba(245,247,246,0.58);
+            }
+            @media (max-width: 820px) {
+              body {
+                padding: 18px;
+              }
+              h1 {
+                font-size: 28px;
+              }
+              .hero-meta {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+              }
+              .chart-grid {
+                grid-template-columns: 1fr;
+              }
+              .chart-panel.wide {
+                grid-column: auto;
+              }
+              th, td {
+                padding: 10px 8px;
+                font-size: 13px;
+              }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="report">
+            <section class="hero">
+              <p class="eyebrow">Rivora Progress Report</p>
+              <h1>${escapeHtml(user.name)}</h1>
+              <p>Exported on ${escapeHtml(format(new Date(), 'MMMM d, yyyy'))}. This report summarizes your current weight trend, nutrition history, workout activity, and coaching recommendation in a readable format.</p>
+              <div class="hero-meta">
+                <div class="stat">
+                  <p class="stat-label">Current weight</p>
+                  <p class="stat-value">${escapeHtml(formatWeightValue(currentWeight, unitSystem))}</p>
+                </div>
+                <div class="stat">
+                  <p class="stat-label">Goal</p>
+                  <p class="stat-value">${escapeHtml(user.fitness_goal.replaceAll('_', ' '))}</p>
+                </div>
+                <div class="stat">
+                  <p class="stat-label">Workouts this week</p>
+                  <p class="stat-value">${workoutsThisWeek}</p>
+                </div>
+                <div class="stat">
+                  <p class="stat-label">Avg daily calories</p>
+                  <p class="stat-value">${Math.round(avgCalories).toLocaleString()}</p>
+                </div>
+              </div>
+            </section>
+
+            <div class="sections">
+              <section class="card">
+                <p class="eyebrow">Connected Recommendation</p>
+                <h2>${escapeHtml(connectedRecommendation.title)}</h2>
+                <p class="card-sub">${escapeHtml(connectedRecommendation.body)}</p>
+                <ul class="bullets">
+                  ${connectedRecommendation.supportingPoints.map((point) => `<li>${escapeHtml(point)}</li>`).join('')}
+                </ul>
+              </section>
+
+              <section class="card">
+                <p class="eyebrow">Trend Charts</p>
+                <h2>Visual snapshots</h2>
+                <p class="card-sub">A readable export of your main tracking graphs so you can review progress without digging through raw data.</p>
+                <div class="chart-grid">
+                  <div class="chart-panel wide">
+                    <p class="chart-title">Weight trend</p>
+                    <p class="chart-sub">Recent weigh-ins over the selected tracking range.</p>
+                    ${weightTrendChart}
+                  </div>
+                  <div class="chart-panel">
+                    <p class="chart-title">Daily calories vs target</p>
+                    <p class="chart-sub">Logged calorie intake with your target marked in gold.</p>
+                    ${calorieTrendChart}
+                  </div>
+                  <div class="chart-panel">
+                    <p class="chart-title">Protein trend</p>
+                    <p class="chart-sub">Recent protein intake across logged nutrition days.</p>
+                    ${proteinTrendChart}
+                  </div>
+                </div>
+              </section>
+
+              <section class="card">
+                <p class="eyebrow">Weight History</p>
+                <h2>Logged weigh-ins</h2>
+                <p class="card-sub">Your recorded weights${unitSystem === 'metric' ? ' in kilograms' : ' in pounds'} with optional body-fat notes.</p>
+                ${weightRows
+                  ? `<table>
+                      <thead>
+                        <tr>
+                          <th>Date</th>
+                          <th>Weight</th>
+                          <th>Body Fat</th>
+                          <th>Notes</th>
+                        </tr>
+                      </thead>
+                      <tbody>${weightRows}</tbody>
+                    </table>`
+                  : '<div class="empty">No weight entries have been logged yet.</div>'}
+              </section>
+
+              <section class="card">
+                <p class="eyebrow">Nutrition History</p>
+                <h2>Recent daily intake</h2>
+                <p class="card-sub">Days where meals were actually logged, along with calorie and protein targets.</p>
+                ${calorieRows
+                  ? `<table>
+                      <thead>
+                        <tr>
+                          <th>Date</th>
+                          <th>Calories</th>
+                          <th>Protein</th>
+                          <th>Calorie Target</th>
+                          <th>Protein Target</th>
+                        </tr>
+                      </thead>
+                      <tbody>${calorieRows}</tbody>
+                    </table>`
+                  : '<div class="empty">No meal history is available yet.</div>'}
+              </section>
+
+              <section class="card">
+                <p class="eyebrow">Workout History</p>
+                <h2>Logged sessions</h2>
+                <p class="card-sub">Your recorded workouts with session length, exercise count, set count, and estimated calories burned.</p>
+                ${workoutRows
+                  ? `<table>
+                      <thead>
+                        <tr>
+                          <th>Date</th>
+                          <th>Workout</th>
+                          <th>Exercises</th>
+                          <th>Sets</th>
+                          <th>Duration</th>
+                          <th>Calories</th>
+                        </tr>
+                      </thead>
+                      <tbody>${workoutRows}</tbody>
+                    </table>`
+                  : '<div class="empty">No workouts have been logged yet.</div>'}
+              </section>
+
+              <section class="card">
+                <p class="eyebrow">Personal Records</p>
+                <h2>Strength highlights</h2>
+                <p class="card-sub">Top personal records pulled from your logged workout sets.</p>
+                ${prRows
+                  ? `<table>
+                      <thead>
+                        <tr>
+                          <th>Exercise</th>
+                          <th>Best Weight</th>
+                          <th>Date</th>
+                          <th>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>${prRows}</tbody>
+                    </table>`
+                  : '<div class="empty">No weight-based personal records are available yet.</div>'}
+              </section>
+            </div>
+          </div>
+        </body>
+      </html>
+    `
+
+    const blob = new Blob([reportHtml], { type: 'text/html;charset=utf-8' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = 'grays-progress-data.json'
+    a.download = `rivora-progress-report-${format(new Date(), 'yyyy-MM-dd')}.html`
     a.click()
-    toast.success('Data exported!')
+    URL.revokeObjectURL(url)
+    toast.success('Progress report exported!')
   }
 
   return (

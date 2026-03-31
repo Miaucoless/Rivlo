@@ -567,28 +567,19 @@ function MealTimelineSection({
   return (
     <section className="space-y-2.5">
       <div className={`rounded-[1.25rem] border bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.02))] p-3.5 shadow-[0_14px_34px_-32px_rgba(0,0,0,0.6)] ${theme.border}`}>
-        <button
-          type="button"
-          onClick={toggleSectionExpanded}
-          className="flex w-full items-center justify-between gap-3 pb-2 text-left sm:hidden"
-        >
-          <div className="min-w-0">
-            <h3 className="text-lg font-semibold tracking-tight text-foreground">{mealTypeLabel(mealType)}</h3>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {meals.length > 0
-                ? `${totals.calories} kcal · ${fmtMacro(totals.protein_g)} g protein · ${meals.length} ${meals.length === 1 ? 'entry' : 'entries'}`
-                : theme.hint}
-            </p>
-          </div>
-          <ChevronDown className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${sectionExpanded ? 'rotate-180' : ''}`} />
-        </button>
-
-        <div className={sectionExpanded ? 'block' : 'hidden sm:block'}>
         <div className="flex flex-col gap-2.5 sm:flex-row sm:items-start sm:justify-between">
-          <div className="space-y-2">
-              <div className="hidden sm:block">
-                <h3 className="text-lg font-semibold tracking-tight text-foreground">{mealTypeLabel(mealType)}</h3>
-              </div>
+          <button
+            type="button"
+            onClick={toggleSectionExpanded}
+            className="flex min-w-0 flex-1 items-start justify-between gap-3 text-left"
+          >
+            <div className="min-w-0 space-y-2">
+              <h3 className="text-lg font-semibold tracking-tight text-foreground">{mealTypeLabel(mealType)}</h3>
+              <p className="mt-1 text-xs text-muted-foreground sm:hidden">
+                {meals.length > 0
+                  ? `${totals.calories} kcal · ${fmtMacro(totals.protein_g)} g protein · ${meals.length} ${meals.length === 1 ? 'entry' : 'entries'}`
+                  : theme.hint}
+              </p>
               <div className="flex flex-wrap gap-2">
                 <div className="rounded-full border border-border/60 bg-background/70 px-2.5 py-1 text-[11px] text-foreground">
                   {totals.calories} kcal
@@ -601,19 +592,22 @@ function MealTimelineSection({
                 </div>
               </div>
             </div>
+            <ChevronDown className={`mt-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform ${sectionExpanded ? 'rotate-180' : ''}`} />
+          </button>
 
-            <Button variant="brand" size="sm" className="h-8 gap-1.5 self-start rounded-full px-3" onClick={() => openAdd(mealType)}>
-              <Plus className="h-3.5 w-3.5" />
-              Add Food
-            </Button>
-          </div>
+          <Button variant="brand" size="sm" className="h-8 gap-1.5 self-start rounded-full px-3" onClick={() => openAdd(mealType)}>
+            <Plus className="h-3.5 w-3.5" />
+            Add Food
+          </Button>
+        </div>
 
+        <div className={sectionExpanded ? 'mt-3 block' : 'hidden'}>
           {meals.length === 0 ? (
-            <div className="mt-3 rounded-[1rem] border border-dashed border-border/70 bg-background/40 px-4 py-4">
+            <div className="rounded-[1rem] border border-dashed border-border/70 bg-background/40 px-4 py-4">
               <p className="text-xs text-muted-foreground">{theme.hint}</p>
             </div>
           ) : (
-            <div className="mt-3 space-y-2">
+            <div className="space-y-2">
               {meals.map((meal, mealIndex) => {
                 const expanded = expandedMeals[meal.id] || false
                 const isExpandable = !!meal.recipe || meal.entry_source === 'saved'

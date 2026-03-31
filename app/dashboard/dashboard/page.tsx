@@ -719,11 +719,147 @@ export default function DashboardPage() {
   const caloriesRemainingText = caloriesLeft > 0
     ? `${caloriesLeft} kcal left for the day`
     : `${todayTotals.calories - user.calorie_target} kcal over target`
-  const mealFocusText = proteinLeftCapped > 0
-    ? `A protein-forward next meal is the fastest win. Aim for about ${Math.min(proteinLeftCapped, 35)}g.`
-    : caloriesLeft > 0
-      ? 'Protein is already covered. Keep the rest of the day light and easy to log.'
-      : 'Protein is covered, so the best move now is a lighter finish to the day.'
+  const mealsLoggedCount = todayMeals.length
+  const nextOpenMealSlot = openMealSlots[0]
+    ? `${openMealSlots[0].charAt(0).toUpperCase()}${openMealSlots[0].slice(1)}`
+    : null
+  const proteinHitRatePct = weeklyReview.days.length > 0
+    ? Math.round((weeklyReview.summary.protein_hit_days / weeklyReview.days.length) * 100)
+    : 0
+  const hydrationHitRatePct = weeklyReview.days.length > 0
+    ? Math.round((weeklyReview.summary.hydration_hit_days / weeklyReview.days.length) * 100)
+    : 0
+  const overCaloriesBy = Math.max(0, todayTotals.calories - user.calorie_target)
+  const showMealSupportCard = expandedMealType === null
+  const mealSupport = (() => {
+    if (todayMeals.length === 0) {
+      return {
+        eyebrow: 'Build the day',
+        title: 'Start with one reliable meal you can repeat',
+        detail: 'Logging one easy, protein-forward meal first makes the rest of the day much easier to steer.',
+        stats: [
+          {
+            label: 'Open slots',
+            value: `${mealSlots.length}`,
+            sub: 'breakfast · lunch · dinner · snack',
+          },
+          {
+            label: 'Protein target',
+            value: `${user.protein_target_g}g`,
+            sub: 'still open today',
+          },
+        ],
+        nextStep: 'A simple breakfast or lunch with clear protein is the easiest place to begin.',
+      }
+    }
+
+    if (overCaloriesBy >= 150 && openMealSlots.length > 0) {
+      return {
+        eyebrow: 'Ease the landing',
+        title: 'Keep the rest of today lighter and easier to track',
+        detail: `You are already ${overCaloriesBy} kcal over target, so the best move is a lighter ${nextOpenMealSlot?.toLowerCase() ?? 'finish'} with straightforward protein.`,
+        stats: [
+          {
+            label: 'Over target',
+            value: `${overCaloriesBy}`,
+            sub: 'kcal above goal',
+          },
+          {
+            label: 'Open slots',
+            value: `${openMealSlots.length}`,
+            sub: openMealSlots.join(' · '),
+          },
+        ],
+        nextStep: 'Skip the “reset tomorrow” mindset and just make the next meal cleaner and easier.',
+      }
+    }
+
+    if (proteinLeftCapped >= 25) {
+      return {
+        eyebrow: 'Protein gap',
+        title: 'Protein is the cleanest lever right now',
+        detail: `You still have ${proteinLeftCapped}g left, and getting about ${Math.min(proteinLeftCapped, 35)}g in the next meal would move the day a lot.`,
+        stats: [
+          {
+            label: 'Protein left',
+            value: `${proteinLeftCapped}g`,
+            sub: caloriesRemainingText,
+          },
+          {
+            label: 'Week protein',
+            value: `${weeklyReview.summary.protein_hit_days}/${weeklyReview.days.length}`,
+            sub: 'goal-hit days',
+          },
+        ],
+        nextStep: `${nextOpenMealSlot ?? 'Your next meal'} is the best place to anchor the rest of the day.`,
+      }
+    }
+
+    if (openMealSlots.length === 0) {
+      return {
+        eyebrow: 'Finish clean',
+        title: 'The structure is there, now keep the closeout light',
+        detail: 'All major meal slots are filled, so the goal now is to avoid unplanned extras and keep the day easy to finish.',
+        stats: [
+          {
+            label: 'Meals logged',
+            value: `${mealsLoggedCount}`,
+            sub: 'entries across the day',
+          },
+          {
+            label: 'Hydration week',
+            value: `${weeklyReview.summary.hydration_hit_days}/${weeklyReview.days.length}`,
+            sub: 'water-goal days',
+          },
+        ],
+        nextStep: hydrationHitRatePct < 50
+          ? 'If anything else gets logged tonight, make it water first.'
+          : 'Only add something else if it clearly supports recovery or hunger.',
+      }
+    }
+
+    if (proteinHitRatePct < 45) {
+      return {
+        eyebrow: 'Weekly pattern',
+        title: 'Consistency matters more than a perfect macro day',
+        detail: `You have only hit protein on ${weeklyReview.summary.protein_hit_days} of ${weeklyReview.days.length} days this week, so making the next open meal predictable matters most.`,
+        stats: [
+          {
+            label: 'Open slots',
+            value: `${openMealSlots.length}`,
+            sub: openMealSlots.join(' · '),
+          },
+          {
+            label: 'Week protein',
+            value: `${proteinHitRatePct}%`,
+            sub: 'weekly hit rate',
+          },
+        ],
+        nextStep: `Make ${nextOpenMealSlot?.toLowerCase() ?? 'the next meal'} easy to repeat instead of trying to optimize everything at once.`,
+      }
+    }
+
+    return {
+      eyebrow: 'Keep it steady',
+      title: 'The rest of today is still easy to steer',
+      detail: `You have ${openMealSlots.length} open meal slot${openMealSlots.length === 1 ? '' : 's'} and ${caloriesLeft > 0 ? `${caloriesLeft} kcal left` : `${overCaloriesBy} kcal over target`}.`,
+      stats: [
+        {
+          label: 'Open slots',
+          value: `${openMealSlots.length}`,
+          sub: openMealSlots.length > 0 ? openMealSlots.join(' · ') : 'all major slots filled',
+        },
+        {
+          label: 'Hydration week',
+          value: `${hydrationHitRatePct}%`,
+          sub: 'goal-hit rate',
+        },
+      ],
+      nextStep: nextOpenMealSlot
+        ? `Use ${nextOpenMealSlot.toLowerCase()} to keep the day simple and intentional.`
+        : 'Keep the rest of the evening easy to log and light to finish.',
+    }
+  })()
 
   const calorieChartData = recentMealDays
     .filter((day) => day.meals.length > 0)
@@ -743,6 +879,9 @@ export default function DashboardPage() {
   const todayWorkoutLogs = workoutLogs.filter((workout) => workout.date === today)
   const todayWorkoutCalories = todayWorkoutLogs.reduce((sum, workout) => sum + (workout.calories_burned_kcal || 0), 0)
   const todayWorkoutMinutes = todayWorkoutLogs.reduce((sum, workout) => sum + (workout.duration_min || 0), 0)
+  const hasExpandedWorkout = todayWorkoutLogs.some((workout) => workout.id === expandedDashboardLogId)
+  const showWorkoutSupportCard = !hasExpandedWorkout
+  const remainingWorkoutSlots = Math.max(0, weeklyReview.summary.target_workout_days - weeklyReview.summary.workouts_completed)
   const netCaloriesToday = Math.max(0, todayTotals.calories - todayWorkoutCalories)
   const netCaloriePct = percentage(netCaloriesToday, user.calorie_target)
 
@@ -1001,8 +1140,8 @@ export default function DashboardPage() {
       {/* Second row */}
       <div className="grid md:grid-cols-3 gap-4">
         {/* Today's workouts */}
-        <motion.div variants={stagger.item} initial="initial" animate="animate">
-          <Card className="hover-lift h-full">
+        <motion.div variants={stagger.item} initial="initial" animate="animate" className="md:space-y-4">
+          <Card className="hover-lift md:min-h-[33.5rem]">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-sm font-semibold">Today&apos;s Workouts</CardTitle>
@@ -1016,7 +1155,7 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent className="flex h-full flex-col">
               {todayWorkoutLogs.length > 0 ? (
-                <div className="flex flex-1 flex-col space-y-3">
+                <div className="flex flex-col space-y-3">
                   <div className="grid grid-cols-3 gap-2">
                     <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5">
                       <p className="font-data text-lg font-semibold">{todayWorkoutLogs.length}</p>
@@ -1032,7 +1171,7 @@ export default function DashboardPage() {
                     </div>
                   </div>
 
-                  <div className="max-h-[25.5rem] space-y-2 overflow-y-auto pr-1">
+                  <div className={`space-y-2 overflow-y-auto pr-1 ${hasExpandedWorkout ? 'md:max-h-[25.5rem]' : 'md:max-h-[11.75rem]'}`}>
                     {todayWorkoutLogs.map((workout) => {
                       const isExpanded = expandedDashboardLogId === workout.id
                       const totalSets = workout.exercises.reduce((s, e) => s + e.sets.length, 0)
@@ -1114,46 +1253,11 @@ export default function DashboardPage() {
                       )
                     })}
                   </div>
-
-                  <div className="mt-auto hidden space-y-3 border-t border-border/60 pt-3 md:block">
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5">
-                        <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Week pace</p>
-                        <p className="mt-1 font-data text-lg font-semibold">
-                          {weeklyReview.summary.workouts_completed}/{weeklyReview.summary.target_workout_days}
-                        </p>
-                        <p className="text-[11px] text-muted-foreground">
-                          {Math.max(0, weeklyReview.summary.target_workout_days - weeklyReview.summary.workouts_completed)} left to place
-                        </p>
-                      </div>
-                      <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5">
-                        <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Logged days</p>
-                        <p className="mt-1 font-data text-lg font-semibold">
-                          {weeklyReview.summary.days_tracked}/{weeklyReview.days.length}
-                        </p>
-                        <p className="text-[11px] text-muted-foreground">days with activity data</p>
-                      </div>
-                    </div>
-
-                    <div className="rounded-xl border border-border/50 bg-background/60 px-3 py-3">
-                      <div className="flex items-start gap-2.5">
-                        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                          <Sparkles className="h-4 w-4" />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Next step</p>
-                          <p className="mt-1 text-xs font-medium leading-5">
-                            {workoutRecoveryAction?.title ?? weeklyReview.recommendation.title}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
                 </div>
               ) : (
-                <div className="flex flex-1 flex-col">
-                  <div className="flex flex-1 items-center justify-center rounded-2xl border border-dashed border-border/50 bg-muted/[0.06] px-5 py-8 text-center text-muted-foreground">
-                    <div className="max-w-[16rem]">
+                <div className="flex flex-col">
+                  <div className="flex min-h-[11.5rem] items-center justify-center rounded-2xl border border-dashed border-border/50 bg-muted/[0.06] px-5 py-8 text-center text-muted-foreground md:min-h-[15.5rem]">
+                    <div className="max-w-[17rem]">
                       <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full border border-border/50 bg-muted/20">
                         <Dumbbell className="h-5 w-5 opacity-40" />
                       </div>
@@ -1161,48 +1265,71 @@ export default function DashboardPage() {
                       <p className="mt-1 text-xs leading-5">Log your first session to see today&apos;s workout summary here.</p>
                     </div>
                   </div>
-
-                  <div className="mt-auto hidden space-y-3 border-t border-border/60 pt-3 md:block">
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5">
-                        <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Week pace</p>
-                        <p className="mt-1 font-data text-lg font-semibold">
-                          {weeklyReview.summary.workouts_completed}/{weeklyReview.summary.target_workout_days}
-                        </p>
-                        <p className="text-[11px] text-muted-foreground">
-                          {Math.max(0, weeklyReview.summary.target_workout_days - weeklyReview.summary.workouts_completed)} workouts still open
-                        </p>
-                      </div>
-                      <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5">
-                        <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Reset ready</p>
-                        <p className="mt-1 font-data text-lg font-semibold">{weeklyReview.recovery_actions.length}</p>
-                        <p className="text-[11px] text-muted-foreground">recovery action{weeklyReview.recovery_actions.length === 1 ? '' : 's'}</p>
-                      </div>
-                    </div>
-
-                    <div className="rounded-xl border border-border/50 bg-background/60 px-3 py-3">
-                      <div className="flex items-start gap-2.5">
-                        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                          <Sparkles className="h-4 w-4" />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Best next move</p>
-                          <p className="mt-1 text-xs font-medium leading-5">
-                            {workoutRecoveryAction?.title ?? 'Place your next workout on the day you are most likely to follow through.'}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
                 </div>
               )}
             </CardContent>
           </Card>
+
+          {showWorkoutSupportCard && (
+            <Card className="hidden md:block md:min-h-[18.5rem]">
+              <CardContent className="flex h-full flex-col justify-between p-4">
+                <div className="space-y-3">
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                    <Sparkles className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                      {todayWorkoutLogs.length > 0 ? 'Keep the week moving' : 'Shape the rest of the week'}
+                    </p>
+                    <p className="mt-1 text-sm font-medium leading-5">
+                      {todayWorkoutLogs.length > 0
+                        ? 'Use the rest of this week to protect consistency, not perfection.'
+                        : 'A smaller, easier session is better than waiting for the perfect day.'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5">
+                    <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Week pace</p>
+                    <p className="mt-1 font-data text-lg font-semibold">
+                      {weeklyReview.summary.workouts_completed}/{weeklyReview.summary.target_workout_days}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">
+                      {remainingWorkoutSlots} workout{remainingWorkoutSlots === 1 ? '' : 's'} still open
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5">
+                    <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                      {todayWorkoutLogs.length > 0 ? 'Logged days' : 'Reset ready'}
+                    </p>
+                    <p className="mt-1 font-data text-lg font-semibold">
+                      {todayWorkoutLogs.length > 0 ? `${weeklyReview.summary.days_tracked}/${weeklyReview.days.length}` : weeklyReview.recovery_actions.length}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">
+                      {todayWorkoutLogs.length > 0
+                        ? 'days with activity data'
+                        : `recovery action${weeklyReview.recovery_actions.length === 1 ? '' : 's'} available`}
+                    </p>
+                  </div>
+                </div>
+                </div>
+
+                <div className="rounded-xl border border-border/50 bg-background/60 px-3 py-3">
+                  <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Next step</p>
+                  <p className="mt-1 text-xs font-medium leading-5">
+                    {workoutRecoveryAction?.title ?? 'Place your next workout on the day you are most likely to follow through.'}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </motion.div>
 
         {/* Today's meals */}
-        <motion.div variants={stagger.item} initial="initial" animate="animate">
-          <Card className="h-full">
+        <motion.div variants={stagger.item} initial="initial" animate="animate" className="md:space-y-4">
+          <Card className="md:min-h-[33.5rem]">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-sm font-semibold">Today&apos;s Meals</CardTitle>
@@ -1211,7 +1338,7 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent className="flex h-full flex-col">
               {todayMeals.length > 0 ? (
-                <div className="flex flex-1 flex-col space-y-3">
+                <div className="flex flex-col space-y-3">
                   {/* Macro stat grid */}
                   <div className="grid grid-cols-4 gap-2">
                     {[
@@ -1271,7 +1398,7 @@ export default function DashboardPage() {
                               transition={{ duration: 0.2 }}
                               className="overflow-hidden"
                             >
-                              <div className="border-t border-border/40 divide-y divide-border/30">
+                              <div className="max-h-[44vh] overflow-y-auto border-t border-border/40 divide-y divide-border/30 pr-1 md:max-h-none md:overflow-visible md:pr-0">
                                 {mealsOfType.map((meal) => {
                                   const isExpandable = !!meal.recipe || meal.entry_source === 'saved'
                                   const expanded = expandedMeals[meal.id] || false
@@ -1418,78 +1545,52 @@ export default function DashboardPage() {
                         : `${todayTotals.calories - user.calorie_target} kcal over target`}
                     </p>
                   </div>
-
-                  <div className="mt-auto hidden space-y-3 border-t border-border/60 pt-3 md:block">
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5">
-                        <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Open meal slots</p>
-                        <p className="mt-1 font-data text-lg font-semibold">{openMealSlots.length}</p>
-                        <p className="text-[11px] text-muted-foreground">
-                          {openMealSlots.length > 0 ? openMealSlots.join(' · ') : 'all major slots filled'}
-                        </p>
-                      </div>
-                      <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5">
-                        <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Protein left</p>
-                        <p className="mt-1 font-data text-lg font-semibold">
-                          {proteinLeftCapped > 0 ? `${proteinLeftCapped}g` : 'Hit'}
-                        </p>
-                        <p className="text-[11px] text-muted-foreground">{caloriesRemainingText}</p>
-                      </div>
-                    </div>
-
-                    <div className="rounded-xl border border-border/50 bg-background/60 px-3 py-3">
-                      <div className="flex items-start gap-2.5">
-                        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                          <Sparkles className="h-4 w-4" />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Fastest win</p>
-                          <p className="mt-1 text-xs font-medium leading-5">{mealFocusText}</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
                   </div>
                 </div>
               ) : (
-                <div className="flex flex-1 flex-col">
+                <div className="flex flex-col">
                   <div className="flex flex-1 flex-col items-center justify-center h-40 text-muted-foreground text-sm text-center">
                     <Apple className="w-10 h-10 mb-3 opacity-20" />
                     <p>No meals logged yet</p>
-                  </div>
-
-                  <div className="mt-auto hidden space-y-3 border-t border-border/60 pt-3 md:block">
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5">
-                        <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Open meal slots</p>
-                        <p className="mt-1 font-data text-lg font-semibold">{mealSlots.length}</p>
-                        <p className="text-[11px] text-muted-foreground">breakfast · lunch · dinner · snack</p>
-                      </div>
-                      <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5">
-                        <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Protein left</p>
-                        <p className="mt-1 font-data text-lg font-semibold">{user.protein_target_g}g</p>
-                        <p className="text-[11px] text-muted-foreground">target still open today</p>
-                      </div>
-                    </div>
-
-                    <div className="rounded-xl border border-border/50 bg-background/60 px-3 py-3">
-                      <div className="flex items-start gap-2.5">
-                        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                          <Sparkles className="h-4 w-4" />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Fastest win</p>
-                          <p className="mt-1 text-xs font-medium leading-5">
-                            Log one protein-forward meal first, then let the rest of the day build around it.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
                   </div>
                 </div>
               )}
             </CardContent>
           </Card>
+
+          {showMealSupportCard && (
+            <Card className="hidden md:block md:min-h-[18.5rem]">
+              <CardContent className="flex h-full flex-col justify-between p-4">
+                <div className="space-y-3">
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                    <Sparkles className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">{mealSupport.eyebrow}</p>
+                    <p className="mt-1 text-sm font-medium leading-5">{mealSupport.title}</p>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">{mealSupport.detail}</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  {mealSupport.stats.map((stat) => (
+                    <div key={stat.label} className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5">
+                      <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">{stat.label}</p>
+                      <p className="mt-1 font-data text-lg font-semibold">{stat.value}</p>
+                      <p className="text-[11px] text-muted-foreground">{stat.sub}</p>
+                    </div>
+                  ))}
+                </div>
+                </div>
+
+                <div className="rounded-xl border border-border/50 bg-background/60 px-3 py-3">
+                  <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Fastest win</p>
+                  <p className="mt-1 text-xs font-medium leading-5">{mealSupport.nextStep}</p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </motion.div>
 
         {/* AI Insight + recent journal */}
