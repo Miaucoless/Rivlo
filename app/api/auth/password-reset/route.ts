@@ -70,15 +70,15 @@ export async function POST(request: Request) {
       throw error
     }
 
-    // Use Supabase's generated action_link — it routes through Supabase's auth
-    // server which verifies the token and redirects to /auth/recovery with a
-    // PKCE code or session. This is more reliable than extracting hashed_token
-    // and calling verifyOtp() client-side.
-    const recoveryLink = data?.properties?.action_link
-
-    if (!recoveryLink) {
-      throw new Error('Missing recovery link.')
+    // Build the reset link directly to /reset-password using the hashed_token.
+    // This avoids Supabase's redirect mechanism entirely — no redirect URL
+    // allowlist configuration required. The /reset-password page calls
+    // verifyOtp({ token_hash, type: 'recovery' }) client-side.
+    const tokenHash = data?.properties?.hashed_token
+    if (!tokenHash) {
+      throw new Error('Missing recovery token.')
     }
+    const recoveryLink = `${APP_ORIGIN}/reset-password?token_hash=${encodeURIComponent(tokenHash)}&type=recovery`
     const emailPayload = buildResetEmail(recoveryLink)
 
     await sendEmailMessage({
