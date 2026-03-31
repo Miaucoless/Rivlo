@@ -59,6 +59,7 @@ export function CodeScannerDialog({
 }: CodeScannerDialogProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const controlsRef = useRef<ScannerControls | null>(null)
+  const streamRef = useRef<MediaStream | null>(null)
   const lastScannedCodeRef = useRef<string | null>(null)
   const lookupInFlightRef = useRef(false)
 
@@ -77,6 +78,8 @@ export function CodeScannerDialog({
   const stopScanner = useCallback(() => {
     controlsRef.current?.stop()
     controlsRef.current = null
+    streamRef.current?.getTracks().forEach((track) => track.stop())
+    streamRef.current = null
     if (videoRef.current) {
       try {
         videoRef.current.srcObject = null
@@ -156,6 +159,39 @@ export function CodeScannerDialog({
         })
       }
 
+      streamRef.current = cameraStream
+
+      const videoElement = videoRef.current
+      if (!videoElement) {
+        throw new Error('Camera preview element is missing.')
+      }
+
+      videoElement.srcObject = cameraStream
+      videoElement.muted = true
+      videoElement.playsInline = true
+      videoElement.autoplay = true
+
+      await new Promise<void>((resolve, reject) => {
+        const handleLoaded = async () => {
+          try {
+            await videoElement.play()
+            resolve()
+          } catch (playError) {
+            reject(playError)
+          }
+        }
+
+        if (videoElement.readyState >= 2) {
+          void handleLoaded()
+          return
+        }
+
+        const handleError = () => reject(new Error('Could not start the camera preview.'))
+
+        videoElement.addEventListener('loadedmetadata', handleLoaded, { once: true })
+        videoElement.addEventListener('error', handleError, { once: true })
+      })
+
       const handleDecodeResult = (result: unknown, error: unknown, activeControls: ScannerControls) => {
         if (result && typeof result === 'object' && 'getText' in result && typeof result.getText === 'function') {
           const scannedText = result.getText().trim()
@@ -179,9 +215,8 @@ export function CodeScannerDialog({
         setCameraMessage('The camera started, but scanning hit an unexpected problem.')
       }
 
-      const controls = await reader.decodeFromStream(
-        cameraStream,
-        videoRef.current,
+      const controls = await reader.decodeFromVideoElement(
+        videoElement,
         handleDecodeResult,
       ) as ScannerControls
 
@@ -189,14 +224,7 @@ export function CodeScannerDialog({
       setCameraState('ready')
       setCameraMessage('Point your camera at a barcode or QR code.')
     } catch (error) {
-      if (videoRef.current?.srcObject instanceof MediaStream) {
-        videoRef.current.srcObject.getTracks().forEach((track) => track.stop())
-        try {
-          videoRef.current.srcObject = null
-        } catch {
-          // ignore cleanup issues
-        }
-      }
+      stopScanner()
       const message = error instanceof Error ? error.message : ''
       const permissionBlocked = /permission|notallowed|denied|dismissed/i.test(message)
 
@@ -292,7 +320,7 @@ export function CodeScannerDialog({
           <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
             <div className="space-y-3">
               <div className="relative overflow-hidden rounded-2xl border border-border/60 bg-muted/20">
-                <div className="aspect-[4/3] bg-gradient-to-br from-muted/40 via-muted/10 to-background">
+                <div className="relative aspect-[4/3] bg-gradient-to-br from-muted/40 via-muted/10 to-background">
                   <video
                     ref={videoRef}
                     className="h-full w-full object-cover"
@@ -300,9 +328,34 @@ export function CodeScannerDialog({
                     autoPlay
                     playsInline
                   />
+                  {cameraState !== 'ready' && (
+                    <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-background/80 px-6 text-center backdrop-blur-sm">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-full border border-border/60 bg-muted/30 text-primary">
+                        {cameraState === 'starting' ? <Loader2 className="h-5 w-5 animate-spin" /> : <Camera className="h-5 w-5" />}
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-sm font-semibold">
+                          {cameraState === 'starting' ? 'Starting camera…' : 'Camera preview is off'}
+                        </p>
+                        <p className="text-xs leading-5 text-muted-foreground">
+                          {cameraState === 'unsupported'
+                            ? 'This browser is not exposing a camera preview here yet.'
+                            : cameraState === 'error'
+                              ? 'Camera access may be blocked or the preview failed to start.'
+                              : 'Turn on the camera to scan a barcode or QR code.'}
+                        </p>
+                      </div>
+                      {cameraState !== 'starting' && (
+                        <Button type="button" size="sm" className="gap-2" onClick={() => void startScanner()}>
+                          <Camera className="h-4 w-4" />
+                          Turn On Camera
+                        </Button>
+                      )}
+                    </div>
+                  )}
                 </div>
-                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent px-4 py-3 text-white">
-                  <div className="flex items-center gap-2 text-xs font-medium">
+                <div className="border-t border-border/60 bg-background/80 px-4 py-3">
+                  <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
                     {lookupLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Camera className="h-3.5 w-3.5" />}
                     <span>{cameraMessage}</span>
                   </div>

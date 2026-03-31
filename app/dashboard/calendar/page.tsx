@@ -289,8 +289,9 @@ export default function CalendarPage() {
         </div>
 
         {/* Selected day detail */}
-        <div>
-          <Card className="sticky top-6 overflow-hidden">
+        <div className="lg:sticky lg:top-24 lg:self-start lg:max-h-[calc(100vh-7.5rem)] lg:overflow-hidden">
+          <div className="flex flex-col gap-4 lg:max-h-[calc(100vh-7.5rem)]">
+          <Card className="overflow-hidden lg:flex-1 lg:min-h-0">
             <CardHeader className="pb-3 border-b border-border/50">
               <div className="flex items-center justify-between gap-2">
                 <CardTitle className="text-sm flex items-center gap-2">
@@ -308,7 +309,7 @@ export default function CalendarPage() {
                 )}
               </div>
             </CardHeader>
-            <CardContent className="p-0">
+            <CardContent className="p-0 lg:min-h-0">
               <AnimatePresence mode="wait">
                 {selectedEvents.length > 0 || selectedReminders.length > 0 ? (
                   <motion.div
@@ -317,7 +318,7 @@ export default function CalendarPage() {
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -8 }}
                     transition={{ duration: 0.2 }}
-                    className="divide-y divide-border/40 max-h-[60vh] overflow-y-auto overscroll-contain"
+                    className="divide-y divide-border/40 max-h-[60vh] overflow-y-auto overscroll-contain lg:max-h-[calc(100vh-22rem)]"
                   >
                     {/* Workout sections — collapsible */}
                     {selectedWorkoutLogs.map((log) => {
@@ -600,7 +601,7 @@ export default function CalendarPage() {
           </Card>
 
           {/* Monthly summary */}
-          <Card className="mt-4">
+          <Card className="shrink-0">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm">Month Summary</CardTitle>
             </CardHeader>
@@ -629,6 +630,7 @@ export default function CalendarPage() {
               })}
             </CardContent>
           </Card>
+          </div>
         </div>
       </div>
 
