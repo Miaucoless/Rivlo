@@ -8,7 +8,7 @@ import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { finalizePasswordRecoverySession, requestPasswordReset, updatePassword } from '@/lib/auth'
+import { confirmPasswordReset, finalizePasswordRecoverySession, requestPasswordReset, updatePassword } from '@/lib/auth'
 import { toast } from 'sonner'
 
 const CANONICAL_APP_ORIGIN = process.env.NEXT_PUBLIC_APP_URL || 'https://rivorafit.com'
@@ -30,6 +30,7 @@ function ResetPasswordPageContent() {
   const [recoveryChecked, setRecoveryChecked] = useState(false)
 
   const isRecoveryMode = useMemo(() => Boolean(code || tokenHash) || type === 'recovery', [code, tokenHash, type])
+  const hasDirectTokenReset = useMemo(() => Boolean(tokenHash) && type === 'recovery', [tokenHash, type])
 
   useEffect(() => {
     document.documentElement.style.overflowY = 'auto'
@@ -73,6 +74,12 @@ function ResetPasswordPageContent() {
         return
       }
 
+      if (hasDirectTokenReset) {
+        setRecoveryReady(true)
+        setRecoveryChecked(true)
+        return
+      }
+
       const response = await finalizePasswordRecoverySession({
         code,
         tokenHash,
@@ -93,7 +100,7 @@ function ResetPasswordPageContent() {
     return () => {
       cancelled = true
     }
-  }, [code, isRecoveryMode, tokenHash, type])
+  }, [code, hasDirectTokenReset, isRecoveryMode, tokenHash, type])
 
   const handleRequestReset = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -129,7 +136,9 @@ function ResetPasswordPageContent() {
     }
 
     setLoading(true)
-    const response = await updatePassword(password)
+    const response = hasDirectTokenReset && tokenHash
+      ? await confirmPasswordReset(tokenHash, password)
+      : await updatePassword(password)
 
     if (response.success) {
       toast.success('Password updated. You can sign in now.')

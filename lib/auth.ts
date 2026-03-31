@@ -202,6 +202,34 @@ export async function updatePassword(password: string): Promise<AuthResponse> {
   }
 }
 
+export async function confirmPasswordReset(
+  tokenHash: string,
+  password: string
+): Promise<AuthResponse> {
+  try {
+    const response = await fetch('/api/auth/password-reset/confirm', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        tokenHash,
+        password,
+      }),
+    })
+
+    const payload = await response.json().catch(() => null)
+
+    if (!response.ok) {
+      return { success: false, error: payload?.error || 'Failed to update password.' }
+    }
+
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: String(error) }
+  }
+}
+
 export async function signOut(): Promise<AuthResponse> {
   try {
     const supabase = createClient()
