@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Rivora</string>
+    <string name="title_activity_main">Rivora</string>
+    <string name="package_name">com.rivorafit.app</string>
+    <string name="custom_url_scheme">rivora</string>
+</resources>

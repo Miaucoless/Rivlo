@@ -22,17 +22,66 @@ function sanitizeText(value: string) {
     .replace(/[|]/g, 'I')
     .replace(/[“”]/g, '"')
     .replace(/[‘’]/g, "'")
+    .replace(/([A-Za-z])\s*\n\s*(\d)/g, '$1 $2')
+    .replace(/(\d)\s*\n\s*([A-Za-z])/g, '$1 $2')
     .replace(/[^\S\n]+/g, ' ')
     .replace(/\n{3,}/g, '\n\n')
     .trim()
 }
 
-function findValue(text: string, patterns: RegExp[]) {
+function normalizeOcrDigits(value: string) {
+  return value
+    .replace(/([0-9])[Oo]/g, '$10')
+    .replace(/[Oo](?=[0-9])/g, '0')
+    .replace(/([0-9])[Il]/g, '$11')
+    .replace(/[Il](?=[0-9])/g, '1')
+    .replace(/(\d)\s+(?=\d)/g, '$1')
+}
+
+function getLines(text: string) {
+  return text
+    .split('\n')
+    .map((line) => normalizeOcrDigits(line.trim()))
+    .filter(Boolean)
+}
+
+function extractFirstNumericToken(value: string) {
+  const normalized = normalizeOcrDigits(value)
+  const match = normalized.match(/(\d+(?:[.,]\d+)?(?:\s*\/\s*\d+(?:[.,]\d+)?)?)/)
+  return match?.[1]
+}
+
+function findValueInLines(lines: string[], labelPatterns: RegExp[]) {
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index]
+    if (!labelPatterns.some((pattern) => pattern.test(line))) continue
+
+    const inlineValue = extractFirstNumericToken(line.replace(/^[^0-9]*/, ''))
+    const parsedInline = parseNumber(inlineValue)
+    if (parsedInline !== null) return parsedInline
+
+    const nextLine = lines[index + 1]
+    const parsedNextLine = parseNumber(extractFirstNumericToken(nextLine || '') || undefined)
+    if (parsedNextLine !== null) return parsedNextLine
+  }
+
+  return null
+}
+
+function findValue(text: string, patterns: RegExp[], linePatterns: RegExp[] = []) {
+  const normalizedText = normalizeOcrDigits(text)
+
   for (const pattern of patterns) {
-    const match = text.match(pattern)
-    const parsed = parseNumber(match?.[1])
+    const match = normalizedText.match(pattern)
+    const parsed = parseNumber(match?.[1] ? normalizeOcrDigits(match[1]) : undefined)
     if (parsed !== null) return parsed
   }
+
+  if (linePatterns.length > 0) {
+    const parsedFromLines = findValueInLines(getLines(normalizedText), linePatterns)
+    if (parsedFromLines !== null) return parsedFromLines
+  }
+
   return null
 }
 
@@ -92,20 +141,32 @@ export function parseNutritionLabelText(rawText: string): BarcodeFoodLookupResul
   if (!text) return null
 
   const calories = findValue(text, [
-    /calories\s+(\d+(?:[.,]\d+)?)/i,
-    /energy\s+(\d+(?:[.,]\d+)?)/i,
+    /calories[^0-9]{0,8}(\d+(?:[.,]\d+)?(?:\s+\d+)*)/i,
+    /energy[^0-9]{0,8}(\d+(?:[.,]\d+)?(?:\s+\d+)*)/i,
+  ], [
+    /\bcalories\b/i,
+    /\benergy\b/i,
   ])
   const protein = findValue(text, [
-    /protein\s+(\d+(?:[.,]\d+)?)/i,
+    /protein[^0-9]{0,12}(\d+(?:[.,]\d+)?)/i,
+  ], [
+    /\bprotein\b/i,
   ])
   const carbs = findValue(text, [
-    /total\s+carbohydrate\s+(\d+(?:[.,]\d+)?)/i,
-    /carbohydrate\s+(\d+(?:[.,]\d+)?)/i,
-    /carbs?\s+(\d+(?:[.,]\d+)?)/i,
+    /total\s+carbohydrate[^0-9]{0,12}(\d+(?:[.,]\d+)?)/i,
+    /carbohydrate[^0-9]{0,12}(\d+(?:[.,]\d+)?)/i,
+    /carbs?[^0-9]{0,12}(\d+(?:[.,]\d+)?)/i,
+  ], [
+    /total\s+carbohydrate/i,
+    /\bcarbohydrate\b/i,
+    /\bcarbs?\b/i,
   ])
   const fat = findValue(text, [
-    /total\s+fat\s+(\d+(?:[.,]\d+)?)/i,
-    /\bfat\s+(\d+(?:[.,]\d+)?)/i,
+    /total\s+fat[^0-9]{0,12}(\d+(?:[.,]\d+)?)/i,
+    /\bfat[^0-9]{0,12}(\d+(?:[.,]\d+)?)/i,
+  ], [
+    /total\s+fat/i,
+    /\bfat\b/i,
   ])
 
   if (calories === null && protein === null && carbs === null && fat === null) {

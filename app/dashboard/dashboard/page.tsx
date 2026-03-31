@@ -940,7 +940,7 @@ export default function DashboardPage() {
         </motion.div>
 
         {/* Macro breakdown pie */}
-        <motion.div variants={stagger.item} initial="initial" animate="animate">
+        <motion.div variants={stagger.item} initial="initial" animate="animate" className="self-start">
           <Card className="h-full">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-semibold">Today&apos;s Macros</CardTitle>
@@ -1115,7 +1115,7 @@ export default function DashboardPage() {
                     })}
                   </div>
 
-                  <div className="mt-auto space-y-3 border-t border-border/60 pt-3">
+                  <div className="mt-auto hidden space-y-3 border-t border-border/60 pt-3 md:block">
                     <div className="grid grid-cols-2 gap-2">
                       <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5">
                         <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Week pace</p>
@@ -1152,12 +1152,17 @@ export default function DashboardPage() {
                 </div>
               ) : (
                 <div className="flex flex-1 flex-col">
-                  <div className="flex flex-1 flex-col items-center justify-center h-40 text-muted-foreground text-sm text-center">
-                    <Dumbbell className="w-10 h-10 mb-3 opacity-20" />
-                    <p>No workouts logged yet today</p>
+                  <div className="flex flex-1 items-center justify-center rounded-2xl border border-dashed border-border/50 bg-muted/[0.06] px-5 py-8 text-center text-muted-foreground">
+                    <div className="max-w-[16rem]">
+                      <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full border border-border/50 bg-muted/20">
+                        <Dumbbell className="h-5 w-5 opacity-40" />
+                      </div>
+                      <p className="text-sm font-medium text-foreground/80">No workouts logged yet today</p>
+                      <p className="mt-1 text-xs leading-5">Log your first session to see today&apos;s workout summary here.</p>
+                    </div>
                   </div>
 
-                  <div className="mt-auto space-y-3 border-t border-border/60 pt-3">
+                  <div className="mt-auto hidden space-y-3 border-t border-border/60 pt-3 md:block">
                     <div className="grid grid-cols-2 gap-2">
                       <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5">
                         <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Week pace</p>
@@ -1414,7 +1419,7 @@ export default function DashboardPage() {
                     </p>
                   </div>
 
-                  <div className="mt-auto space-y-3 border-t border-border/60 pt-3">
+                  <div className="mt-auto hidden space-y-3 border-t border-border/60 pt-3 md:block">
                     <div className="grid grid-cols-2 gap-2">
                       <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5">
                         <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Open meal slots</p>
@@ -1453,7 +1458,7 @@ export default function DashboardPage() {
                     <p>No meals logged yet</p>
                   </div>
 
-                  <div className="mt-auto space-y-3 border-t border-border/60 pt-3">
+                  <div className="mt-auto hidden space-y-3 border-t border-border/60 pt-3 md:block">
                     <div className="grid grid-cols-2 gap-2">
                       <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5">
                         <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Open meal slots</p>

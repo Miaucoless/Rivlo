@@ -70,7 +70,7 @@ function parseServingSize(value: string | undefined): ServingMeta | null {
   const trimmed = value.trim()
   if (!trimmed) return null
 
-  const match = trimmed.match(/(\d+(?:[.,]\d+)?)\s*(g|gram|grams|kg|ml|milliliter|milliliters|l|liter|liters|oz|fl oz|serving|servings|piece|pieces|slice|slices|cup|cups)\b/i)
+  const match = trimmed.match(/(\d+(?:[.,]\d+)?)\s*(g|gram|grams|kg|ml|milliliter|milliliters|l|liter|liters|fl\.?\s*oz|oz|serving|servings|piece|pieces|slice|slices|cup|cups)\b/i)
   if (!match) {
     return {
       label: trimmed,
@@ -81,7 +81,7 @@ function parseServingSize(value: string | undefined): ServingMeta | null {
   }
 
   const rawAmount = parseNumber(match[1]) ?? 1
-  const rawUnit = match[2].toLowerCase()
+  const rawUnit = match[2].toLowerCase().replace(/\s+/g, '')
 
   if (rawUnit === 'kg') {
     return {
@@ -119,6 +119,25 @@ function parseServingSize(value: string | undefined): ServingMeta | null {
     }
   }
 
+  // Convert oz → g and fl oz → ml so US products get a proper serving scale
+  if (rawUnit === 'floz' || rawUnit === 'fl.oz') {
+    return {
+      label: trimmed,
+      amount: Math.round(rawAmount * 29.5735 * 10) / 10,
+      unit: 'ml',
+      normalized_unit: 'ml',
+    }
+  }
+
+  if (rawUnit === 'oz') {
+    return {
+      label: trimmed,
+      amount: Math.round(rawAmount * 28.3495 * 10) / 10,
+      unit: 'g',
+      normalized_unit: 'g',
+    }
+  }
+
   return {
     label: trimmed,
     amount: rawAmount,
@@ -133,6 +152,15 @@ function getPerServingNutrient(nutriments: Record<string, unknown>, key: string)
 
 function getPer100Nutrient(nutriments: Record<string, unknown>, key: string) {
   return parseNumber(nutriments[`${key}_100g`]) ?? parseNumber(nutriments[`${key}_100ml`])
+}
+
+function hasPerServingNutrient(nutriments: Record<string, unknown>, key: string) {
+  return getPerServingNutrient(nutriments, key) !== null
+}
+
+function inferPer100Unit(nutriments: Record<string, unknown>): 'g' | 'ml' {
+  const has100ml = ['energy-kcal', 'proteins', 'carbohydrates', 'fat'].some((key) => parseNumber(nutriments[`${key}_100ml`]) !== null)
+  return has100ml ? 'ml' : 'g'
 }
 
 function getServingScale(servingMeta: ServingMeta | null) {
@@ -159,8 +187,11 @@ export function normalizeOpenFoodFactsProduct(barcode: string, payload: OpenFood
 
   const product = payload.product
   const nutriments = product.nutriments ?? {}
-  const servingMeta = parseServingSize(product.serving_size || product.quantity)
+  const servingMeta = parseServingSize(product.serving_size)
+  const packageMeta = parseServingSize(product.quantity)
   const servingScale = getServingScale(servingMeta)
+  const hasDirectServingData = ['energy-kcal', 'proteins', 'carbohydrates', 'fat'].some((key) => hasPerServingNutrient(nutriments, key))
+  const fallbackPer100Unit = inferPer100Unit(nutriments)
 
   const calories = resolveNutrientValue(nutriments, 'energy-kcal', servingScale)
   const protein = resolveNutrientValue(nutriments, 'proteins', servingScale)
@@ -174,14 +205,24 @@ export function normalizeOpenFoodFactsProduct(barcode: string, payload: OpenFood
   const name = product.product_name_en?.trim() || product.product_name?.trim()
   if (!name) return null
 
+  // Only use servingMeta as the display label when it has a normalized unit (g/ml)
+  // or when we have direct _serving nutrient values. Otherwise the label would say
+  // "1 serving" while the macros are actually per-100g, which is the inflation bug.
+  const servingMetaHasScale = servingMeta !== null && servingMeta.normalized_unit !== null
+  const displayServingMeta = servingMetaHasScale
+    ? servingMeta
+    : hasDirectServingData
+      ? (servingMeta ?? packageMeta)
+      : null
+
   return {
     barcode,
     name,
     brand: product.brands?.split(',')[0]?.trim() || null,
     image_url: product.image_front_small_url || product.image_url || null,
-    serving_label: servingMeta?.label || '100 g',
-    serving_amount: servingMeta?.amount ?? 100,
-    serving_unit: servingMeta?.unit ?? 'g',
+    serving_label: displayServingMeta?.label || `100 ${fallbackPer100Unit}`,
+    serving_amount: displayServingMeta?.amount ?? 100,
+    serving_unit: displayServingMeta?.unit ?? fallbackPer100Unit,
     macros: {
       calories: Math.round(calories ?? 0),
       protein_g: roundMacro(protein ?? 0),

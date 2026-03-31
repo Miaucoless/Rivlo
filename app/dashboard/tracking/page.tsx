@@ -419,9 +419,15 @@ export default function TrackingPage() {
   const weightChange = currentWeight - startWeight
   const weightChangeAbs = Math.abs(weightChange)
   const isLosing = weightChange < 0
-  const projectedWeeksToGoal = user.fitness_goal === 'fat_loss'
+  const projectedWeeksAtCurrentPace = user.fitness_goal === 'fat_loss'
     ? Math.abs(weightChange) > 0 ? Math.round(10 / (weightChangeAbs / (days / 7))) : 20
     : null
+
+  const goalTimeframeLabel = user.goal_timeframe_weeks
+    ? `${user.goal_timeframe_weeks} week target`
+    : projectedWeeksAtCurrentPace
+      ? `~${projectedWeeksAtCurrentPace} weeks at current pace`
+      : 'On track'
 
   // Calorie history
   const calorieHistory = Array.from({ length: 14 }, (_, i) => {
@@ -536,7 +542,7 @@ export default function TrackingPage() {
           {
             label: 'Goal',
             value: user.fitness_goal.replace('_', ' '),
-            sub: projectedWeeksToGoal ? `~${projectedWeeksToGoal} weeks to goal` : 'On track',
+            sub: goalTimeframeLabel,
             icon: Target,
           },
           {

@@ -3,12 +3,13 @@
 import React from 'react'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { motion } from 'framer-motion'
 import {
   User, Target, BarChart3, Bell, Shield, Download,
   Save, Trash2, Moon, Sun, Monitor, Zap, Check,
-  Users, UserPlus, UserCheck, UserX, X, Loader2, Search,
+  Users, UserPlus, UserCheck, UserX, X, Loader2, Search, ExternalLink, FileText, Mail,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -16,6 +17,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useAppStore } from '@/store/useAppStore'
 import { deleteAccount as deleteSupabaseAccount, updateProfile as persistProfile } from '@/lib/auth'
@@ -82,6 +84,9 @@ export default function SettingsPage() {
   const [smsPhone, setSmsPhone] = useState(user?.phone_number || '')
   const [smsEnabled, setSmsEnabled] = useState(Boolean(user?.sms_notifications_enabled))
   const [smsLoading, setSmsLoading] = useState(false)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [deleteConfirmText, setDeleteConfirmText] = useState('')
+  const [deleteLoading, setDeleteLoading] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -279,23 +284,32 @@ export default function SettingsPage() {
 
   const handleDeleteAccount = async () => {
     if (!user) return
-
-    const confirmed = window.confirm('Delete your account and all data permanently? This cannot be undone.')
-    if (!confirmed) return
+    if (deleteConfirmText.trim().toUpperCase() !== 'DELETE') {
+      toast.error('Type DELETE to confirm permanent account deletion.')
+      return
+    }
 
     if (isDemoMode) {
       toast.error('Demo accounts cannot be deleted from Supabase.')
       return
     }
 
-    const response = await deleteSupabaseAccount()
-    if (!response.success) {
-      toast.error(response.error || 'Failed to delete your account.')
-      return
-    }
+    setDeleteLoading(true)
 
-    toast.success('Your account was deleted.')
-    router.replace('/login')
+    try {
+      const response = await deleteSupabaseAccount()
+      if (!response.success) {
+        toast.error(response.error || 'Failed to delete your account.')
+        return
+      }
+
+      toast.success('Your account was deleted.')
+      setDeleteDialogOpen(false)
+      setDeleteConfirmText('')
+      router.replace('/login')
+    } finally {
+      setDeleteLoading(false)
+    }
   }
 
   const handleToggleNotification = async (key: NotificationPreferenceKey) => {
@@ -1000,16 +1014,82 @@ export default function SettingsPage() {
               <CardTitle className="text-base text-destructive">Danger Zone</CardTitle>
               <CardDescription>Irreversible actions — proceed with caution</CardDescription>
             </CardHeader>
-            <CardContent>
-              <Button
-                variant="destructive"
-                size="sm"
-                className="gap-1.5"
-                onClick={handleDeleteAccount}
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                Delete Account & All Data
-              </Button>
+            <CardContent className="space-y-4">
+              <div className="rounded-xl border border-destructive/20 bg-background/50 p-4 text-sm">
+                <p className="font-medium text-foreground">Delete account and personal data</p>
+                <p className="mt-1 text-muted-foreground">
+                  This removes your Rivora account, profile, logs, and connected app data. Export your data first if you want a copy.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" size="sm" onClick={handleExportJSON}>
+                  Export JSON First
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={() => setDeleteDialogOpen(true)}
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Delete Account & All Data
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Privacy, Terms, and Support</CardTitle>
+              <CardDescription>Links reviewers and users expect to find in a production app</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Link href="/privacy" className="rounded-xl border border-border/60 bg-muted/20 p-4 transition-colors hover:border-border hover:bg-muted/30">
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-400">
+                      <Shield className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold">Privacy Policy</p>
+                      <p className="mt-1 text-xs text-muted-foreground">Review how Rivora stores and uses account, workout, and meal data.</p>
+                    </div>
+                  </div>
+                </Link>
+
+                <Link href="/terms" className="rounded-xl border border-border/60 bg-muted/20 p-4 transition-colors hover:border-border hover:bg-muted/30">
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-full bg-blue-500/10 text-blue-400">
+                      <FileText className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold">Terms of Service</p>
+                      <p className="mt-1 text-xs text-muted-foreground">See the account, billing, and platform rules that apply to Rivora.</p>
+                    </div>
+                  </div>
+                </Link>
+              </div>
+
+              <div className="rounded-xl border border-border/60 bg-muted/20 p-4">
+                <p className="text-sm font-semibold">Need help?</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <a
+                    href="mailto:support@rivorafit.com"
+                    className="inline-flex items-center gap-2 rounded-full border border-border/60 px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+                  >
+                    <Mail className="h-3.5 w-3.5" />
+                    support@rivorafit.com
+                  </a>
+                  <a
+                    href="mailto:privacy@rivorafit.com"
+                    className="inline-flex items-center gap-2 rounded-full border border-border/60 px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    privacy@rivorafit.com
+                  </a>
+                </div>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -1019,6 +1099,47 @@ export default function SettingsPage() {
           <FriendsTab />
         </TabsContent>
       </Tabs>
+
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-destructive">Delete Account</DialogTitle>
+            <DialogDescription>
+              This permanently removes your Rivora account and associated data. Type <span className="font-semibold text-foreground">DELETE</span> to confirm.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-sm text-muted-foreground">
+              Your profile, meal logs, workout logs, journal entries, reminders, and connected app data will be removed. This cannot be undone.
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="delete-confirmation">Type DELETE</Label>
+              <Input
+                id="delete-confirmation"
+                value={deleteConfirmText}
+                onChange={(event) => setDeleteConfirmText(event.target.value)}
+                placeholder="DELETE"
+                autoCapitalize="characters"
+              />
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" onClick={handleExportJSON}>
+                Export My Data First
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleDeleteAccount}
+                disabled={deleteLoading || deleteConfirmText.trim().toUpperCase() !== 'DELETE'}
+              >
+                Delete Permanently
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
