@@ -294,7 +294,7 @@ export async function POST(
         difficulty: data.difficulty === 'beginner' || data.difficulty === 'intermediate' || data.difficulty === 'advanced'
           ? data.difficulty
           : 'beginner',
-        split_type: data.split_type === 'ppl' || data.split_type === 'upper_lower' || data.split_type === '3day_fullbody' || data.split_type === '4day' || data.split_type === '5day' || data.split_type === '6day' || data.split_type === 'cardio_focus'
+        split_type: data.split_type === 'ppl' || data.split_type === 'upper_lower' || data.split_type === '3day_fullbody' || data.split_type === '4day' || data.split_type === '5day' || data.split_type === '6day' || data.split_type === 'cardio_focus' || data.split_type === 'custom'
           ? data.split_type
           : '4day',
         source: 'custom',

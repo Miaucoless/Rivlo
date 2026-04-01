@@ -313,6 +313,7 @@ const SPLIT_OPTIONS: Array<{ value: WorkoutSplit; label: string }> = [
   { value: '5day', label: '5-Day Split' },
   { value: '6day', label: '6-Day Split' },
   { value: 'cardio_focus', label: 'Cardio Focus' },
+  { value: 'custom', label: 'Custom' },
 ]
 
 const ACFT_GUIDE_EMAIL = 'lspetrera1213@email.campbell.edu'
@@ -2890,6 +2891,8 @@ export default function WorkoutsPage() {
     if (!dayType || dayType === 'rest') return []
     return getWorkoutsForDayType(dayType, workoutLibrary)
   }, [user?.split_schedule, user?.workout_split, workoutLibrary])
+  const todayWeekDay = getTodayWeekDay()
+  const todaySplitDayType = (user?.split_schedule ?? buildDefaultSchedule(user?.workout_split ?? 'ppl'))[todayWeekDay]
 
   const filteredPremadeWorkouts = useMemo(() => {
     return WORKOUTS.filter((w) => {
@@ -3623,24 +3626,47 @@ export default function WorkoutsPage() {
             </div>
           )}
 
-        {todayRecommendedWorkouts.length > 0 && (() => {
-          const todayDay = getTodayWeekDay()
-          const dayType = user?.split_schedule?.[todayDay]
-          return (
-            <div className="space-y-1.5">
-              <p className="text-xs text-muted-foreground">
-                {WEEK_DAY_LABELS[todayDay]} · <span className="font-medium text-foreground">{dayType ? SPLIT_DAY_LABELS[dayType] : ''} Day</span>
-              </p>
+        {todayRecommendedWorkouts.length > 0 && (
+          <div className="hidden space-y-1.5 md:block">
+            <p className="text-xs text-muted-foreground">
+              {WEEK_DAY_LABELS[todayWeekDay]} · <span className="font-medium text-foreground">{todaySplitDayType ? SPLIT_DAY_LABELS[todaySplitDayType] : ''} Day</span>
+            </p>
+            <TodayWorkoutBanner
+              workouts={todayRecommendedWorkouts}
+              onStart={startWorkout}
+              onPreview={setPreviewWorkout}
+            />
+          </div>
+        )}
+
+        <div className="md:hidden">
+          <div className="space-y-1.5">
+            <p className="text-xs text-muted-foreground">
+              {WEEK_DAY_LABELS[todayWeekDay]} · <span className="font-medium text-foreground">{todaySplitDayType ? SPLIT_DAY_LABELS[todaySplitDayType] : 'No split set'}</span>
+            </p>
+            {todayRecommendedWorkouts.length > 0 ? (
               <TodayWorkoutBanner
                 workouts={todayRecommendedWorkouts}
                 onStart={startWorkout}
                 onPreview={setPreviewWorkout}
               />
-            </div>
-          )
-        })()}
+            ) : (
+              <div className="rounded-2xl border border-border/60 bg-card p-4">
+                <div className="flex items-center gap-2">
+                  <Dumbbell className="h-4 w-4 text-muted-foreground" />
+                  <p className="text-sm font-semibold">Recommended for today</p>
+                </div>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  {todaySplitDayType === 'rest'
+                    ? 'Today is marked as a rest day in your split.'
+                    : 'Set your training split to get workout recommendations here.'}
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
 
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <div className="hidden gap-3 md:grid md:grid-cols-4">
           <div className="rounded-2xl border border-border/60 bg-card px-4 py-4">
             <p className="font-data text-xl sm:text-2xl font-semibold">{todayLoggedWorkouts.reduce((sum, log) => sum + (log.calories_burned_kcal || 0), 0)}</p>
             <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Today&apos;s kcal burned</p>
@@ -4676,7 +4702,7 @@ export default function WorkoutsPage() {
                     <div className="space-y-1.5">
                       <p className="text-[10px] uppercase tracking-[0.12em] font-semibold text-muted-foreground">Split type</p>
                       <div className="flex flex-wrap gap-1.5">
-                        {(['all', 'ppl', 'upper_lower', '3day_fullbody', '4day', '5day', '6day', 'cardio_focus'] as const).map(s => (
+                        {(['all', 'ppl', 'upper_lower', '3day_fullbody', '4day', '5day', '6day', 'cardio_focus', 'custom'] as const).map(s => (
                           <button
                             key={s}
                             onClick={() => setSavedWorkoutSplit(s)}
@@ -4780,7 +4806,7 @@ export default function WorkoutsPage() {
                           <div>
                             <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Split type</p>
                             <div className="flex flex-wrap gap-1.5">
-                              {([['all', 'All'], ['ppl', 'PPL'], ['upper_lower', 'Upper/Lower'], ['3day_fullbody', 'Full Body'], ['4day', '4-Day'], ['5day', 'Bro Split'], ['6day', '6-Day'], ['cardio_focus', 'Cardio']] as const).map(([val, label]) => (
+                              {([['all', 'All'], ['ppl', 'PPL'], ['upper_lower', 'Upper/Lower'], ['3day_fullbody', 'Full Body'], ['4day', '4-Day'], ['5day', 'Bro Split'], ['6day', '6-Day'], ['cardio_focus', 'Cardio'], ['custom', 'Custom']] as const).map(([val, label]) => (
                                 <button key={val} onClick={() => setPremadeSplit(val)} className={`rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors ${premadeSplit === val ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-muted/30 text-muted-foreground hover:border-primary/50 hover:text-foreground'}`}>{label}</button>
                               ))}
                             </div>

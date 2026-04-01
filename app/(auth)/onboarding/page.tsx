@@ -374,7 +374,7 @@ export default function OnboardingPage() {
               placeholder="e.g. Busy schedule, protein consistency, motivation"
               className="bg-zinc-900 border-white/10 text-white"
             />
-            <p className="text-xs text-zinc-500">We'll use this to make your plan feel more realistic from day one.</p>
+            <p className="text-xs text-zinc-500">We&apos;ll use this to make your plan feel more realistic from day one.</p>
           </div>
         </div>
       ),
@@ -397,6 +397,7 @@ export default function OnboardingPage() {
               { value: '4day', label: '4-Day Bro Split', description: 'Classic bodybuilding split', emoji: '💥' },
               { value: 'cardio_focus', label: 'Cardio Focus', description: 'Running, cycling, HIIT', emoji: '🏃' },
               { value: '5day', label: '5-Day Split', description: 'Advanced hypertrophy', emoji: '📈' },
+              { value: 'custom', label: 'Custom Split', description: 'Pick your own day-by-day setup', emoji: '🛠️' },
             ] as Array<{ value: WorkoutSplit; label: string; description: string; emoji: string }>}
           />
 

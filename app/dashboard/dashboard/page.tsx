@@ -1210,13 +1210,13 @@ export default function DashboardPage() {
       </motion.div>
 
       {/* Charts row */}
-      <div className="grid md:grid-cols-3 gap-4">
+      <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-2">
         {/* Calorie history chart */}
         <motion.div
           variants={stagger.item}
           initial="initial"
           animate="animate"
-          className="md:col-span-2"
+          className="md:col-span-2 xl:col-span-1"
         >
           <Card>
             <CardHeader className="pb-2">
@@ -1228,7 +1228,7 @@ export default function DashboardPage() {
             <CardContent>
               {calorieChartData.length > 0 ? (
                 <>
-                  <ResponsiveContainer width="100%" height={180}>
+                  <ResponsiveContainer width="100%" height={164}>
                     <AreaChart data={calorieChartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
                       <defs>
                         <linearGradient id="cal-area" x1="0" y1="0" x2="0" y2="1">
@@ -1271,7 +1271,7 @@ export default function DashboardPage() {
                   </div>
                 </>
               ) : (
-                <div className="flex h-[180px] flex-col items-center justify-center text-center text-sm text-muted-foreground">
+                <div className="flex h-[164px] flex-col items-center justify-center text-center text-sm text-muted-foreground">
                   <Flame className="mb-3 h-10 w-10 opacity-20" />
                   <p>No calorie history yet</p>
                   <p className="mt-1 text-xs">Your chart will appear once you log meals on at least one day.</p>

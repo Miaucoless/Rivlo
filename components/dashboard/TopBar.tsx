@@ -505,6 +505,7 @@ export function TopBar() {
                   <SelectItem value="5day">5-Day Split</SelectItem>
                   <SelectItem value="6day">6-Day PPL</SelectItem>
                   <SelectItem value="cardio_focus">Cardio Focus</SelectItem>
+                  <SelectItem value="custom">Custom</SelectItem>
                 </SelectContent>
               </Select>
             </div>

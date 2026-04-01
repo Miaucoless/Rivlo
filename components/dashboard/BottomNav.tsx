@@ -102,9 +102,9 @@ export function BottomNav({
     >
       <div
         className="pointer-events-auto border-t border-white/10 bg-[rgba(7,10,12,0.94)] shadow-[0_-14px_40px_rgba(0,0,0,0.28)] backdrop-blur-2xl supports-[backdrop-filter]:bg-[rgba(7,10,12,0.78)]"
-        style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 6px)' }}
+        style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 12px)' }}
       >
-        <div className="mx-auto flex max-w-md items-center justify-around px-2 pt-1.5">
+        <div className="mx-auto flex max-w-md items-center justify-around px-2 pt-2">
           {NAV_ITEMS.map(({ label, href, icon: Icon }) => {
             const isActive = pathname === href || pathname.startsWith(href + '/')
             return (
@@ -113,7 +113,7 @@ export function BottomNav({
                 href={href}
                 aria-label={label}
                 className={cn(
-                  'relative flex min-w-0 flex-1 items-center justify-center rounded-xl py-2 transition-colors',
+                  'relative flex min-w-0 flex-1 items-center justify-center rounded-xl py-2.5 transition-colors',
                   isActive ? 'text-white' : 'text-zinc-500'
                 )}
               >

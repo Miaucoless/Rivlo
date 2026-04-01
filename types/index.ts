@@ -3,7 +3,7 @@
 export type Gender = 'male' | 'female' | 'other'
 export type ActivityLevel = 'sedentary' | 'lightly_active' | 'moderately_active' | 'very_active' | 'extra_active'
 export type FitnessGoal = 'fat_loss' | 'muscle_gain' | 'maintenance' | 'athletic_performance'
-export type WorkoutSplit = 'ppl' | 'upper_lower' | '3day_fullbody' | '4day' | '5day' | '6day' | 'cardio_focus'
+export type WorkoutSplit = 'ppl' | 'upper_lower' | '3day_fullbody' | '4day' | '5day' | '6day' | 'cardio_focus' | 'custom'
 export type SplitDayType = 'push' | 'pull' | 'legs' | 'upper' | 'lower' | 'full_body' | 'chest' | 'back' | 'shoulders' | 'arms' | 'cardio' | 'rest'
 export type WeekDay = 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday'
 export type SplitSchedule = Partial<Record<WeekDay, SplitDayType>>

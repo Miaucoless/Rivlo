@@ -654,6 +654,7 @@ export default function SettingsPage() {
                     <SelectItem value="4day">4-Day Split</SelectItem>
                     <SelectItem value="5day">5-Day Split</SelectItem>
                     <SelectItem value="cardio_focus">Cardio Focus</SelectItem>
+                    <SelectItem value="custom">Custom</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

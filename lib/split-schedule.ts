@@ -28,6 +28,21 @@ export const SPLIT_DAY_LABELS: Record<SplitDayType, string> = {
   rest: 'Rest',
 }
 
+export const CUSTOM_SPLIT_DAY_OPTIONS: SplitDayType[] = [
+  'push',
+  'pull',
+  'legs',
+  'upper',
+  'lower',
+  'full_body',
+  'chest',
+  'back',
+  'shoulders',
+  'arms',
+  'cardio',
+  'rest',
+]
+
 // What day types are valid for each split
 export const SPLIT_DAY_OPTIONS: Record<WorkoutSplit, SplitDayType[]> = {
   ppl: ['push', 'pull', 'legs', 'rest'],
@@ -37,6 +52,7 @@ export const SPLIT_DAY_OPTIONS: Record<WorkoutSplit, SplitDayType[]> = {
   '5day': ['chest', 'back', 'shoulders', 'arms', 'legs', 'rest'],
   '6day': ['push', 'pull', 'legs', 'rest'],
   cardio_focus: ['cardio', 'rest'],
+  custom: CUSTOM_SPLIT_DAY_OPTIONS,
 }
 
 // Build a default schedule for a split (common patterns)
@@ -56,6 +72,8 @@ export function buildDefaultSchedule(split: WorkoutSplit): SplitSchedule {
       return { monday: 'push', tuesday: 'pull', wednesday: 'legs', thursday: 'push', friday: 'pull', saturday: 'legs', sunday: 'rest' }
     case 'cardio_focus':
       return { monday: 'cardio', tuesday: 'rest', wednesday: 'cardio', thursday: 'cardio', friday: 'rest', saturday: 'cardio', sunday: 'rest' }
+    case 'custom':
+      return { monday: 'push', tuesday: 'pull', wednesday: 'legs', thursday: 'rest', friday: 'upper', saturday: 'cardio', sunday: 'rest' }
     default:
       return {}
   }
