@@ -141,6 +141,18 @@ function sortDashboardReminders(a: CalendarReminder, b: CalendarReminder) {
   return (a.created_at || '').localeCompare(b.created_at || '')
 }
 
+function formatReminderTimeLabel(time: string) {
+  const [rawHour, rawMinute] = time.split(':')
+  const hour = Number(rawHour)
+  const minute = Number(rawMinute)
+
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return time
+
+  const meridiem = hour >= 12 ? 'PM' : 'AM'
+  const normalizedHour = hour % 12 || 12
+  return `${normalizedHour}:${String(minute).padStart(2, '0')} ${meridiem}`
+}
+
 // Quick Add Meal Dialog
 function QuickAddMealDialog() {
   const [open, setOpen] = useState(false)
@@ -723,12 +735,14 @@ function TodayRemindersCard({
                   aria-label="Reminder time"
                   className="absolute inset-0 z-10 h-10 w-full cursor-pointer opacity-0"
                 />
-                <div className="flex h-10 w-full items-center rounded-xl border border-border bg-background/70 px-3">
-                  <Clock3 className="mr-3 h-4 w-4 shrink-0 text-muted-foreground" />
-                  <span className="truncate text-sm text-muted-foreground">
-                    {time || 'Add time'}
-                  </span>
-                </div>
+                <Clock3 className="pointer-events-none absolute left-3 top-1/2 z-20 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={time ? formatReminderTimeLabel(time) : ''}
+                  placeholder="Add time"
+                  readOnly
+                  tabIndex={-1}
+                  className="pointer-events-none h-10 rounded-xl border-border bg-background/70 pl-10 pr-3 text-sm text-muted-foreground"
+                />
               </div>
             ) : (
               <Button
@@ -786,7 +800,7 @@ function TodayRemindersCard({
                           {reminder.title}
                         </p>
                         {reminder.time && (
-                          <span className="text-[11px] font-medium text-muted-foreground">{reminder.time}</span>
+                          <span className="text-[11px] font-medium text-muted-foreground">{formatReminderTimeLabel(reminder.time)}</span>
                         )}
                         <span className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground/80">
                           {reminder.kind === 'note' ? 'note' : 'reminder'}

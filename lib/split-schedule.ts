@@ -120,5 +120,8 @@ export function getWorkoutsForDayType(
   allWorkouts: Workout[],
 ): Workout[] {
   if (dayType === 'rest') return []
-  return allWorkouts.filter((w) => getWorkoutDayType(w) === dayType)
+  const matched = allWorkouts.filter((w) => getWorkoutDayType(w) === dayType)
+  const saved = matched.filter((workout) => workout.source !== 'premade')
+  const premade = matched.filter((workout) => workout.source === 'premade')
+  return [...saved, ...premade]
 }
