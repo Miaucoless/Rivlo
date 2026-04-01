@@ -98,13 +98,19 @@ export function BottomNav({
         opacity: isMenuOpen ? 0.98 : 1 - (hideProgress * 0.02),
       }}
       transition={{ duration: 0.12, ease: 'linear' }}
-      className="pointer-events-none fixed inset-x-0 z-50 md:hidden"
-      style={{ bottom: `${NAV_FLOAT_OFFSET}px` }}
+      className="pointer-events-none fixed inset-x-0 bottom-0 z-50 md:hidden"
       aria-label="Mobile navigation"
     >
       <div
+        className="pointer-events-none absolute inset-x-0 bottom-0 bg-[rgba(6,8,10,0.98)]"
+        style={{ height: `calc(env(safe-area-inset-bottom) + ${NAV_FLOAT_OFFSET}px)` }}
+      />
+      <div
         className="pointer-events-auto border-t border-white/10 bg-[rgba(7,10,12,0.94)] shadow-[0_-14px_40px_rgba(0,0,0,0.28)] backdrop-blur-2xl supports-[backdrop-filter]:bg-[rgba(7,10,12,0.78)]"
-        style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 8px)' }}
+        style={{
+          marginBottom: `${NAV_FLOAT_OFFSET}px`,
+          paddingBottom: 'calc(env(safe-area-inset-bottom) + 8px)',
+        }}
       >
         <div className="mx-auto flex max-w-md items-center justify-around px-2 pt-2">
           {NAV_ITEMS.map(({ label, href, icon: Icon }) => {

@@ -715,20 +715,20 @@ function TodayRemindersCard({
               placeholder={entryKind === 'note' ? 'e.g. Talk to coach after training' : 'e.g. Evening walk'}
             />
             {entryKind === 'reminder' ? (
-              <div className="relative min-w-0">
-                <Clock3 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                {!time && (
-                  <span className="pointer-events-none absolute left-9 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                    Add time
-                  </span>
-                )}
+              <div className="relative h-10 min-w-0">
                 <Input
                   type="time"
                   value={time}
                   onChange={(event) => setTime(event.target.value)}
                   aria-label="Reminder time"
-                  className="h-10 w-full min-w-0 rounded-xl border-border bg-background/70 pl-9 pr-3 [color-scheme:dark]"
+                  className="absolute inset-0 z-10 h-10 w-full cursor-pointer opacity-0"
                 />
+                <div className="flex h-10 w-full items-center rounded-xl border border-border bg-background/70 px-3">
+                  <Clock3 className="mr-3 h-4 w-4 shrink-0 text-muted-foreground" />
+                  <span className="truncate text-sm text-muted-foreground">
+                    {time || 'Add time'}
+                  </span>
+                </div>
               </div>
             ) : (
               <Button

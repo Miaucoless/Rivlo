@@ -197,15 +197,6 @@ export default function CalendarPage() {
           <h2 className="text-xl font-bold">Calendar</h2>
           <p className="text-muted-foreground text-sm">Your workouts, meals, and check-ins at a glance</p>
         </div>
-        {/* Month stats - simplified */}
-        <div className="flex gap-6 text-sm">
-          <span className="flex items-center gap-2 text-emerald-400">
-            <Dumbbell className="w-4 h-4" /> {monthWorkouts} workouts
-          </span>
-          <span className="flex items-center gap-2 text-blue-400">
-            <Apple className="w-4 h-4" /> {monthMeals} meal days
-          </span>
-        </div>
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6">
