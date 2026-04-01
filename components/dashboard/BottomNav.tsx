@@ -20,15 +20,19 @@ const NAV_ITEMS = [
   { label: 'Calendar', href: '/dashboard/calendar', icon: Calendar },
 ]
 
+const NAV_HIDE_DISTANCE = 120
+const NAV_HIDE_OFFSET = 72
+
 export function BottomNav({
   scrollContainerRef,
 }: {
   scrollContainerRef: RefObject<HTMLElement | null>
 }) {
   const pathname = usePathname()
-  const [isHidden, setIsHidden] = useState(false)
+  const [hideProgress, setHideProgress] = useState(0)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const lastScrollTopRef = useRef(0)
+  const hideProgressRef = useRef(0)
 
   useEffect(() => {
     const container = scrollContainerRef.current
@@ -45,11 +49,12 @@ export function BottomNav({
       const delta = currentScrollTop - lastScrollTopRef.current
 
       if (currentScrollTop <= 8) {
-        setIsHidden(false)
-      } else if (delta > 10 && currentScrollTop > 64) {
-        setIsHidden(true)
-      } else if (delta < -8) {
-        setIsHidden(false)
+        hideProgressRef.current = 0
+        setHideProgress(0)
+      } else if (Math.abs(delta) >= 1) {
+        const nextProgress = Math.min(1, Math.max(0, hideProgressRef.current + (delta / NAV_HIDE_DISTANCE)))
+        hideProgressRef.current = nextProgress
+        setHideProgress((previous) => (Math.abs(previous - nextProgress) > 0.01 ? nextProgress : previous))
       }
 
       lastScrollTopRef.current = currentScrollTop
@@ -64,6 +69,12 @@ export function BottomNav({
       window.removeEventListener('scroll', handleScroll)
     }
   }, [scrollContainerRef])
+
+  useEffect(() => {
+    hideProgressRef.current = 0
+    setHideProgress(0)
+    lastScrollTopRef.current = 0
+  }, [pathname])
 
   useEffect(() => {
     const handleMenuToggle = (event: Event) => {
@@ -82,10 +93,10 @@ export function BottomNav({
     <motion.nav
       initial={false}
       animate={{
-        y: isHidden || isMenuOpen ? 80 : 0,
-        opacity: isHidden || isMenuOpen ? 0.98 : 1,
+        y: isMenuOpen ? NAV_HIDE_OFFSET : hideProgress * NAV_HIDE_OFFSET,
+        opacity: isMenuOpen ? 0.98 : 1 - (hideProgress * 0.02),
       }}
-      transition={{ duration: 0.28, ease: [0.22, 0.61, 0.36, 1] }}
+      transition={{ duration: 0.12, ease: 'linear' }}
       className="pointer-events-none fixed inset-x-0 bottom-0 z-50 md:hidden"
       aria-label="Mobile navigation"
     >

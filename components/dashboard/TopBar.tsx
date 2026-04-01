@@ -284,6 +284,8 @@ export function TopBar() {
 
   const title = PAGE_TITLES[pathname] || 'Dashboard'
   const today = formatDate(new Date(), 'EEEE, MMMM d')
+  const splitLabel = todayDayType ? SPLIT_DAY_LABELS[todayDayType] : 'Set split'
+  const mobileSplitLabel = todayDayType ? SPLIT_DAY_LABELS[todayDayType] : 'Split'
   const deferredSearchQuery = useDeferredValue(searchQuery)
   const syncLabel = syncStatus === 'offline'
     ? `${pendingCloudWrites > 0 ? `${pendingCloudWrites} pending` : 'Offline mode'}`
@@ -408,18 +410,19 @@ export function TopBar() {
         </div>
 
         {/* Right — actions */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2">
           <button
             type="button"
             onClick={openSplitPanel}
-            className={`hidden sm:inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-medium transition-colors ${
+            aria-label={splitLabel}
+            className={`inline-flex max-w-[5.5rem] items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-medium transition-colors sm:max-w-none sm:px-2.5 ${
               todayDayType
                 ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20'
                 : 'border-border/60 bg-background/60 text-muted-foreground hover:border-emerald-500/30 hover:text-emerald-400'
             }`}
           >
             <Zap className="w-2.5 h-2.5" />
-            {todayDayType ? SPLIT_DAY_LABELS[todayDayType] : 'Set split'}
+            <span className="truncate">{isMobile ? mobileSplitLabel : splitLabel}</span>
           </button>
           <Button
             variant="ghost"
