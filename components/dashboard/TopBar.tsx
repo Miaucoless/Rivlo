@@ -317,6 +317,18 @@ export function TopBar() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
 
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('rivora-mobile-nav-toggle', {
+      detail: { open: isMobileNavOpen },
+    }))
+
+    return () => {
+      window.dispatchEvent(new CustomEvent('rivora-mobile-nav-toggle', {
+        detail: { open: false },
+      }))
+    }
+  }, [isMobileNavOpen])
+
   const filteredItems = useMemo(() => {
     const query = deferredSearchQuery.trim().toLowerCase()
 

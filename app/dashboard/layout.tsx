@@ -128,7 +128,7 @@ export default function DashboardLayout({
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3, ease: [0.22, 0.61, 0.36, 1] }}
-            className="mx-auto max-w-[1400px] p-3 pb-[calc(env(safe-area-inset-bottom)+6.75rem)] md:p-6"
+            className="mx-auto max-w-[1400px] p-3 pb-[calc(env(safe-area-inset-bottom)+5.5rem)] md:p-6"
           >
             {children}
           </motion.div>
