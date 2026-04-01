@@ -545,7 +545,6 @@ export default function JournalPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-bold">Journal</h2>
           <p className="text-muted-foreground text-sm hidden sm:block">Daily reflections, mood, and energy tracking</p>
         </div>
         <JournalEditorDialog onSave={handleCreate} />

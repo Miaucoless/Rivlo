@@ -194,7 +194,6 @@ export default function CalendarPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-bold">Calendar</h2>
           <p className="text-muted-foreground text-sm">Your workouts, meals, and check-ins at a glance</p>
         </div>
       </div>

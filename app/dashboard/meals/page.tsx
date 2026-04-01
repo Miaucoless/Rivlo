@@ -4319,16 +4319,10 @@ export default function MealsPage() {
     <div className="space-y-8">
       <div className="space-y-6">
         <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
-          <div className="space-y-3">
-            <div className="inline-flex rounded-full border border-border/70 bg-muted/40 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.26em] text-muted-foreground">
-              Daily Nutrition Dashboard
-            </div>
-            <div>
-              <h2 className="font-display text-4xl font-black tracking-tight text-foreground sm:text-5xl">Meals</h2>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-                See today&apos;s intake at a glance, move through meals in order, and expand each entry only when you need the item-level detail.
-              </p>
-            </div>
+          <div>
+            <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
+              See today&apos;s intake at a glance, move through meals in order, and expand each entry only when you need the item-level detail.
+            </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -4376,7 +4370,7 @@ export default function MealsPage() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
               <Input
-                placeholder="Search saved meals…"
+                placeholder="Search"
                 value={savedMealSearchText}
                 onChange={e => setSavedMealSearchText(e.target.value)}
                 type="search"
@@ -4398,7 +4392,7 @@ export default function MealsPage() {
             </Button>
             <Button variant="outline" size="sm" className="gap-1.5 shrink-0" onClick={() => openScanner('saved')}>
               <ScanLine className="w-3.5 h-3.5" />
-              Scan & Save Meal
+              Scan
             </Button>
           </div>
           {/* Filter dropdowns */}

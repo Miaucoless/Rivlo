@@ -470,7 +470,6 @@ export default function SettingsPage() {
     <div className="space-y-6 max-w-3xl">
       {/* Header */}
       <div>
-        <h2 className="text-xl font-bold">Settings</h2>
         <p className="text-muted-foreground text-sm">Manage your profile, goals, and preferences</p>
         {isDemoMode && (
           <Badge variant="warning" className="mt-2">
