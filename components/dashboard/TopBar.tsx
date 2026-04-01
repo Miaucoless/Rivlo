@@ -927,7 +927,6 @@ export function TopBar() {
                 { label: 'Calendar',   href: '/dashboard/calendar',     icon: Calendar },
                 { label: 'Journal',    href: '/dashboard/journal',      icon: BookOpen },
                 { label: 'Supplements',href: '/dashboard/supplements',  icon: Pill },
-                { label: 'Settings',   href: '/dashboard/settings',     icon: Settings },
                 { label: 'Shared With Me', href: '/dashboard/shared', icon: Users },
               ].map(({ label, href, icon: Icon }) => {
                 const isActive = pathname === href || pathname.startsWith(href + '/')
@@ -971,13 +970,22 @@ export function TopBar() {
                     </div>
                   </div>
                 )}
-                <button
-                  onClick={handleMobileLogout}
-                  className="p-2 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                  aria-label="Log out"
-                >
-                  <LogOut className="w-4 h-4" />
-                </button>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => handleMobileNavNavigate('/dashboard/settings')}
+                    className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                    aria-label="Open settings"
+                  >
+                    <Settings className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={handleMobileLogout}
+                    className="p-2 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                    aria-label="Log out"
+                  >
+                    <LogOut className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             </div>
           </motion.div>

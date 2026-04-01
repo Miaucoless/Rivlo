@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS profiles (
   fitness_goal  TEXT NOT NULL DEFAULT 'fat_loss'
     CHECK (fitness_goal IN ('fat_loss','muscle_gain','maintenance','athletic_performance')),
   workout_split TEXT NOT NULL DEFAULT 'ppl'
-    CHECK (workout_split IN ('ppl','upper_lower','3day_fullbody','4day','5day','6day','cardio_focus')),
+    CHECK (workout_split IN ('ppl','upper_lower','3day_fullbody','4day','5day','6day','cardio_focus','custom')),
   goal_target_change_kg NUMERIC(5,2),
   goal_timeframe_weeks INTEGER,
   preferred_workout_time TEXT CHECK (preferred_workout_time IN ('early_morning','morning','afternoon','evening','late_night','flexible')),

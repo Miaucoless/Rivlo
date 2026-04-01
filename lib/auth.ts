@@ -206,6 +206,13 @@ export async function updatePassword(password: string): Promise<AuthResponse> {
     const { error } = await supabase.auth.updateUser({ password })
 
     if (error) {
+      if (error.message.includes('profiles_workout_split_check')) {
+        return {
+          success: false,
+          error: 'Your database needs the latest workout split migration before the Custom split can be saved.',
+        }
+      }
+
       return { success: false, error: error.message }
     }
 

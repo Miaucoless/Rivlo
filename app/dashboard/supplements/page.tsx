@@ -44,40 +44,6 @@ const FREQUENCY_OPTIONS: Array<{ value: SupplementFrequency; label: string }> = 
   { value: 'as_needed', label: 'As needed' },
 ]
 
-const BLOOM_PRESETS: Array<{
-  name: string
-  category: SupplementCategory
-  amount: number
-  unit: string
-  frequency: SupplementFrequency
-  notes: string
-}> = [
-  {
-    name: 'Bloom Greens & Superfoods',
-    category: 'supplement',
-    amount: 1,
-    unit: 'scoop',
-    frequency: 'daily',
-    notes: 'Typically mixed with water in the morning.',
-  },
-  {
-    name: 'Bloom Pre + Energy',
-    category: 'supplement',
-    amount: 1,
-    unit: 'scoop',
-    frequency: 'as_needed',
-    notes: 'Use before workouts as needed.',
-  },
-  {
-    name: 'Bloom Colostrum + Collagen',
-    category: 'supplement',
-    amount: 1,
-    unit: 'scoop',
-    frequency: 'daily',
-    notes: 'Daily gut and skin support blend.',
-  },
-]
-
 function categoryBadgeVariant(category: SupplementCategory) {
   switch (category) {
     case 'vitamin':
@@ -274,7 +240,7 @@ function SupplementEditor({
 
 export default function SupplementsPage() {
   const today = getTodayISO()
-  const { supplements, addSupplement, toggleSupplementTaken, updateSupplement, removeSupplement } = useAppStore()
+  const { supplements, toggleSupplementTaken, updateSupplement, removeSupplement } = useAppStore()
 
   const activeSupplements = useMemo(
     () => supplements.filter((supplement) => !supplement.archived).sort((a, b) => a.name.localeCompare(b.name)),
@@ -298,77 +264,44 @@ export default function SupplementsPage() {
           <p className="mt-1 text-sm text-muted-foreground hidden sm:block">
             Keep vitamins, herbals, medications, and other daily support items in one schedule.
           </p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {BLOOM_PRESETS.map((preset) => {
-              const alreadyAdded = activeSupplements.some((supplement) => supplement.name.toLowerCase() === preset.name.toLowerCase())
-              return (
-                <Button
-                  key={preset.name}
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={alreadyAdded}
-                  className="gap-1.5"
-                  onClick={() => {
-                    const now = new Date().toISOString()
-                    addSupplement({
-                      id: `supplement-${Date.now()}-${preset.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
-                      name: preset.name,
-                      category: preset.category,
-                      amount: preset.amount,
-                      unit: preset.unit,
-                      frequency: preset.frequency,
-                      notes: preset.notes,
-                      notification_enabled: true,
-                      taken_dates: [],
-                      created_at: now,
-                      updated_at: now,
-                    })
-                    toast.success(`${preset.name} added.`)
-                  }}
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  {alreadyAdded ? `${preset.name} added` : `Add ${preset.name}`}
-                </Button>
-              )
-            })}
-          </div>
         </div>
         <SupplementEditor />
       </motion.div>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-3 md:grid-cols-3">
         {[
           {
             label: 'Active items',
             value: activeSupplements.length,
-            sub: 'Everything currently on your stack',
+            sub: 'Current stack',
             icon: PillBottle,
             color: 'text-emerald-400',
           },
           {
             label: 'Taken today',
             value: takenToday.length,
-            sub: `${Math.max(activeSupplements.length - takenToday.length, 0)} still open today`,
+            sub: `${Math.max(activeSupplements.length - takenToday.length, 0)} left`,
             icon: CheckCircle2,
           },
           {
             label: 'Reminders on',
             value: remindersEnabled.length,
-            sub: `${dueToday.length} due and ready to notify`,
+            sub: `${dueToday.length} due`,
             icon: Bell,
           },
         ].map((item) => (
           <Card key={item.label}>
-            <CardHeader className="pb-2">
-              <CardTitle className="flex items-center justify-between text-sm font-medium text-muted-foreground">
+            <CardHeader className="pb-1 px-4 pt-4">
+              <CardTitle className="flex items-center justify-between text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
                 {item.label}
-                <item.icon className="h-4 w-4 text-emerald-500" />
+                <item.icon className="h-3.5 w-3.5 text-emerald-500" />
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <p className="text-3xl font-bold tabular-nums">{item.value}</p>
-              <p className="mt-1 text-xs text-muted-foreground">{item.sub}</p>
+            <CardContent className="px-4 pb-4 pt-0">
+              <div className="flex items-end justify-between gap-3">
+                <p className="text-2xl font-bold tabular-nums leading-none">{item.value}</p>
+                <p className="text-[11px] text-right text-muted-foreground">{item.sub}</p>
+              </div>
             </CardContent>
           </Card>
         ))}
