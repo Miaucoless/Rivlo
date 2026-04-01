@@ -480,7 +480,7 @@ export default function SettingsPage() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="flex gap-1 h-auto bg-transparent p-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <TabsList className="flex h-auto gap-1 overflow-x-auto bg-transparent px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <TabsTrigger value="profile" className="shrink-0 gap-1.5 text-xs rounded-lg border border-border/60 bg-muted/30 px-3 py-2 data-[state=active]:border-border data-[state=active]:bg-background data-[state=active]:text-foreground">
             <User className="w-3.5 h-3.5" /> Profile
           </TabsTrigger>

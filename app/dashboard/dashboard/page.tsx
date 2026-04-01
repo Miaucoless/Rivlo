@@ -8,7 +8,7 @@ import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Flame, Zap, Apple, Dumbbell, Plus, ScanLine, Search,
-  ChevronDown, ChevronUp, Sparkles, Bell, CheckCircle2, Circle, Trash2,
+  ChevronDown, ChevronUp, Sparkles, Bell, CheckCircle2, Circle, Trash2, Clock3,
 } from 'lucide-react'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell,
@@ -715,12 +715,21 @@ function TodayRemindersCard({
               placeholder={entryKind === 'note' ? 'e.g. Talk to coach after training' : 'e.g. Evening walk'}
             />
             {entryKind === 'reminder' ? (
-              <Input
-                type="time"
-                value={time}
-                onChange={(event) => setTime(event.target.value)}
-                className="h-10 rounded-xl border-border bg-background/70"
-              />
+              <div className="relative min-w-0">
+                <Clock3 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                {!time && (
+                  <span className="pointer-events-none absolute left-9 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                    Add time
+                  </span>
+                )}
+                <Input
+                  type="time"
+                  value={time}
+                  onChange={(event) => setTime(event.target.value)}
+                  aria-label="Reminder time"
+                  className="h-10 w-full min-w-0 rounded-xl border-border bg-background/70 pl-9 pr-3 [color-scheme:dark]"
+                />
+              </div>
             ) : (
               <Button
                 variant="outline"

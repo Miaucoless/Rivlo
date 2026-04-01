@@ -21,7 +21,8 @@ const NAV_ITEMS = [
 ]
 
 const NAV_HIDE_DISTANCE = 120
-const NAV_HIDE_OFFSET = 72
+const NAV_HIDE_OFFSET = 88
+const NAV_FLOAT_OFFSET = 10
 
 export function BottomNav({
   scrollContainerRef,
@@ -97,12 +98,13 @@ export function BottomNav({
         opacity: isMenuOpen ? 0.98 : 1 - (hideProgress * 0.02),
       }}
       transition={{ duration: 0.12, ease: 'linear' }}
-      className="pointer-events-none fixed inset-x-0 bottom-0 z-50 md:hidden"
+      className="pointer-events-none fixed inset-x-0 z-50 md:hidden"
+      style={{ bottom: `${NAV_FLOAT_OFFSET}px` }}
       aria-label="Mobile navigation"
     >
       <div
         className="pointer-events-auto border-t border-white/10 bg-[rgba(7,10,12,0.94)] shadow-[0_-14px_40px_rgba(0,0,0,0.28)] backdrop-blur-2xl supports-[backdrop-filter]:bg-[rgba(7,10,12,0.78)]"
-        style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 12px)' }}
+        style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 8px)' }}
       >
         <div className="mx-auto flex max-w-md items-center justify-around px-2 pt-2">
           {NAV_ITEMS.map(({ label, href, icon: Icon }) => {

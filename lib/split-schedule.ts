@@ -90,17 +90,27 @@ export function getWorkoutDayType(workout: Workout): SplitDayType | null {
   const label = workout.day_label?.toLowerCase() ?? ''
   const muscles = workout.muscle_groups.map((m) => m.toLowerCase())
 
-  if (label.includes('push') || (muscles.includes('chest') && muscles.includes('triceps'))) return 'push'
-  if (label.includes('pull') || (muscles.includes('back') && muscles.includes('biceps'))) return 'pull'
-  if (label.includes('leg') || muscles.includes('quads') || muscles.includes('hamstrings') || muscles.includes('glutes')) return 'legs'
-  if (label.includes('upper') || (muscles.includes('chest') && muscles.includes('back'))) return 'upper'
+  if (label.includes('push')) return 'push'
+  if (label.includes('pull')) return 'pull'
+  if (label.includes('leg')) return 'legs'
+  if (label.includes('upper')) return 'upper'
   if (label.includes('lower')) return 'lower'
   if (label.includes('full') || label.includes('full body') || label.includes('total')) return 'full_body'
-  if (label.includes('chest') || (muscles.includes('chest') && muscles.length <= 2)) return 'chest'
-  if (label.includes('back') || (muscles.includes('back') && muscles.length <= 2)) return 'back'
-  if (label.includes('shoulder') || (muscles.includes('shoulders') && muscles.length <= 2)) return 'shoulders'
-  if (label.includes('arm') || (muscles.includes('biceps') && muscles.includes('triceps'))) return 'arms'
-  if (label.includes('cardio') || muscles.includes('cardiovascular')) return 'cardio'
+  if (label.includes('chest')) return 'chest'
+  if (label.includes('back')) return 'back'
+  if (label.includes('shoulder')) return 'shoulders'
+  if (label.includes('arm')) return 'arms'
+  if (label.includes('cardio')) return 'cardio'
+
+  if (muscles.includes('chest') && muscles.includes('triceps')) return 'push'
+  if (muscles.includes('back') && muscles.includes('biceps')) return 'pull'
+  if (muscles.includes('quads') || muscles.includes('hamstrings') || muscles.includes('glutes')) return 'legs'
+  if (muscles.includes('chest') && muscles.includes('back')) return 'upper'
+  if (muscles.includes('chest') && muscles.length <= 2) return 'chest'
+  if (muscles.includes('back') && muscles.length <= 2) return 'back'
+  if (muscles.includes('shoulders') && muscles.length <= 2) return 'shoulders'
+  if (muscles.includes('biceps') && muscles.includes('triceps')) return 'arms'
+  if (muscles.includes('cardiovascular')) return 'cardio'
   return null
 }
 
