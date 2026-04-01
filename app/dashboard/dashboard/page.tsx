@@ -744,24 +744,25 @@ function TodayRemindersCard({
                   className="pointer-events-none h-10 rounded-xl border-border bg-background/70 pl-10 pr-3 text-sm text-muted-foreground"
                 />
               </div>
-            ) : (
-              <Button
-                variant="outline"
-                className="h-10 rounded-xl px-4 text-[11px] font-semibold"
-                onClick={handleAdd}
-              >
-                Add Note
-              </Button>
-            )}
+            ) : null}
           </div>
 
-          <div className="flex items-end gap-2">
+          <div className={cn('flex gap-2', entryKind === 'reminder' ? 'items-end' : 'flex-col')}>
             <Textarea
               value={notes}
               onChange={(event) => setNotes(event.target.value)}
               placeholder={entryKind === 'note' ? 'Quick note details...' : 'Optional details...'}
               className="min-h-[58px] rounded-xl border-border bg-background/70"
             />
+            {entryKind === 'note' && (
+              <Button
+                variant="outline"
+                className="h-10 rounded-xl px-4 text-[11px] font-semibold sm:self-end"
+                onClick={handleAdd}
+              >
+                Add Note
+              </Button>
+            )}
             {entryKind === 'reminder' && (
               <Button
                 variant="outline"
@@ -1233,13 +1234,13 @@ export default function DashboardPage() {
       </motion.div>
 
       {/* Charts row */}
-      <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-2">
+      <div className="grid gap-4 lg:grid-cols-3">
         {/* Calorie history chart */}
         <motion.div
           variants={stagger.item}
           initial="initial"
           animate="animate"
-          className="md:col-span-2 xl:col-span-1"
+          className="lg:col-span-2"
         >
           <Card>
             <CardHeader className="pb-2">
@@ -1251,7 +1252,7 @@ export default function DashboardPage() {
             <CardContent>
               {calorieChartData.length > 0 ? (
                 <>
-                  <ResponsiveContainer width="100%" height={164}>
+                  <ResponsiveContainer width="100%" height={208}>
                     <AreaChart data={calorieChartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
                       <defs>
                         <linearGradient id="cal-area" x1="0" y1="0" x2="0" y2="1">
@@ -1294,7 +1295,7 @@ export default function DashboardPage() {
                   </div>
                 </>
               ) : (
-                <div className="flex h-[164px] flex-col items-center justify-center text-center text-sm text-muted-foreground">
+                <div className="flex h-[208px] flex-col items-center justify-center text-center text-sm text-muted-foreground">
                   <Flame className="mb-3 h-10 w-10 opacity-20" />
                   <p>No calorie history yet</p>
                   <p className="mt-1 text-xs">Your chart will appear once you log meals on at least one day.</p>
@@ -1305,7 +1306,7 @@ export default function DashboardPage() {
         </motion.div>
 
         {/* Macro breakdown pie */}
-        <motion.div variants={stagger.item} initial="initial" animate="animate" className="self-start">
+        <motion.div variants={stagger.item} initial="initial" animate="animate">
           <Card className="h-full">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-semibold">Today&apos;s Macros</CardTitle>
@@ -1313,14 +1314,14 @@ export default function DashboardPage() {
             <CardContent>
               {todayTotals.calories > 0 ? (
                 <>
-                  <div className="flex justify-center mb-2">
-                    <PieChart width={140} height={140}>
+                  <div className="mb-1 flex justify-center">
+                    <PieChart width={120} height={120}>
                       <Pie
                         data={macroPieData}
-                        cx={70}
-                        cy={70}
-                        innerRadius={45}
-                        outerRadius={65}
+                        cx={60}
+                        cy={60}
+                        innerRadius={36}
+                        outerRadius={54}
                         paddingAngle={3}
                         dataKey="value"
                       >
@@ -1330,14 +1331,14 @@ export default function DashboardPage() {
                       </Pie>
                     </PieChart>
                   </div>
-                  <div className="space-y-3">
+                  <div className="space-y-2.5">
                     {[
                       { label: 'Protein', value: todayTotals.protein_g, target: user.protein_target_g, color: '#10b981', unit: 'g' },
                       { label: 'Carbs', value: todayTotals.carbs_g, target: user.carb_target_g, color: '#3b82f6', unit: 'g' },
                       { label: 'Fat', value: todayTotals.fat_g, target: user.fat_target_g, color: '#f59e0b', unit: 'g' },
                     ].map((m) => (
                       <div key={m.label}>
-                        <div className="flex justify-between text-xs mb-1">
+                        <div className="mb-1 flex justify-between text-xs">
                           <span className="text-muted-foreground">{m.label}</span>
                           <span className="font-medium">{m.value}g / {m.target}g</span>
                         </div>

@@ -946,7 +946,7 @@ export function TopBar() {
             </nav>
 
             {/* Bottom — streak + user + logout */}
-            <div className="px-3 py-4 border-t border-border space-y-2">
+            <div className="space-y-2 border-t border-border px-3 pt-4 pb-[calc(env(safe-area-inset-bottom)+1.25rem)]">
               {streak > 0 && (
                 <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2 flex items-center gap-2 mb-2">
                   <Flame className="w-4 h-4 text-amber-400 flex-shrink-0" />
