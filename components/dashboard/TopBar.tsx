@@ -372,26 +372,6 @@ export function TopBar() {
             <h1 className="text-lg font-semibold">{title}</h1>
             <div className="hidden sm:flex sm:items-center sm:gap-2">
               <p className="text-xs text-muted-foreground">{today}</p>
-              {todayDayType && (
-                <button
-                  type="button"
-                  onClick={openSplitPanel}
-                  className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-400 transition-colors hover:bg-emerald-500/20"
-                >
-                  <Zap className="w-2.5 h-2.5" />
-                  {SPLIT_DAY_LABELS[todayDayType]}
-                </button>
-              )}
-              {!todayDayType && (
-                <button
-                  type="button"
-                  onClick={openSplitPanel}
-                  className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-background/60 px-2 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:border-emerald-500/30 hover:bg-emerald-500/5 hover:text-emerald-400"
-                >
-                  <Zap className="w-2.5 h-2.5" />
-                  Set split
-                </button>
-              )}
               <button
                 type="button"
                 onClick={() => {
@@ -417,6 +397,18 @@ export function TopBar() {
 
         {/* Right — actions */}
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={openSplitPanel}
+            className={`hidden sm:inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-medium transition-colors ${
+              todayDayType
+                ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20'
+                : 'border-border/60 bg-background/60 text-muted-foreground hover:border-emerald-500/30 hover:text-emerald-400'
+            }`}
+          >
+            <Zap className="w-2.5 h-2.5" />
+            {todayDayType ? SPLIT_DAY_LABELS[todayDayType] : 'Set split'}
+          </button>
           <Button
             variant="ghost"
             size="icon-sm"

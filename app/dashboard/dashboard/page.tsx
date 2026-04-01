@@ -8,7 +8,7 @@ import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Flame, Zap, Apple, Dumbbell, Plus, ScanLine, Search,
-  ChevronDown, ChevronUp, Sparkles, Bell, CheckCircle2, Circle,
+  ChevronDown, ChevronUp, Sparkles, Bell, CheckCircle2, Circle, Trash2,
 } from 'lucide-react'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell,
@@ -620,11 +620,13 @@ function TodayRemindersCard({
   reminders,
   onAdd,
   onToggle,
+  onRemove,
   onOpenCalendar,
 }: {
   reminders: CalendarReminder[]
   onAdd: (entry: { kind: 'reminder' | 'note'; title: string; time?: string; notes?: string }) => void
   onToggle: (id: string) => void
+  onRemove: (id: string) => void
   onOpenCalendar: () => void
 }) {
   const [entryKind, setEntryKind] = useState<'reminder' | 'note'>('reminder')
@@ -660,17 +662,17 @@ function TodayRemindersCard({
   }
 
   return (
-    <Card className="overflow-hidden border-[#d8c7a4] bg-[#f3ead8] text-[#2d2418] shadow-[0_20px_42px_rgba(0,0,0,0.18)]">
-      <CardHeader className="border-b border-[#ddcfb4] pb-3">
+    <Card className="overflow-hidden border-border bg-card text-card-foreground shadow-[0_20px_42px_rgba(0,0,0,0.18)]">
+      <CardHeader className="border-b border-border pb-3">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <CardTitle className="text-base font-semibold tracking-tight text-[#2d2418]">Today&apos;s Reminders</CardTitle>
-            <p className="mt-1 text-[11px] uppercase tracking-[0.18em] text-[#8b6d46]">{summaryText}</p>
+            <CardTitle className="text-base font-semibold tracking-tight">Today&apos;s Reminders</CardTitle>
+            <p className="mt-1 text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{summaryText}</p>
           </div>
           <Button
             variant="outline"
             size="sm"
-            className="h-8 shrink-0 rounded-full border-[#cdb892] bg-[#fff8e8] px-3 text-[11px] font-semibold text-[#5b472a] hover:bg-[#f8efd9]"
+            className="h-8 shrink-0 rounded-full px-3 text-[11px] font-semibold"
             onClick={onOpenCalendar}
           >
             Calendar
@@ -678,7 +680,7 @@ function TodayRemindersCard({
         </div>
       </CardHeader>
       <CardContent className="space-y-3 p-4">
-        <div className="space-y-2 rounded-[1.4rem] border border-[#deceb0] bg-[#fbf4e5] p-3">
+        <div className="space-y-2 rounded-[1.4rem] border border-border bg-muted/20 p-3">
           <div className="flex flex-wrap items-center gap-2">
             {([
               { value: 'reminder', label: 'Reminder' },
@@ -691,16 +693,16 @@ function TodayRemindersCard({
                 className={cn(
                   'rounded-full border px-3 py-1 text-[11px] font-semibold transition-colors',
                   entryKind === option.value
-                    ? 'border-[#baa06f] bg-[#eadbb8] text-[#4f3f27]'
-                    : 'border-[#d7c8aa] bg-[#fffaf0] text-[#8b6d46] hover:text-[#4f3f27]'
+                    ? 'border-primary/40 bg-primary/10 text-primary'
+                    : 'border-border bg-background/70 text-muted-foreground hover:text-foreground'
                 )}
               >
                 {option.label}
               </button>
             ))}
-            <div className="ml-auto flex items-center gap-1 text-[11px] text-[#8b6d46]">
+            <div className="ml-auto flex items-center gap-1 text-[11px] text-muted-foreground">
               <span>{reminders.length} item{reminders.length === 1 ? '' : 's'}</span>
-              <span className="text-[#c4b18d]">/</span>
+              <span className="text-border">/</span>
               <span>{completedCount} done</span>
             </div>
           </div>
@@ -709,7 +711,7 @@ function TodayRemindersCard({
             <Input
               value={title}
               onChange={(event) => setTitle(event.target.value)}
-              className="h-10 rounded-xl border-[#d6c4a1] bg-[#fffaf0] text-[#2d2418] placeholder:text-[#9d8864]"
+              className="h-10 rounded-xl border-border bg-background/70"
               placeholder={entryKind === 'note' ? 'e.g. Talk to coach after training' : 'e.g. Evening walk'}
             />
             {entryKind === 'reminder' ? (
@@ -717,12 +719,12 @@ function TodayRemindersCard({
                 type="time"
                 value={time}
                 onChange={(event) => setTime(event.target.value)}
-                className="h-10 rounded-xl border-[#d6c4a1] bg-[#fffaf0] text-[#5b472a]"
+                className="h-10 rounded-xl border-border bg-background/70"
               />
             ) : (
               <Button
                 variant="outline"
-                className="h-10 rounded-xl border-[#baa06f] bg-[#eadbb8] px-4 text-[11px] font-semibold text-[#4f3f27] hover:bg-[#e2d2ad]"
+                className="h-10 rounded-xl px-4 text-[11px] font-semibold"
                 onClick={handleAdd}
               >
                 Add Note
@@ -735,12 +737,12 @@ function TodayRemindersCard({
               value={notes}
               onChange={(event) => setNotes(event.target.value)}
               placeholder={entryKind === 'note' ? 'Quick note details...' : 'Optional details...'}
-              className="min-h-[58px] rounded-xl border-[#d6c4a1] bg-[#fffaf0] text-[#2d2418] placeholder:text-[#9d8864]"
+              className="min-h-[58px] rounded-xl border-border bg-background/70"
             />
             {entryKind === 'reminder' && (
               <Button
                 variant="outline"
-                className="h-[58px] rounded-xl border-[#baa06f] bg-[#eadbb8] px-4 text-[11px] font-semibold text-[#4f3f27] hover:bg-[#e2d2ad]"
+                className="h-[58px] rounded-xl px-4 text-[11px] font-semibold"
                 onClick={handleAdd}
               >
                 Add
@@ -749,9 +751,9 @@ function TodayRemindersCard({
           </div>
         </div>
 
-        <div className="relative overflow-hidden rounded-[1.5rem] border border-[#decda9] bg-[#fffaf0] shadow-inner">
-          <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_bottom,transparent_0,transparent_31px,rgba(133,105,70,0.18)_31px,rgba(133,105,70,0.18)_32px)] bg-[length:100%_32px]" />
-          <div className="pointer-events-none absolute bottom-0 left-9 top-0 w-px bg-[#d8a6a4]" />
+        <div className="relative overflow-hidden rounded-[1.5rem] border border-border bg-background/60 shadow-inner">
+          <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_bottom,transparent_0,transparent_31px,rgba(15,23,42,0.08)_31px,rgba(15,23,42,0.08)_32px)] bg-[length:100%_32px] dark:bg-[linear-gradient(to_bottom,transparent_0,transparent_31px,rgba(255,255,255,0.07)_31px,rgba(255,255,255,0.07)_32px)]" />
+          <div className="pointer-events-none absolute bottom-0 left-9 top-0 w-px bg-rose-500/20 dark:bg-rose-400/20" />
           <div className="relative px-4 py-3 pl-12">
             {reminders.length > 0 ? (
               <div className="space-y-0">
@@ -760,7 +762,7 @@ function TodayRemindersCard({
                     <button
                       type="button"
                       onClick={() => onToggle(reminder.id)}
-                      className="mt-0.5 shrink-0 rounded-full text-[#8a7551] transition-colors hover:text-[#4f3f27]"
+                      className="mt-0.5 shrink-0 rounded-full text-muted-foreground transition-colors hover:text-foreground"
                       aria-label={reminder.completed ? 'Mark as incomplete' : 'Mark as complete'}
                     >
                       {reminder.completed ? (
@@ -771,28 +773,36 @@ function TodayRemindersCard({
                     </button>
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <p className={cn('text-sm font-medium text-[#2d2418]', reminder.completed && 'text-[#8d7a5a] line-through')}>
+                        <p className={cn('text-sm font-medium text-foreground', reminder.completed && 'text-muted-foreground line-through')}>
                           {reminder.title}
                         </p>
                         {reminder.time && (
-                          <span className="text-[11px] font-medium text-[#8b6d46]">{reminder.time}</span>
+                          <span className="text-[11px] font-medium text-muted-foreground">{reminder.time}</span>
                         )}
-                        <span className="text-[10px] uppercase tracking-[0.14em] text-[#a1865d]">
+                        <span className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground/80">
                           {reminder.kind === 'note' ? 'note' : 'reminder'}
                         </span>
                       </div>
                       {reminder.notes && (
-                        <p className={cn('mt-0.5 text-xs leading-5 text-[#6b583b]', reminder.completed && 'text-[#9b8a6f] line-through')}>
+                        <p className={cn('mt-0.5 text-xs leading-5 text-muted-foreground', reminder.completed && 'line-through')}>
                           {reminder.notes}
                         </p>
                       )}
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => onRemove(reminder.id)}
+                      className="mt-0.5 shrink-0 rounded-full p-1 text-muted-foreground/70 transition-colors hover:bg-muted/40 hover:text-destructive"
+                      aria-label="Delete reminder"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="flex min-h-[92px] flex-col justify-center py-1 text-[#8b6d46]">
-                <p className="text-sm font-medium text-[#5b472a]">Nothing on today&apos;s page yet.</p>
+              <div className="flex min-h-[92px] flex-col justify-center py-1 text-muted-foreground">
+                <p className="text-sm font-medium text-foreground/85">Nothing on today&apos;s page yet.</p>
                 <p className="mt-1 text-xs">Add a note or reminder above, or pull one in from the calendar.</p>
               </div>
             )}
@@ -820,6 +830,7 @@ export default function DashboardPage() {
     calendarReminders,
     addCalendarReminder,
     toggleCalendarReminderComplete,
+    removeCalendarReminder,
   } = useAppStore()
   const [hasPausedWorkout, setHasPausedWorkout] = useState(false)
   const [expandedDashboardLogId, setExpandedDashboardLogId] = useState<string | null>(null)
@@ -1791,6 +1802,7 @@ export default function DashboardPage() {
             reminders={todayReminders}
             onAdd={handleAddTodayReminder}
             onToggle={toggleCalendarReminderComplete}
+            onRemove={removeCalendarReminder}
             onOpenCalendar={() => router.push('/dashboard/calendar')}
           />
 

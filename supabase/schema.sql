@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS profiles (
   goal_timeframe_weeks INTEGER,
   preferred_workout_time TEXT CHECK (preferred_workout_time IN ('early_morning','morning','afternoon','evening','late_night','flexible')),
   preferred_workout_days TEXT[] DEFAULT '{}',
+  split_schedule JSONB NOT NULL DEFAULT '{}'::jsonb,
   training_experience TEXT CHECK (training_experience IN ('beginner','intermediate','advanced')),
   dietary_style TEXT CHECK (dietary_style IN ('balanced','high_protein','vegetarian','vegan','pescatarian','low_carb')),
   biggest_challenge TEXT,
@@ -61,6 +62,7 @@ ALTER TABLE profiles
   ADD COLUMN IF NOT EXISTS preferred_workout_time TEXT
   CHECK (preferred_workout_time IN ('early_morning','morning','afternoon','evening','late_night','flexible')),
   ADD COLUMN IF NOT EXISTS preferred_workout_days TEXT[] DEFAULT '{}',
+  ADD COLUMN IF NOT EXISTS split_schedule JSONB NOT NULL DEFAULT '{}'::jsonb,
   ADD COLUMN IF NOT EXISTS training_experience TEXT
   CHECK (training_experience IN ('beginner','intermediate','advanced')),
   ADD COLUMN IF NOT EXISTS dietary_style TEXT

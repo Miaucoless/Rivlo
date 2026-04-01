@@ -27,7 +27,7 @@ import { EXERCISE_LIBRARY, WORKOUTS } from '@/lib/content-library'
 import { EXERCISE_CLASSIFICATIONS } from '@/lib/exercise-classifications'
 import type { Exercise, ExerciseLibraryItem, ExerciseSetMetric, Gender, MuscleGroup, UserProfile, Workout, WorkoutExercise, WorkoutSet, WorkoutSplit } from '@/types'
 import { cn, formatVolumeValue, getTodayISO, getWeightUnitLabel, kgToLbs, lbsToKg } from '@/lib/utils'
-import { getTodayWeekDay, getWorkoutsForDayType, SPLIT_DAY_LABELS, WEEK_DAY_LABELS } from '@/lib/split-schedule'
+import { buildDefaultSchedule, getTodayWeekDay, getWorkoutsForDayType, SPLIT_DAY_LABELS, WEEK_DAY_LABELS } from '@/lib/split-schedule'
 import { createUserWorkoutTemplate, fetchUserWorkoutTemplates, updateUserWorkoutTemplate } from '@/lib/workout-templates'
 import { toast } from 'sonner'
 import type { UnitSystem } from '@/types'
@@ -2884,13 +2884,12 @@ export default function WorkoutsPage() {
   const workoutLibrary = useMemo(() => [...accountCustomWorkouts, ...WORKOUTS.map((workout) => ({ ...workout, source: 'premade' as const }))], [accountCustomWorkouts])
 
   const todayRecommendedWorkouts = useMemo(() => {
-    const schedule = user?.split_schedule
-    if (!schedule) return []
     const todayDay = getTodayWeekDay()
+    const schedule = user?.split_schedule ?? buildDefaultSchedule(user?.workout_split ?? 'ppl')
     const dayType = schedule[todayDay]
     if (!dayType || dayType === 'rest') return []
     return getWorkoutsForDayType(dayType, workoutLibrary)
-  }, [user?.split_schedule, workoutLibrary])
+  }, [user?.split_schedule, user?.workout_split, workoutLibrary])
 
   const filteredPremadeWorkouts = useMemo(() => {
     return WORKOUTS.filter((w) => {

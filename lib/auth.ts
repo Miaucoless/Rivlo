@@ -1,11 +1,24 @@
 import { createClient } from '@/lib/supabase'
 import type { UnitSystem, UserProfile } from '@/types'
+import { buildDefaultSchedule } from '@/lib/split-schedule'
 
 export type AuthResponse = {
   success: boolean
   error?: string
   user?: UserProfile
   pendingConfirmation?: boolean
+}
+
+function normalizeProfile(profile: Partial<UserProfile> | null | undefined): UserProfile | null {
+  if (!profile) return null
+
+  const workoutSplit = profile.workout_split || 'ppl'
+
+  return {
+    ...profile,
+    workout_split: workoutSplit,
+    split_schedule: profile.split_schedule ?? buildDefaultSchedule(workoutSplit),
+  } as UserProfile
 }
 
 export async function signUpWithEmail(
@@ -50,7 +63,7 @@ export async function signUpWithEmail(
       return { success: false, error: profileError.message }
     }
 
-    return { success: true, user: profile as UserProfile }
+    return { success: true, user: normalizeProfile(profile) ?? undefined }
   } catch (error) {
     return { success: false, error: String(error) }
   }
@@ -95,7 +108,7 @@ export async function signInWithEmail(
       return { success: false, error: profileError.message }
     }
 
-    return { success: true, user: profile as UserProfile }
+    return { success: true, user: normalizeProfile(profile) ?? undefined }
   } catch (error) {
     return { success: false, error: String(error) }
   }
@@ -293,7 +306,7 @@ export async function getCurrentUser(): Promise<UserProfile | null> {
       return null
     }
 
-    return profile as UserProfile
+    return normalizeProfile(profile)
   } catch (error) {
     return null
   }
@@ -305,19 +318,34 @@ export async function updateProfile(
 ): Promise<AuthResponse> {
   try {
     const supabase = createClient()
+    const performUpdate = async (payload: Partial<UserProfile>) => {
+      return supabase
+        .from('profiles')
+        .update(payload)
+        .eq('id', userId)
+        .select()
+        .single()
+    }
 
-    const { data: profile, error } = await supabase
-      .from('profiles')
-      .update(updates)
-      .eq('id', userId)
-      .select()
-      .single()
+    let { data: profile, error } = await performUpdate(updates)
+
+    const splitScheduleMissing =
+      updates.split_schedule !== undefined &&
+      !!error &&
+      error.message.includes('split_schedule')
+
+    if (splitScheduleMissing) {
+      const { split_schedule: _splitSchedule, ...fallbackUpdates } = updates
+      const retry = await performUpdate(fallbackUpdates)
+      profile = retry.data
+      error = retry.error
+    }
 
     if (error) {
       return { success: false, error: error.message }
     }
 
-    return { success: true, user: profile as UserProfile }
+    return { success: true, user: normalizeProfile(profile) ?? undefined }
   } catch (error) {
     return { success: false, error: String(error) }
   }

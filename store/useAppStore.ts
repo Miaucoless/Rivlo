@@ -896,8 +896,12 @@ export const useAppStore = create<AppStore>()(
             const missingWaterGoalColumn =
               updates.water_goal_ml != null &&
               (err.includes('water_goal_ml') || err.includes('schema cache'))
+            const missingSplitScheduleColumn =
+              updates.split_schedule != null &&
+              (err.includes('split_schedule') || err.includes('schema cache'))
 
             if (missingWaterGoalColumn) return
+            if (missingSplitScheduleColumn) return
 
             if (resp.error) toast.error(resp.error)
             throw new Error(resp.error || 'Profile sync failed.')

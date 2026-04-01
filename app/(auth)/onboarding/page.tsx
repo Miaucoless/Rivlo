@@ -10,7 +10,8 @@ import { Label } from '@/components/ui/label'
 import { useAppStore } from '@/store/useAppStore'
 import { updateProfile as persistProfile } from '@/lib/auth'
 import { buildUserProfile, formatGoalWeightChangeForInput, formatHeightForInput, formatWeightForInput, getHeightUnitLabel, getWeightUnitLabel, parseHeightInput, parseWeightInput } from '@/lib/utils'
-import type { Gender, ActivityLevel, DietaryStyle, FitnessGoal, PreferredWorkoutTime, TrainingExperience, UnitSystem, WorkoutSplit } from '@/types'
+import type { Gender, ActivityLevel, DietaryStyle, FitnessGoal, PreferredWorkoutTime, SplitDayType, SplitSchedule, TrainingExperience, UnitSystem, WeekDay, WorkoutSplit } from '@/types'
+import { buildDefaultSchedule, SPLIT_DAY_LABELS, SPLIT_DAY_OPTIONS, WEEK_DAYS, WEEK_DAY_LABELS } from '@/lib/split-schedule'
 import { toast } from 'sonner'
 
 interface FormData {
@@ -24,6 +25,7 @@ interface FormData {
   fitness_goal: FitnessGoal
   biggest_challenge: string
   workout_split: WorkoutSplit
+  split_schedule: SplitSchedule
   preferred_workout_days: string[]
   goal_target_change_input: string
   goal_timeframe_weeks_input: string
@@ -107,6 +109,7 @@ export default function OnboardingPage() {
       fitness_goal: user?.fitness_goal || 'fat_loss',
       biggest_challenge: user?.biggest_challenge || '',
       workout_split: user?.workout_split || 'ppl',
+      split_schedule: user?.split_schedule ?? buildDefaultSchedule(user?.workout_split ?? 'ppl'),
       preferred_workout_days: user?.preferred_workout_days || ['mon', 'tue', 'thu', 'sat'],
       goal_target_change_input: formatGoalWeightChangeForInput(user?.goal_target_change_kg, unitSystem),
       goal_timeframe_weeks_input: user?.goal_timeframe_weeks ? String(user.goal_timeframe_weeks) : '12',
@@ -206,11 +209,13 @@ export default function OnboardingPage() {
       if (isDemoMode) {
         updateProfile({
           ...profile,
+          split_schedule: form.split_schedule,
           onboarded: true,
         })
       } else {
         const response = await persistProfile(user.id, {
           ...profile,
+          split_schedule: form.split_schedule,
           onboarded: true,
         })
 
@@ -369,7 +374,7 @@ export default function OnboardingPage() {
               placeholder="e.g. Busy schedule, protein consistency, motivation"
               className="bg-zinc-900 border-white/10 text-white"
             />
-            <p className="text-xs text-zinc-500">We’ll use this to make your plan feel more realistic from day one.</p>
+            <p className="text-xs text-zinc-500">We'll use this to make your plan feel more realistic from day one.</p>
           </div>
         </div>
       ),
@@ -381,7 +386,10 @@ export default function OnboardingPage() {
         <div className="space-y-5">
           <ChoiceGrid
             value={form.workout_split}
-            onChange={(v) => update('workout_split', v)}
+            onChange={(v) => {
+              const split = v as WorkoutSplit
+              setForm((prev) => ({ ...prev, workout_split: split, split_schedule: buildDefaultSchedule(split) }))
+            }}
             choices={[
               { value: 'ppl', label: 'Push/Pull/Legs', description: '6-day split, optimal gains', emoji: '🔄' },
               { value: 'upper_lower', label: 'Upper/Lower', description: '4-day split, balanced', emoji: '⬆️' },
@@ -413,7 +421,37 @@ export default function OnboardingPage() {
                 )
               })}
             </div>
-            <p className="text-xs text-zinc-500">Choose the days you’re most likely to actually train.</p>
+            <p className="text-xs text-zinc-500">Choose the days you&apos;re most likely to actually train.</p>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-zinc-300">Weekly schedule</Label>
+            <div className="grid gap-2">
+              {WEEK_DAYS.map((day) => (
+                <div key={day} className="flex items-center gap-3">
+                  <span className="w-9 text-xs font-medium text-zinc-400 shrink-0">{WEEK_DAY_LABELS[day]}</span>
+                  <div className="grid grid-cols-3 gap-1.5 flex-1 sm:flex sm:flex-wrap sm:gap-1.5">
+                    {SPLIT_DAY_OPTIONS[form.workout_split].map((opt) => (
+                      <button
+                        key={opt}
+                        type="button"
+                        onClick={() => setForm((prev) => ({ ...prev, split_schedule: { ...prev.split_schedule, [day]: opt as SplitDayType } }))}
+                        className={`rounded-md border px-2 py-1 text-[11px] font-medium transition-all ${
+                          (form.split_schedule[day as WeekDay] ?? 'rest') === opt
+                            ? opt === 'rest'
+                              ? 'border-zinc-600 bg-zinc-700 text-zinc-300'
+                              : 'border-emerald-500 bg-emerald-500/15 text-emerald-400'
+                            : 'border-white/10 bg-zinc-900/60 text-zinc-500 hover:border-white/20 hover:text-zinc-300'
+                        }`}
+                      >
+                        {SPLIT_DAY_LABELS[opt]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-zinc-500">Tap a day to assign its workout type. You can change this anytime.</p>
           </div>
         </div>
       ),
