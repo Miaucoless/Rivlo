@@ -470,6 +470,7 @@ export default function SettingsPage() {
     <div className="space-y-6 max-w-3xl">
       {/* Header */}
       <div>
+        <h2 className="text-xl font-bold">Settings</h2>
         <p className="text-muted-foreground text-sm">Manage your profile, goals, and preferences</p>
         {isDemoMode && (
           <Badge variant="warning" className="mt-2">
@@ -479,23 +480,25 @@ export default function SettingsPage() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="flex h-auto gap-1 overflow-x-auto bg-transparent px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          <TabsTrigger value="profile" className="shrink-0 gap-1.5 text-xs rounded-lg border border-border/60 bg-muted/30 px-3 py-2 data-[state=active]:border-border data-[state=active]:bg-background data-[state=active]:text-foreground">
-            <User className="w-3.5 h-3.5" /> Profile
-          </TabsTrigger>
-          <TabsTrigger value="goals" className="shrink-0 gap-1.5 text-xs rounded-lg border border-border/60 bg-muted/30 px-3 py-2 data-[state=active]:border-border data-[state=active]:bg-background data-[state=active]:text-foreground">
-            <Target className="w-3.5 h-3.5" /> Goals
-          </TabsTrigger>
-          <TabsTrigger value="appearance" className="shrink-0 gap-1.5 text-xs rounded-lg border border-border/60 bg-muted/30 px-3 py-2 data-[state=active]:border-border data-[state=active]:bg-background data-[state=active]:text-foreground">
-            <Monitor className="w-3.5 h-3.5" /> Display
-          </TabsTrigger>
-          <TabsTrigger value="data" className="shrink-0 gap-1.5 text-xs rounded-lg border border-border/60 bg-muted/30 px-3 py-2 data-[state=active]:border-border data-[state=active]:bg-background data-[state=active]:text-foreground">
-            <Download className="w-3.5 h-3.5" /> Data
-          </TabsTrigger>
-          <TabsTrigger value="friends" className="shrink-0 gap-1.5 text-xs rounded-lg border border-border/60 bg-muted/30 px-3 py-2 data-[state=active]:border-border data-[state=active]:bg-background data-[state=active]:text-foreground">
-            <Users className="w-3.5 h-3.5" /> Friends
-          </TabsTrigger>
-        </TabsList>
+        <div className="overflow-x-auto px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <TabsList className="flex h-auto min-w-max gap-1 bg-transparent pb-1">
+            <TabsTrigger value="profile" className="shrink-0 gap-1.5 text-xs rounded-lg border border-border/60 bg-muted/30 px-3 py-2 data-[state=active]:border-border data-[state=active]:bg-background data-[state=active]:text-foreground">
+              <User className="w-3.5 h-3.5" /> Profile
+            </TabsTrigger>
+            <TabsTrigger value="goals" className="shrink-0 gap-1.5 text-xs rounded-lg border border-border/60 bg-muted/30 px-3 py-2 data-[state=active]:border-border data-[state=active]:bg-background data-[state=active]:text-foreground">
+              <Target className="w-3.5 h-3.5" /> Goals
+            </TabsTrigger>
+            <TabsTrigger value="appearance" className="shrink-0 gap-1.5 text-xs rounded-lg border border-border/60 bg-muted/30 px-3 py-2 data-[state=active]:border-border data-[state=active]:bg-background data-[state=active]:text-foreground">
+              <Monitor className="w-3.5 h-3.5" /> Display
+            </TabsTrigger>
+            <TabsTrigger value="data" className="shrink-0 gap-1.5 text-xs rounded-lg border border-border/60 bg-muted/30 px-3 py-2 data-[state=active]:border-border data-[state=active]:bg-background data-[state=active]:text-foreground">
+              <Download className="w-3.5 h-3.5" /> Data
+            </TabsTrigger>
+            <TabsTrigger value="friends" className="shrink-0 gap-1.5 text-xs rounded-lg border border-border/60 bg-muted/30 px-3 py-2 data-[state=active]:border-border data-[state=active]:bg-background data-[state=active]:text-foreground">
+              <Users className="w-3.5 h-3.5" /> Friends
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
         {/* Profile tab */}
         <TabsContent value="profile" className="mt-4 space-y-4">

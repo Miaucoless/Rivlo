@@ -3604,6 +3604,7 @@ export default function WorkoutsPage() {
       <div className="space-y-5">
         <div className="flex items-start justify-between gap-4">
           <div>
+            <h2 className="font-display text-xl sm:text-3xl font-bold tracking-tight">Workouts</h2>
             <p className="text-sm text-muted-foreground">Log what you did today, then save it as a workout if you want to reuse it later.</p>
           </div>
           <Button variant="outline" className="gap-2" onClick={() => { setEditingWorkout(null); setBuilderOpen(true) }}>

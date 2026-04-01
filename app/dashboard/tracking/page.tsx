@@ -1082,6 +1082,7 @@ export default function TrackingPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
+          <h2 className="text-xl font-bold">Progress Tracking</h2>
           <p className="text-muted-foreground text-sm hidden sm:block">Visualize your transformation over time</p>
         </div>
         <div className="flex gap-2">

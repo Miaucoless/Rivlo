@@ -282,7 +282,6 @@ export function TopBar() {
     router.push('/')
   }
 
-  const title = PAGE_TITLES[pathname] || 'Dashboard'
   const today = formatDate(new Date(), 'EEEE, MMMM d')
   const splitLabel = todayDayType ? SPLIT_DAY_LABELS[todayDayType] : 'Set split'
   const mobileSplitLabel = todayDayType ? SPLIT_DAY_LABELS[todayDayType] : 'Split'
@@ -371,7 +370,7 @@ export function TopBar() {
         style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
       >
         <div className="h-14 flex items-center justify-between px-4 md:px-6">
-        {/* Left — hamburger (mobile) + title */}
+        {/* Left — hamburger + sync */}
         <div className="flex items-center gap-3">
           <Button
             variant="ghost"
@@ -382,9 +381,8 @@ export function TopBar() {
           >
             <Menu className="w-5 h-5" />
           </Button>
-          <div>
-            <h1 className="text-lg font-semibold">{title}</h1>
-            <div className="hidden sm:flex sm:items-center sm:gap-2">
+          <div className="hidden sm:block">
+            <div className="flex items-center gap-2">
               <p className="text-xs text-muted-foreground">{today}</p>
               <button
                 type="button"

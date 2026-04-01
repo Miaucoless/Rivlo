@@ -260,6 +260,7 @@ export default function SupplementsPage() {
         className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between"
       >
         <div>
+          <h2 className="text-2xl font-bold">Supplements</h2>
           <p className="mt-1 text-sm text-muted-foreground hidden sm:block">
             Keep vitamins, herbals, medications, and other daily support items in one schedule.
           </p>
