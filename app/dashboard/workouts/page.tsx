@@ -6,8 +6,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  BookOpen, CheckCircle, ChevronDown, ChevronUp, Circle, Copy, Dumbbell, Eye, Pencil, Play, PlayCircle, Plus, Search,
-  SlidersHorizontal, Sparkles, Trash2, Trophy, X, Share2,
+  BookOpen, CheckCircle, ChevronDown, ChevronUp, Circle, Copy, Dumbbell, Eye, Loader2, Pencil, Play, PlayCircle, Plus, Search,
+  SlidersHorizontal, Sparkles, Trash2, Trophy, X, Share2, Zap,
 } from 'lucide-react'
 import { WorkoutTimerBar } from '@/components/workout/WorkoutTimerBar'
 import { WorkoutTimerStrip } from '@/components/workout/WorkoutTimerStrip'
@@ -15,7 +15,7 @@ import { ShareModal } from '@/components/sharing/ShareModal'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Progress } from '@/components/ui/progress'
@@ -25,9 +25,9 @@ import { Textarea } from '@/components/ui/textarea'
 import { useAppStore } from '@/store/useAppStore'
 import { EXERCISE_LIBRARY, WORKOUTS } from '@/lib/content-library'
 import { EXERCISE_CLASSIFICATIONS } from '@/lib/exercise-classifications'
-import type { Exercise, ExerciseLibraryItem, ExerciseSetMetric, Gender, MuscleGroup, UserProfile, Workout, WorkoutExercise, WorkoutSet, WorkoutSplit } from '@/types'
+import type { Exercise, ExerciseLibraryItem, ExerciseSetMetric, Gender, JournalEntry, MuscleGroup, SplitDayType, SplitSchedule, UserProfile, WeekDay, Workout, WorkoutExercise, WorkoutLog, WorkoutSet, WorkoutSplit } from '@/types'
 import { cn, formatVolumeValue, getTodayISO, getWeightUnitLabel, kgToLbs, lbsToKg } from '@/lib/utils'
-import { buildDefaultSchedule, getTodayWeekDay, getWorkoutsForDayType, SPLIT_DAY_LABELS, WEEK_DAY_LABELS } from '@/lib/split-schedule'
+import { buildDefaultSchedule, getTodayWeekDay, getWorkoutsForDayType, SPLIT_DAY_LABELS, SPLIT_DAY_OPTIONS, WEEK_DAYS, WEEK_DAY_LABELS } from '@/lib/split-schedule'
 import { createUserWorkoutTemplate, fetchUserWorkoutTemplates, updateUserWorkoutTemplate } from '@/lib/workout-templates'
 import { toast } from 'sonner'
 import type { UnitSystem } from '@/types'
@@ -61,6 +61,11 @@ interface PersistedActiveWorkoutSession {
   startedAt: string | null
 }
 
+interface LoggedWorkoutEditSession {
+  log: WorkoutLog
+  exercises: ActiveExercise[]
+}
+
 const ACTIVE_WORKOUT_SESSION_KEY = 'rivora-active-workout-session'
 
 interface MetProfile {
@@ -84,6 +89,21 @@ function formatWorkoutTime(iso?: string) {
   const date = new Date(iso)
   if (Number.isNaN(date.getTime())) return '—'
   return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+}
+
+function applyWorkoutDateToTimestamp(date: string, sourceIso?: string, fallback?: Date) {
+  const sourceDate = sourceIso ? new Date(sourceIso) : fallback
+  if (!sourceDate || Number.isNaN(sourceDate.getTime())) return new Date(`${date}T12:00:00`).toISOString()
+
+  const normalized = new Date(`${date}T12:00:00`)
+  normalized.setHours(
+    sourceDate.getHours(),
+    sourceDate.getMinutes(),
+    sourceDate.getSeconds(),
+    sourceDate.getMilliseconds(),
+  )
+
+  return normalized.toISOString()
 }
 
 function formatWorkoutDuration(startedAt?: string, completedAt?: string, durationMin?: number) {
@@ -528,6 +548,73 @@ function createActiveExercisesFromWorkout(workout: Workout): ActiveExercise[] {
   }))
 }
 
+function createActiveExercisesFromWorkoutLog(log: WorkoutLog): ActiveExercise[] {
+  const templateByKey = new Map<string, WorkoutExercise>()
+
+  log.workout.exercises.forEach((exercise) => {
+    templateByKey.set(`id:${exercise.exercise.id}`, exercise)
+    templateByKey.set(`name:${exercise.exercise.name.toLowerCase()}`, exercise)
+  })
+
+  return log.exercises.map((loggedExercise) => {
+    const templateExercise =
+      templateByKey.get(`id:${loggedExercise.exercise_id}`) ??
+      templateByKey.get(`name:${loggedExercise.exercise_name.toLowerCase()}`)
+
+    const exercise =
+      templateExercise?.exercise ??
+      EXERCISE_LIBRARY.find((item) => item.id === loggedExercise.exercise_id) ??
+      EXERCISE_LIBRARY.find((item) => item.name.toLowerCase() === loggedExercise.exercise_name.toLowerCase()) ??
+      createCustomExercise(loggedExercise.exercise_name).exercise
+
+    return {
+      exercise: {
+        ...exercise,
+        set_metric: exercise.set_metric ?? templateExercise?.exercise.set_metric ?? inferExerciseSetMetric(exercise),
+      },
+      sets: normalizeSetNumbers(
+        loggedExercise.sets.map((set, setIndex) => {
+          const templateSet =
+            templateExercise?.sets.find((candidate) =>
+              candidate.set_number === set.set_number &&
+              (candidate.set_type ?? 'standard') === (set.set_type ?? 'standard') &&
+              (candidate.drop_set_index ?? 0) === (set.drop_set_index ?? 0)
+            ) ??
+            templateExercise?.sets[setIndex]
+
+          return {
+            set_number: set.set_number,
+            set_type: set.set_type ?? templateSet?.set_type ?? 'standard',
+            drop_from_set_number:
+              set.drop_from_set_number ??
+              templateSet?.drop_from_set_number ??
+              ((set.set_type ?? templateSet?.set_type) === 'drop' ? set.set_number : undefined),
+            drop_set_index: set.drop_set_index ?? templateSet?.drop_set_index,
+            reps: Math.max(0, set.target_reps ?? templateSet?.reps ?? 0),
+            weight_kg: Math.max(0, Number(templateSet?.weight_kg ?? set.weight_kg ?? 0)),
+            incline_pct: templateSet?.incline_pct ?? set.incline_pct,
+            speed_mph: templateSet?.speed_mph ?? set.speed_mph,
+            machine_level: templateSet?.machine_level ?? set.machine_level,
+            resistance_level: templateSet?.resistance_level ?? set.resistance_level,
+            watts: templateSet?.watts ?? set.watts,
+            cadence_rpm: templateSet?.cadence_rpm ?? set.cadence_rpm,
+            rest_seconds: Math.max(0, Number(templateSet?.rest_seconds ?? 60)),
+            completed: true,
+            actual_reps: Math.max(0, set.actual_reps ?? set.target_reps ?? templateSet?.reps ?? 0),
+            actual_weight: Math.max(0, Number(set.weight_kg ?? templateSet?.weight_kg ?? 0)),
+            actual_speed_mph: set.speed_mph ?? templateSet?.speed_mph,
+            actual_incline_pct: set.incline_pct ?? templateSet?.incline_pct,
+            actual_machine_level: set.machine_level ?? templateSet?.machine_level,
+            actual_resistance_level: set.resistance_level ?? templateSet?.resistance_level,
+            actual_watts: set.watts ?? templateSet?.watts,
+            actual_cadence_rpm: set.cadence_rpm ?? templateSet?.cadence_rpm,
+          }
+        })
+      ),
+    }
+  })
+}
+
 function normalizeActiveExercisesForWorkout(exercises: ActiveExercise[]): WorkoutExercise[] {
   return exercises.map((exercise) => ({
     exercise: exercise.exercise,
@@ -846,6 +933,28 @@ function summarizeExercises(exercises: WorkoutExercise[], metProfile: MetProfile
   }
 }
 
+function buildEditableExercisesFromLog(log: WorkoutLog): EditableWorkoutExercise[] {
+  return createActiveExercisesFromWorkoutLog(log).map((exercise, exerciseIndex) => ({
+    exercise: exercise.exercise,
+    sets: exercise.sets.map((set) => ({
+      set_number: set.set_number,
+      set_type: set.set_type,
+      drop_from_set_number: set.drop_from_set_number,
+      drop_set_index: set.drop_set_index,
+      reps: set.actual_reps ?? set.reps ?? 0,
+      weight_kg: set.actual_weight ?? set.weight_kg ?? 0,
+      incline_pct: set.actual_incline_pct ?? set.incline_pct,
+      speed_mph: set.actual_speed_mph ?? set.speed_mph,
+      machine_level: set.actual_machine_level ?? set.machine_level,
+      resistance_level: set.actual_resistance_level ?? set.resistance_level,
+      watts: set.actual_watts ?? set.watts,
+      cadence_rpm: set.actual_cadence_rpm ?? set.cadence_rpm,
+      rest_seconds: set.rest_seconds,
+    })),
+    instanceId: `logged-${exercise.exercise.id}-${exerciseIndex}-${Date.now()}`,
+  }))
+}
+
 function SavedWorkoutCard({
   workout,
   averageDurationMin,
@@ -979,15 +1088,15 @@ function TodayWorkoutBanner({
       </div>
       <div className="grid gap-2 sm:grid-cols-2">
         {prioritized.map((w) => (
-          <div key={w.id} className="flex items-center justify-between gap-2 rounded-xl border border-border/50 bg-background/60 px-3 py-2.5">
+          <div key={w.id} className="flex flex-col gap-3 rounded-xl border border-border/50 bg-background/60 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
-              <p className="text-sm font-medium truncate">{w.name}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
+              <p className="text-sm font-medium leading-5 sm:truncate">{w.name}</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
                 {w.exercises.length} exercises · <span className="capitalize">{w.difficulty}</span>
                 {w.source !== 'premade' && <span className="ml-1.5 rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400">Saved</span>}
               </p>
             </div>
-            <div className="flex items-center gap-1.5 shrink-0">
+            <div className="flex items-center justify-end gap-1.5 sm:shrink-0">
               <Button variant="ghost" size="icon-sm" onClick={() => onPreview(w)} title="Preview">
                 <Eye className="w-3.5 h-3.5" />
               </Button>
@@ -1775,6 +1884,8 @@ function ActiveWorkoutModal({
   onPause,
   onSessionChange,
   onComplete,
+  mode = 'live',
+  lockedTiming,
 }: {
   workout: Workout
   metProfile: MetProfile
@@ -1786,7 +1897,15 @@ function ActiveWorkoutModal({
   onPause: () => void
   onSessionChange: (exercises: ActiveExercise[], startedAt?: string | null) => void
   onComplete: (payload: { exercises: ActiveExercise[]; caloriesBurned: number; totalVolumeKg: number; durationMin: number }, options?: { saveAsTemplate?: boolean; templateName?: string }) => void
+  mode?: 'live' | 'edit-log'
+  lockedTiming?: {
+    date: string
+    startedAt?: string | null
+    completedAt?: string | null
+    durationMin?: number
+  }
 }) {
+  const isEditMode = mode === 'edit-log'
   // Build a lookup of most recent performance per exercise id
   const lastPerformance = useMemo(() => {
     const map: Record<string, { date: string; sets: Array<{ actual_reps: number; weight_kg: number }> }> = {}
@@ -1814,7 +1933,7 @@ function ActiveWorkoutModal({
   const [apiLiveSuggestions, setApiLiveSuggestions] = useState<ExerciseLibraryItem[]>([])
   const [timeUnits, setTimeUnits] = useState<Record<string, 'sec' | 'min'>>({})
   const [previewExercise, setPreviewExercise] = useState<Exercise | null>(null)
-  const [startedAt, setStartedAt] = useState<string | null>(initialStartedAt ?? null)
+  const [startedAt, setStartedAt] = useState<string | null>(isEditMode ? (lockedTiming?.startedAt ?? null) : (initialStartedAt ?? null))
   const [nowMs, setNowMs] = useState(() => Date.now())
   const [restEndsAtMs, setRestEndsAtMs] = useState<number | null>(null)
   const [showSaveRoutineName, setShowSaveRoutineName] = useState(false)
@@ -1855,20 +1974,21 @@ function ActiveWorkoutModal({
   useEffect(() => {
     if (initialExercises && initialExercises.length > 0) {
       setExercises(initialExercises)
-      setStartedAt(initialStartedAt ?? null)
+      setStartedAt(isEditMode ? (lockedTiming?.startedAt ?? null) : (initialStartedAt ?? null))
       return
     }
     setExercises(createActiveExercisesFromWorkout(workout))
-    setStartedAt(initialStartedAt ?? null)
-  }, [initialExercises, initialStartedAt, workout])
+    setStartedAt(isEditMode ? (lockedTiming?.startedAt ?? null) : (initialStartedAt ?? null))
+  }, [initialExercises, initialStartedAt, isEditMode, lockedTiming?.startedAt, workout])
 
   useEffect(() => {
+    if (isEditMode) return
     const hasCompletedSet = exercises.some((exercise) => exercise.sets.some((set) => set.completed))
     if (!hasCompletedSet) {
       setStartedAt(null)
       setRestEndsAtMs(null)
     }
-  }, [exercises])
+  }, [exercises, isEditMode])
 
   useEffect(() => {
     setSaveRoutineName(`${workout.name} (${getTodayISO()})`)
@@ -1876,12 +1996,13 @@ function ActiveWorkoutModal({
   }, [workout.id, workout.name])
 
   useEffect(() => {
+    if (isEditMode) return
     if (!startedAt && !restEndsAtMs) return
     const timer = window.setInterval(() => {
       setNowMs(Date.now())
     }, 1000)
     return () => window.clearInterval(timer)
-  }, [startedAt, restEndsAtMs])
+  }, [isEditMode, startedAt, restEndsAtMs])
 
   useEffect(() => {
     if (restEndsAtMs && restEndsAtMs <= nowMs) {
@@ -1897,12 +2018,13 @@ function ActiveWorkoutModal({
   const totalSets = exercises.flatMap((exercise) => exercise.sets).length
   const progress = totalSets > 0 ? Math.round((completedSets / totalSets) * 100) : 0
   const liveDurationSeconds = useMemo(() => {
+    if (isEditMode) return 0
     if (!startedAt) return 0
     const startedMs = new Date(startedAt).getTime()
     if (Number.isNaN(startedMs)) return 0
     return Math.max(0, Math.floor((nowMs - startedMs) / 1000))
-  }, [nowMs, startedAt])
-  const restRemainingSeconds = restEndsAtMs ? Math.max(0, Math.ceil((restEndsAtMs - nowMs) / 1000)) : 0
+  }, [isEditMode, nowMs, startedAt])
+  const restRemainingSeconds = isEditMode ? 0 : (restEndsAtMs ? Math.max(0, Math.ceil((restEndsAtMs - nowMs) / 1000)) : 0)
   const liveSuggestions = useMemo(() => {
     const query = exerciseSearch.trim()
     if (query.length < 1) return []
@@ -2094,6 +2216,22 @@ function ActiveWorkoutModal({
   }
 
   const toggleSet = (exerciseIndex: number, setIndex: number) => {
+    if (isEditMode) {
+      setExercises((current) =>
+        current.map((exercise, currentExerciseIndex) =>
+          currentExerciseIndex === exerciseIndex
+            ? {
+                ...exercise,
+                sets: exercise.sets.map((set, currentSetIndex) =>
+                  currentSetIndex === setIndex ? { ...set, completed: !set.completed } : set
+                ),
+              }
+            : exercise
+        )
+      )
+      return
+    }
+
     let toggledToCompleted = false
     let restSecondsForSet = 0
 
@@ -2345,21 +2483,27 @@ function ActiveWorkoutModal({
     </div>
   )
 
+  const lockedDurationLabel = lockedTiming?.durationMin ? formatAverageWorkoutTime(lockedTiming.durationMin) : '—'
+  const lockedStartedLabel = lockedTiming?.startedAt ? formatWorkoutTime(lockedTiming.startedAt) : '—'
+  const lockedCompletedLabel = lockedTiming?.completedAt ? formatWorkoutTime(lockedTiming.completedAt) : '—'
+
   return (
     <DialogContent className="flex max-h-[92vh] w-[calc(100vw-1rem)] max-w-3xl flex-col overflow-hidden p-0">
       <DialogHeader className="flex-shrink-0 px-3 pb-0 pt-3 sm:px-6 sm:pt-6">
-        <DialogTitle>{workout.name}</DialogTitle>
+        <DialogTitle>{isEditMode ? `Edit ${workout.name}` : workout.name}</DialogTitle>
       </DialogHeader>
 
       <div className="relative flex min-h-0 flex-1">
-        <WorkoutTimerStrip
-          durationSeconds={liveDurationSeconds}
-          restSeconds={restRemainingSeconds}
-          progress={progress}
-          isTimerStarted={startedAt !== null}
-          onStartTimer={() => setStartedAt(new Date().toISOString())}
-          onSkipRest={() => setRestEndsAtMs(null)}
-        />
+        {!isEditMode && (
+          <WorkoutTimerStrip
+            durationSeconds={liveDurationSeconds}
+            restSeconds={restRemainingSeconds}
+            progress={progress}
+            isTimerStarted={startedAt !== null}
+            onStartTimer={() => setStartedAt(new Date().toISOString())}
+            onSkipRest={() => setRestEndsAtMs(null)}
+          />
+        )}
         <div className="min-w-0 flex-1 overflow-y-auto px-3 pb-3 sm:px-6 sm:pb-6">
           <div className="space-y-5 pb-16 sm:pb-0">
             <div className="grid grid-cols-2 gap-2">
@@ -2371,19 +2515,52 @@ function ActiveWorkoutModal({
             <p className="font-data text-2xl font-semibold">{summary.caloriesBurned}</p>
             <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Est. kcal</p>
           </div>
-          <div className="rounded-2xl border border-border/60 bg-card px-4 py-3 sm:hidden">
-            <p className="font-data text-2xl font-semibold">{formatElapsedSeconds(liveDurationSeconds)}</p>
-            <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Live timer</p>
-          </div>
-          <div className="rounded-2xl border border-border/60 bg-card px-4 py-3 sm:hidden">
-            <p className="font-data text-2xl font-semibold">{restRemainingSeconds > 0 ? formatElapsedSeconds(restRemainingSeconds) : '—'}</p>
-            <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Rest</p>
-          </div>
+          {isEditMode ? (
+            <>
+              <div className="rounded-2xl border border-border/60 bg-card px-4 py-3 sm:hidden">
+                <p className="font-data text-2xl font-semibold">{lockedDurationLabel}</p>
+                <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Logged time</p>
+              </div>
+              <div className="rounded-2xl border border-border/60 bg-card px-4 py-3 sm:hidden">
+                <p className="font-data text-2xl font-semibold">{lockedStartedLabel}</p>
+                <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Started</p>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="rounded-2xl border border-border/60 bg-card px-4 py-3 sm:hidden">
+                <p className="font-data text-2xl font-semibold">{formatElapsedSeconds(liveDurationSeconds)}</p>
+                <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Live timer</p>
+              </div>
+              <div className="rounded-2xl border border-border/60 bg-card px-4 py-3 sm:hidden">
+                <p className="font-data text-2xl font-semibold">{restRemainingSeconds > 0 ? formatElapsedSeconds(restRemainingSeconds) : '—'}</p>
+                <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Rest</p>
+              </div>
+            </>
+          )}
         </div>
 
         <Progress value={progress} indicatorClassName="bg-emerald-500" className="h-1.5" />
 
-        {startedAt && (
+        {isEditMode ? (
+          <div className="rounded-2xl border border-border/60 bg-muted/10 px-4 py-3">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div>
+                <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Logged date</p>
+                <p className="mt-1 text-sm text-foreground/90">{lockedTiming?.date ?? getTodayISO()}</p>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Started</p>
+                <p className="mt-1 text-sm text-foreground/90">{lockedStartedLabel}</p>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Finished</p>
+                <p className="mt-1 text-sm text-foreground/90">{lockedCompletedLabel} · {lockedDurationLabel}</p>
+              </div>
+            </div>
+            <p className="mt-3 text-xs text-muted-foreground">You can tweak the exercises and sets here without changing the original session timing.</p>
+          </div>
+        ) : startedAt && (
           <div className="rounded-2xl border border-border/60 bg-muted/10 px-4 py-3 sm:hidden">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div className="space-y-1">
@@ -2411,7 +2588,10 @@ function ActiveWorkoutModal({
           </Button>
         </div>
 
-        {renderExerciseAdder('Add another exercise', 'Search and drop a movement into this live workout.')}
+        {renderExerciseAdder(
+          isEditMode ? 'Add another exercise' : 'Add another exercise',
+          isEditMode ? 'Adjust this completed workout with extra movements if you need to.' : 'Search and drop a movement into this live workout.'
+        )}
 
         <div className="space-y-4">
           {exercises.map((exercise, exerciseIndex) => {
@@ -2538,21 +2718,21 @@ function ActiveWorkoutModal({
                         type="number"
                         value={formatNumericInput(set.actual_speed_mph)}
                         onChange={(e) => updateSet(exerciseIndex, setIndex, 'actual_speed_mph', e.target.value === '' ? undefined : Number(e.target.value))}
-                        disabled={set.completed}
+                        disabled={!isEditMode && set.completed}
                         placeholder="Speed MPH"
                       />
                       <Input
                         type="number"
                         value={formatNumericInput(set.actual_incline_pct)}
                         onChange={(e) => updateSet(exerciseIndex, setIndex, 'actual_incline_pct', e.target.value === '' ? undefined : Number(e.target.value))}
-                        disabled={set.completed}
+                        disabled={!isEditMode && set.completed}
                         placeholder="Incline %"
                       />
                       <Input
                         type="number"
                         value={formatNumericInput(set.actual_reps)}
                         onChange={(e) => updateSet(exerciseIndex, setIndex, 'actual_reps', e.target.value === '' ? undefined : Number(e.target.value))}
-                        disabled={set.completed}
+                        disabled={!isEditMode && set.completed}
                         placeholder="Minutes"
                       />
                       <button type="button" className="justify-self-end sm:justify-self-auto" onClick={() => toggleSet(exerciseIndex, setIndex)}>
@@ -2565,24 +2745,24 @@ function ActiveWorkoutModal({
                   ) : inputMode === 'run_walk' ? (
                     <div key={`${exercise.exercise.id}-${setIndex}`} className={`grid grid-cols-[2.75rem_minmax(0,1fr)_minmax(0,1fr)_1.75rem_1.75rem] items-center gap-1.5 rounded-xl border px-3 py-2 sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto_auto] sm:gap-2 ${set.completed ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-border/50 bg-muted/10'}`}>
                       <span className="font-data text-xs">{getShortSetDisplayName(set)}</span>
-                      <Input type="number" value={formatNumericInput(set.actual_speed_mph)} onChange={(e) => updateSet(exerciseIndex, setIndex, 'actual_speed_mph', e.target.value === '' ? undefined : Number(e.target.value))} disabled={set.completed} placeholder="Speed MPH" />
-                      <Input type="number" value={formatNumericInput(set.actual_reps)} onChange={(e) => updateSet(exerciseIndex, setIndex, 'actual_reps', e.target.value === '' ? undefined : Number(e.target.value))} disabled={set.completed} placeholder="Minutes" />
+                      <Input type="number" value={formatNumericInput(set.actual_speed_mph)} onChange={(e) => updateSet(exerciseIndex, setIndex, 'actual_speed_mph', e.target.value === '' ? undefined : Number(e.target.value))} disabled={!isEditMode && set.completed} placeholder="Speed MPH" />
+                      <Input type="number" value={formatNumericInput(set.actual_reps)} onChange={(e) => updateSet(exerciseIndex, setIndex, 'actual_reps', e.target.value === '' ? undefined : Number(e.target.value))} disabled={!isEditMode && set.completed} placeholder="Minutes" />
                       <button type="button" className="justify-self-end sm:justify-self-auto" onClick={() => toggleSet(exerciseIndex, setIndex)}>{set.completed ? <CheckCircle className="h-5 w-5 text-emerald-400" /> : <Circle className="h-5 w-5 text-muted-foreground" />}</button>
                       <Button type="button" variant="ghost" size="icon-sm" className="justify-self-end sm:justify-self-auto" onClick={() => removeSetFromExercise(exerciseIndex, setIndex)} disabled={exercise.sets.length <= 1}><X className="h-3.5 w-3.5" /></Button>
                     </div>
                   ) : inputMode === 'bike' || inputMode === 'rower' ? (
                     <div key={`${exercise.exercise.id}-${setIndex}`} className={`grid grid-cols-[2.75rem_minmax(0,1fr)_minmax(0,1fr)_1.75rem_1.75rem] items-center gap-1.5 rounded-xl border px-3 py-2 sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto_auto] sm:gap-2 ${set.completed ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-border/50 bg-muted/10'}`}>
                       <span className="font-data text-xs">{getShortSetDisplayName(set)}</span>
-                      <Input type="number" value={formatNumericInput(set.actual_watts)} onChange={(e) => updateSet(exerciseIndex, setIndex, 'actual_watts', e.target.value === '' ? undefined : Number(e.target.value))} disabled={set.completed} placeholder="Watts" />
-                      <Input type="number" value={formatNumericInput(set.actual_reps)} onChange={(e) => updateSet(exerciseIndex, setIndex, 'actual_reps', e.target.value === '' ? undefined : Number(e.target.value))} disabled={set.completed} placeholder="Minutes" />
+                      <Input type="number" value={formatNumericInput(set.actual_watts)} onChange={(e) => updateSet(exerciseIndex, setIndex, 'actual_watts', e.target.value === '' ? undefined : Number(e.target.value))} disabled={!isEditMode && set.completed} placeholder="Watts" />
+                      <Input type="number" value={formatNumericInput(set.actual_reps)} onChange={(e) => updateSet(exerciseIndex, setIndex, 'actual_reps', e.target.value === '' ? undefined : Number(e.target.value))} disabled={!isEditMode && set.completed} placeholder="Minutes" />
                       <button type="button" className="justify-self-end sm:justify-self-auto" onClick={() => toggleSet(exerciseIndex, setIndex)}>{set.completed ? <CheckCircle className="h-5 w-5 text-emerald-400" /> : <Circle className="h-5 w-5 text-muted-foreground" />}</button>
                       <Button type="button" variant="ghost" size="icon-sm" className="justify-self-end sm:justify-self-auto" onClick={() => removeSetFromExercise(exerciseIndex, setIndex)} disabled={exercise.sets.length <= 1}><X className="h-3.5 w-3.5" /></Button>
                     </div>
                   ) : inputMode === 'level_cardio' || inputMode === 'basic_cardio' ? (
                     <div key={`${exercise.exercise.id}-${setIndex}`} className={`grid grid-cols-[2.75rem_minmax(0,1fr)_minmax(0,1fr)_1.75rem_1.75rem] items-center gap-1.5 rounded-xl border px-3 py-2 sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto_auto] sm:gap-2 ${set.completed ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-border/50 bg-muted/10'}`}>
                       <span className="font-data text-xs">{getShortSetDisplayName(set)}</span>
-                      <Input type="number" value={formatNumericInput(set.actual_machine_level)} onChange={(e) => updateSet(exerciseIndex, setIndex, 'actual_machine_level', e.target.value === '' ? undefined : Number(e.target.value))} disabled={set.completed} placeholder="Level" />
-                      <Input type="number" value={formatNumericInput(set.actual_reps)} onChange={(e) => updateSet(exerciseIndex, setIndex, 'actual_reps', e.target.value === '' ? undefined : Number(e.target.value))} disabled={set.completed} placeholder="Minutes" />
+                      <Input type="number" value={formatNumericInput(set.actual_machine_level)} onChange={(e) => updateSet(exerciseIndex, setIndex, 'actual_machine_level', e.target.value === '' ? undefined : Number(e.target.value))} disabled={!isEditMode && set.completed} placeholder="Level" />
+                      <Input type="number" value={formatNumericInput(set.actual_reps)} onChange={(e) => updateSet(exerciseIndex, setIndex, 'actual_reps', e.target.value === '' ? undefined : Number(e.target.value))} disabled={!isEditMode && set.completed} placeholder="Minutes" />
                       <button type="button" className="justify-self-end sm:justify-self-auto" onClick={() => toggleSet(exerciseIndex, setIndex)}>{set.completed ? <CheckCircle className="h-5 w-5 text-emerald-400" /> : <Circle className="h-5 w-5 text-muted-foreground" />}</button>
                       <Button type="button" variant="ghost" size="icon-sm" className="justify-self-end sm:justify-self-auto" onClick={() => removeSetFromExercise(exerciseIndex, setIndex)} disabled={exercise.sets.length <= 1}><X className="h-3.5 w-3.5" /></Button>
                     </div>
@@ -2599,7 +2779,7 @@ function ActiveWorkoutModal({
                         type="number"
                         value={formatWorkoutWeightInput(set.actual_weight, unitSystem)}
                         onChange={(e) => updateSet(exerciseIndex, setIndex, 'actual_weight', e.target.value === '' ? undefined : parseWorkoutWeightInput(e.target.value, unitSystem))}
-                        disabled={set.completed}
+                        disabled={!isEditMode && set.completed}
                         placeholder={isCardioExercise(exercise.exercise)
                           ? `Incline / load (${getWeightUnitLabel(unitSystem)})`
                           : isAssistedPullExercise(exercise.exercise)
@@ -2610,7 +2790,7 @@ function ActiveWorkoutModal({
                           type="number"
                           value={formatNumericInput(set.actual_reps)}
                           onChange={(e) => updateSet(exerciseIndex, setIndex, 'actual_reps', e.target.value === '' ? undefined : Number(e.target.value))}
-                          disabled={set.completed}
+                          disabled={!isEditMode && set.completed}
                           placeholder={getSetMetricPlaceholder(exercise.exercise)}
                         />
                       <button type="button" className="justify-self-end sm:justify-self-auto" onClick={() => toggleSet(exerciseIndex, setIndex)}>
@@ -2642,54 +2822,73 @@ function ActiveWorkoutModal({
 
         {renderExerciseAdder('Need one more?', 'Add another exercise here without scrolling back to the top.')}
 
-        <div className="rounded-2xl border border-border/60 bg-muted/10 p-4">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold">Saved workout name</p>
-              <p className="text-xs text-muted-foreground">Default keeps today&apos;s date, but you can rename it before saving.</p>
+        {!isEditMode && (
+          <>
+            <div className="rounded-2xl border border-border/60 bg-muted/10 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold">Saved workout name</p>
+                  <p className="text-xs text-muted-foreground">Default keeps today&apos;s date, but you can rename it before saving.</p>
+                </div>
+                <Button type="button" variant="ghost" size="sm" onClick={() => setShowSaveRoutineName((current) => !current)}>
+                  {showSaveRoutineName ? 'Hide' : 'Rename'}
+                </Button>
+              </div>
+              {showSaveRoutineName && (
+                <Input
+                  className="mt-3"
+                  value={saveRoutineName}
+                  onChange={(e) => setSaveRoutineName(e.target.value)}
+                  placeholder={`${workout.name} (${getTodayISO()})`}
+                />
+              )}
             </div>
-            <Button type="button" variant="ghost" size="sm" onClick={() => setShowSaveRoutineName((current) => !current)}>
-              {showSaveRoutineName ? 'Hide' : 'Rename'}
+
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+              <Button variant="outline" className="w-full sm:min-w-[80px] sm:flex-1" onClick={onPause}>Pause</Button>
+              <Button
+                variant="outline"
+                className="w-full gap-2 sm:flex-1"
+                onClick={() => handleCompleteWorkout({ saveAsTemplate: true, templateName: saveRoutineName.trim() || `${workout.name} (${getTodayISO()})` })}
+                disabled={isCompleting}
+              >
+                {isCompleting ? <><span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" /> Saving…</> : <><Copy className="h-4 w-4" /> Complete & Save Routine</>}
+              </Button>
+              <Button
+                variant="brand"
+                className="w-full gap-2 sm:flex-1"
+                onClick={() => handleCompleteWorkout()}
+                disabled={isCompleting}
+              >
+                {isCompleting ? <><span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" /> Saving…</> : <><Trophy className="h-4 w-4" /> Complete Workout</>}
+              </Button>
+            </div>
+          </>
+        )}
+        {isEditMode && (
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Button variant="outline" className="w-full sm:flex-1" onClick={onClose}>Cancel</Button>
+            <Button
+              variant="brand"
+              className="w-full gap-2 sm:flex-1"
+              onClick={() => handleCompleteWorkout()}
+              disabled={isCompleting}
+            >
+              {isCompleting ? <><span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" /> Updating…</> : <><Pencil className="h-4 w-4" /> Update Workout</>}
             </Button>
           </div>
-          {showSaveRoutineName && (
-            <Input
-              className="mt-3"
-              value={saveRoutineName}
-              onChange={(e) => setSaveRoutineName(e.target.value)}
-              placeholder={`${workout.name} (${getTodayISO()})`}
-            />
-          )}
-        </div>
-
-        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-          <Button variant="outline" className="w-full sm:min-w-[80px] sm:flex-1" onClick={onPause}>Pause</Button>
-          <Button
-            variant="outline"
-            className="w-full gap-2 sm:flex-1"
-            onClick={() => handleCompleteWorkout({ saveAsTemplate: true, templateName: saveRoutineName.trim() || `${workout.name} (${getTodayISO()})` })}
-            disabled={isCompleting}
-          >
-            {isCompleting ? <><span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" /> Saving…</> : <><Copy className="h-4 w-4" /> Complete & Save Routine</>}
-          </Button>
-          <Button
-            variant="brand"
-            className="w-full gap-2 sm:flex-1"
-            onClick={() => handleCompleteWorkout()}
-            disabled={isCompleting}
-          >
-            {isCompleting ? <><span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" /> Saving…</> : <><Trophy className="h-4 w-4" /> Complete Workout</>}
-          </Button>
-        </div>
+        )}
           </div>
         </div>
-        <WorkoutTimerBar
-          durationSeconds={liveDurationSeconds}
-          restSeconds={restRemainingSeconds}
-          isTimerStarted={startedAt !== null}
-          onStartTimer={() => setStartedAt(new Date().toISOString())}
-          onSkipRest={() => setRestEndsAtMs(null)}
-        />
+        {!isEditMode && (
+          <WorkoutTimerBar
+            durationSeconds={liveDurationSeconds}
+            restSeconds={restRemainingSeconds}
+            isTimerStarted={startedAt !== null}
+            onStartTimer={() => setStartedAt(new Date().toISOString())}
+            onSkipRest={() => setRestEndsAtMs(null)}
+          />
+        )}
       </div>
       <ExercisePreviewDialog exercise={previewExercise} onClose={() => setPreviewExercise(null)} />
     </DialogContent>
@@ -2812,25 +3011,34 @@ export default function WorkoutsPage() {
     logWorkout,
     updateWorkoutLog,
     removeWorkoutLog,
+    journalEntries,
     user,
     isDemoMode,
     customWorkouts,
     addCustomWorkout,
     updateCustomWorkout,
     removeCustomWorkout,
+    updateProfile,
   } = useAppStore()
 
   const [previewExercise, setPreviewExercise] = useState<Exercise | null>(null)
   const [previewWorkout, setPreviewWorkout] = useState<Workout | null>(null)
-  const [tab, setTab] = useState<'log' | 'saved'>('log')
+  const [tab, setTab] = useState<'log' | 'saved' | 'premade'>('log')
   const [runningWorkout, setRunningWorkout] = useState<Workout | null>(null)
   const [activeWorkoutSession, setActiveWorkoutSession] = useState<PersistedActiveWorkoutSession | null>(null)
   const [didAutoResumeFromQuery, setDidAutoResumeFromQuery] = useState(false)
   const [builderOpen, setBuilderOpen] = useState(false)
   const [editingWorkout, setEditingWorkout] = useState<Workout | null>(null)
   const [editingLoggedWorkoutId, setEditingLoggedWorkoutId] = useState<string | null>(null)
+  const [editingLoggedWorkoutSession, setEditingLoggedWorkoutSession] = useState<LoggedWorkoutEditSession | null>(null)
   const [remoteCustomWorkouts, setRemoteCustomWorkouts] = useState<Workout[]>([])
   const [savedWorkoutsLoading, setSavedWorkoutsLoading] = useState(false)
+  const [isSplitDialogOpen, setIsSplitDialogOpen] = useState(false)
+  const [draftSplit, setDraftSplit] = useState<WorkoutSplit>(user?.workout_split ?? 'ppl')
+  const [draftSchedule, setDraftSchedule] = useState<SplitSchedule>(
+    user?.split_schedule ?? buildDefaultSchedule(user?.workout_split ?? 'ppl')
+  )
+  const [splitSaving, setSplitSaving] = useState(false)
 
   const [expandedLogId, setExpandedLogId] = useState<string | null>(null)
   const [premadeSearch, setPremadeSearch] = useState('')
@@ -2851,6 +3059,7 @@ export default function WorkoutsPage() {
   const [manualSearch, setManualSearch] = useState('')
   const [manualAction, setManualAction] = useState<'log' | 'save'>('log')
   const [manualWorkoutName, setManualWorkoutName] = useState('')
+  const [manualWorkoutDate, setManualWorkoutDate] = useState(getTodayISO())
   const [manualExercises, setManualExercises] = useState<EditableWorkoutExercise[]>([])
   const [pendingExercise, setPendingExercise] = useState<EditableWorkoutExercise | null>(null)
   const [manualSuggestionIndex, setManualSuggestionIndex] = useState(0)
@@ -2883,7 +3092,6 @@ export default function WorkoutsPage() {
   const shouldResumeFromQuery = searchParams.get('resume') === '1'
 
   const workoutLibrary = useMemo(() => [...accountCustomWorkouts, ...WORKOUTS.map((workout) => ({ ...workout, source: 'premade' as const }))], [accountCustomWorkouts])
-
   const todayRecommendedWorkouts = useMemo(() => {
     const todayDay = getTodayWeekDay()
     const schedule = user?.split_schedule ?? buildDefaultSchedule(user?.workout_split ?? 'ppl')
@@ -2893,6 +3101,70 @@ export default function WorkoutsPage() {
   }, [user?.split_schedule, user?.workout_split, workoutLibrary])
   const todayWeekDay = getTodayWeekDay()
   const todaySplitDayType = (user?.split_schedule ?? buildDefaultSchedule(user?.workout_split ?? 'ppl'))[todayWeekDay]
+  const splitPillLabel = todaySplitDayType ? SPLIT_DAY_LABELS[todaySplitDayType] : 'Set split'
+  const linkedWorkoutRecoveryHeadsUp = useMemo(() => {
+    if (todayRecommendedWorkouts.length === 0) return null
+
+    const latestLinkedEntry = [...journalEntries]
+      .filter((entry: JournalEntry) => entry.linked_item?.type === 'workout' && (entry.workout_id || entry.linked_item?.id))
+      .sort((left, right) => right.updated_at.localeCompare(left.updated_at))[0]
+
+    if (!latestLinkedEntry) return null
+
+    const linkedLog = workoutLogs.find((log) =>
+      log.id === latestLinkedEntry.workout_id ||
+      log.id === latestLinkedEntry.linked_item?.id ||
+      log.workout_id === latestLinkedEntry.workout_id
+    )
+
+    if (!linkedLog) return null
+
+    const overlapsToday = linkedLog.workout.muscle_groups.some((muscle) =>
+      todayRecommendedWorkouts.some((workout) => workout.muscle_groups.includes(muscle))
+    )
+
+    if (!overlapsToday) return null
+
+    if (latestLinkedEntry.energy <= 2 || latestLinkedEntry.mood <= 2) {
+      return {
+        tone: 'caution' as const,
+        title: 'Recovery heads-up for today',
+        detail: `${latestLinkedEntry.linked_item?.label || linkedLog.workout.name} was logged with ${latestLinkedEntry.energy}/5 energy and ${latestLinkedEntry.mood}/5 mood. Consider the lighter option or pull a little volume back.`,
+      }
+    }
+
+    if (latestLinkedEntry.energy === 3 || latestLinkedEntry.mood === 3) {
+      return {
+        tone: 'steady' as const,
+        title: 'Moderate effort signal',
+        detail: `${latestLinkedEntry.linked_item?.label || linkedLog.workout.name} looked more middle-of-the-road in your journal. Today is probably best handled with solid execution over max intensity.`,
+      }
+    }
+
+    return null
+  }, [journalEntries, todayRecommendedWorkouts, workoutLogs])
+
+  const openSplitDialog = () => {
+    if (!user) return
+    setDraftSplit(user.workout_split ?? 'ppl')
+    setDraftSchedule(user.split_schedule ?? buildDefaultSchedule(user.workout_split ?? 'ppl'))
+    setIsSplitDialogOpen(true)
+  }
+
+  const handleSplitSave = async () => {
+    if (!user) return
+
+    setSplitSaving(true)
+    try {
+      await updateProfile({ workout_split: draftSplit, split_schedule: draftSchedule })
+      toast.success('Split schedule saved!')
+      setIsSplitDialogOpen(false)
+    } catch {
+      toast.error('Could not save split schedule.')
+    } finally {
+      setSplitSaving(false)
+    }
+  }
 
   const filteredPremadeWorkouts = useMemo(() => {
     return WORKOUTS.filter((w) => {
@@ -3411,7 +3683,7 @@ export default function WorkoutsPage() {
     }))
 
     const workoutName =
-      manualAction === 'save'
+      manualAction === 'save' || editingLoggedWorkoutId
         ? manualWorkoutName.trim()
         : normalizedExercises.length === 1
           ? normalizedExercises[0].exercise.name
@@ -3440,21 +3712,47 @@ export default function WorkoutsPage() {
       return
     }
 
-    if (manualAction === 'save' && !manualWorkoutName.trim()) {
-      toast.error('Name the workout before saving it.')
+    if ((manualAction === 'save' || editingLoggedWorkoutId) && !manualWorkoutName.trim()) {
+      toast.error(editingLoggedWorkoutId ? 'Name the workout before updating it.' : 'Name the workout before saving it.')
       return
     }
 
-    const workout = buildWorkoutFromManual()
+    if (editingLoggedWorkoutId && !manualWorkoutDate) {
+      toast.error('Choose a workout date before updating the log.')
+      return
+    }
+
+    const existingLog = editingLoggedWorkoutId
+      ? workoutLogs.find((log) => log.id === editingLoggedWorkoutId) ?? null
+      : null
+    const builtWorkout = buildWorkoutFromManual()
+    const workout = editingLoggedWorkoutId && existingLog
+      ? {
+          ...builtWorkout,
+          id: existingLog.workout_id || existingLog.workout.id,
+        }
+      : builtWorkout
 
     const logPayload = {
-      id: `wl-${Date.now()}`,
+      id: existingLog?.id || `wl-${Date.now()}`,
       user_id: user.id,
       workout_id: workout.id,
       workout,
-      date: getTodayISO(),
-      started_at: new Date(Date.now() - Math.max(1, manualSummary.durationMin) * 60000).toISOString(),
-      completed_at: new Date().toISOString(),
+      date: editingLoggedWorkoutId ? manualWorkoutDate : getTodayISO(),
+      started_at: editingLoggedWorkoutId
+        ? applyWorkoutDateToTimestamp(
+            manualWorkoutDate,
+            existingLog?.started_at,
+            new Date(Date.now() - Math.max(1, manualSummary.durationMin) * 60000),
+          )
+        : new Date(Date.now() - Math.max(1, manualSummary.durationMin) * 60000).toISOString(),
+      completed_at: editingLoggedWorkoutId
+        ? applyWorkoutDateToTimestamp(
+            manualWorkoutDate,
+            existingLog?.completed_at,
+            new Date(),
+          )
+        : new Date().toISOString(),
       duration_min: manualSummary.durationMin,
       calories_burned_kcal: manualSummary.caloriesBurned,
       total_volume_kg: manualSummary.totalVolumeKg,
@@ -3477,7 +3775,7 @@ export default function WorkoutsPage() {
           cadence_rpm: set.cadence_rpm,
         })),
       })),
-      rating: 4 as 4,
+      rating: existingLog?.rating || (4 as 4),
     }
 
     if (editingLoggedWorkoutId) {
@@ -3513,9 +3811,25 @@ export default function WorkoutsPage() {
       setManualSearch('')
       setManualAction('log')
       setManualWorkoutName('')
+      setManualWorkoutDate(getTodayISO())
       setManualExercises([])
       setEditingLoggedWorkoutId(null)
+      setPendingExercise(null)
     })
+  }
+
+  const closeLoggedWorkoutEditor = (options?: { silent?: boolean }) => {
+    setEditingLoggedWorkoutId(null)
+    setEditingLoggedWorkoutSession(null)
+    setManualAction('log')
+    setManualWorkoutName('')
+    setManualWorkoutDate(getTodayISO())
+    setManualExercises([])
+    setPendingExercise(null)
+    setManualSearch('')
+    if (!options?.silent) {
+      toast.success('Closed workout editor.')
+    }
   }
 
   const loadLoggedWorkoutForEdit = (logId: string) => {
@@ -3523,18 +3837,11 @@ export default function WorkoutsPage() {
     if (!target) return
 
     setEditingLoggedWorkoutId(logId)
-    setManualAction('log')
-    setManualWorkoutName(target.workout.name)
-    setManualExercises(
-      target.workout.exercises.map((exercise, exerciseIndex) => ({
-        ...exercise,
-        instanceId: `logged-${exercise.exercise.id}-${exerciseIndex}-${Date.now()}`,
-      }))
-    )
-    setPendingExercise(null)
-    setManualSearch('')
-    setTab('log')
-    toast.success('Loaded workout into logger for editing.')
+    setEditingLoggedWorkoutSession({
+      log: target,
+      exercises: createActiveExercisesFromWorkoutLog(target),
+    })
+    toast.success('Opened completed workout editor.')
   }
 
   const handleSaveWorkout = async (workout: Workout) => {
@@ -3607,10 +3914,21 @@ export default function WorkoutsPage() {
             <h2 className="font-display text-xl sm:text-3xl font-bold tracking-tight">Workouts</h2>
             <p className="text-sm text-muted-foreground">Log what you did today, then save it as a workout if you want to reuse it later.</p>
           </div>
-          <Button variant="outline" className="gap-2" onClick={() => { setEditingWorkout(null); setBuilderOpen(true) }}>
-            <Sparkles className="h-4 w-4" />
-            Build Workout
-          </Button>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-11 rounded-full border-emerald-500/35 bg-emerald-500/8 px-4 text-sm font-semibold text-emerald-300 hover:border-emerald-400/45 hover:bg-emerald-500/12 hover:text-emerald-200"
+              onClick={openSplitDialog}
+            >
+              <Zap className="mr-2 h-4 w-4" />
+              <span className="truncate">{splitPillLabel}</span>
+            </Button>
+            <Button variant="outline" className="h-11 gap-2 rounded-full px-4" onClick={() => { setEditingWorkout(null); setBuilderOpen(true) }}>
+              <Sparkles className="h-4 w-4" />
+              Build Workout
+            </Button>
+          </div>
         </div>
 
           {activeWorkoutSession && !runningWorkout && (
@@ -3659,12 +3977,117 @@ export default function WorkoutsPage() {
                 <p className="mt-2 text-sm text-muted-foreground">
                   {todaySplitDayType === 'rest'
                     ? 'Today is marked as a rest day in your split.'
-                    : 'Set your training split to get workout recommendations here.'}
+                    : todaySplitDayType
+                      ? `No workouts match your ${SPLIT_DAY_LABELS[todaySplitDayType].toLowerCase()} day yet. Save one, build one, or adjust your split.`
+                      : 'Set your training split to get workout recommendations here.'}
                 </p>
               </div>
             )}
           </div>
         </div>
+
+        {linkedWorkoutRecoveryHeadsUp && (
+          <div className={cn(
+            'rounded-2xl border px-4 py-3',
+            linkedWorkoutRecoveryHeadsUp.tone === 'caution'
+              ? 'border-amber-500/30 bg-amber-500/10'
+              : 'border-blue-500/30 bg-blue-500/10'
+          )}>
+            <p className="text-sm font-semibold">{linkedWorkoutRecoveryHeadsUp.title}</p>
+            <p className="mt-1 text-sm text-muted-foreground">{linkedWorkoutRecoveryHeadsUp.detail}</p>
+          </div>
+        )}
+
+        <Dialog open={isSplitDialogOpen} onOpenChange={setIsSplitDialogOpen}>
+          <DialogContent className="max-w-lg border-border/60 bg-card/95 p-0 backdrop-blur sm:max-h-[85vh]">
+            <DialogHeader className="border-b border-border/60 px-5 py-4">
+              <DialogTitle className="flex items-center gap-2 text-base">
+                <Zap className="h-4 w-4 text-emerald-400" />
+                Workout Split Schedule
+              </DialogTitle>
+              <DialogDescription>
+                Choose your training split and assign the workout type for each day.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-6 overflow-y-auto p-5">
+              <div className="space-y-2">
+                <Label>Training Split</Label>
+                <Select
+                  value={draftSplit}
+                  onValueChange={(value) => {
+                    const nextSplit = value as WorkoutSplit
+                    setDraftSplit(nextSplit)
+                    setDraftSchedule(buildDefaultSchedule(nextSplit))
+                  }}
+                >
+                  <SelectTrigger className="border-border/60 bg-background">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SPLIT_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Weekly Schedule</Label>
+                <div className="grid gap-2">
+                  {WEEK_DAYS.map((day) => (
+                    <div key={day} className="flex items-center gap-3">
+                      <span
+                        className={cn(
+                          'w-12 shrink-0 text-xs font-medium',
+                          day === todayWeekDay ? 'text-emerald-400' : 'text-muted-foreground'
+                        )}
+                      >
+                        {WEEK_DAY_LABELS[day]}
+                      </span>
+                      <Select
+                        value={draftSchedule[day as WeekDay] ?? 'rest'}
+                        onValueChange={(value) => setDraftSchedule((prev) => ({ ...prev, [day]: value as SplitDayType }))}
+                      >
+                        <SelectTrigger className="h-9 border-border/60 bg-background text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {SPLIT_DAY_OPTIONS[draftSplit].map((option) => (
+                            <SelectItem key={option} value={option} className="text-xs">
+                              {SPLIT_DAY_LABELS[option]}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 border-t border-border/60 px-5 py-4">
+              <button
+                type="button"
+                onClick={() => setIsSplitDialogOpen(false)}
+                className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSplitSave}
+                disabled={splitSaving}
+                className="inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-600 disabled:opacity-50"
+              >
+                {splitSaving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                Save Schedule
+              </button>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         <div className="hidden gap-3 md:grid md:grid-cols-4">
           <div className="rounded-2xl border border-border/60 bg-card px-4 py-4">
@@ -3686,14 +4109,17 @@ export default function WorkoutsPage() {
         </div>
       </div>
 
-      <Tabs value={tab} onValueChange={(value) => setTab(value as 'log' | 'saved')}>
-        <div className="border-b border-border/60">
-          <TabsList className="inline-flex h-auto items-center gap-0 bg-transparent p-0">
+      <Tabs value={tab} onValueChange={(value) => setTab(value as 'log' | 'saved' | 'premade')}>
+        <div className="overflow-x-auto border-b border-border/60 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <TabsList className="inline-flex h-auto min-w-max items-center gap-0 bg-transparent p-0">
             <TabsTrigger value="log" className="relative rounded-none border-0 bg-transparent px-4 py-2.5 text-sm font-medium text-muted-foreground shadow-none transition-none data-[state=active]:text-foreground data-[state=active]:after:absolute data-[state=active]:after:bottom-0 data-[state=active]:after:left-0 data-[state=active]:after:right-0 data-[state=active]:after:h-0.5 data-[state=active]:after:bg-primary">
               Log Workout
             </TabsTrigger>
             <TabsTrigger value="saved" className="relative rounded-none border-0 bg-transparent px-4 py-2.5 text-sm font-medium text-muted-foreground shadow-none transition-none data-[state=active]:text-foreground data-[state=active]:after:absolute data-[state=active]:after:bottom-0 data-[state=active]:after:left-0 data-[state=active]:after:right-0 data-[state=active]:after:h-0.5 data-[state=active]:after:bg-primary">
               Saved Workouts
+            </TabsTrigger>
+            <TabsTrigger value="premade" className="relative rounded-none border-0 bg-transparent px-4 py-2.5 text-sm font-medium text-muted-foreground shadow-none transition-none data-[state=active]:text-foreground data-[state=active]:after:absolute data-[state=active]:after:bottom-0 data-[state=active]:after:left-0 data-[state=active]:after:right-0 data-[state=active]:after:h-0.5 data-[state=active]:after:bg-primary">
+              Premade Workouts
             </TabsTrigger>
           </TabsList>
         </div>
@@ -4293,16 +4719,39 @@ export default function WorkoutsPage() {
                   </button>
                 </div>
 
-                {manualAction === 'save' && (
-                  <div className="mt-4 space-y-1.5">
-                    <Label>Saved workout name</Label>
-                    <Input value={manualWorkoutName} onChange={(e) => setManualWorkoutName(e.target.value)} placeholder="e.g. Upper body pump" />
+                {(manualAction === 'save' || editingLoggedWorkoutId) && (
+                  <div className="mt-4 space-y-3">
+                    <div className="space-y-1.5">
+                      <Label>{editingLoggedWorkoutId ? 'Workout name' : 'Saved workout name'}</Label>
+                      <Input
+                        value={manualWorkoutName}
+                        onChange={(e) => setManualWorkoutName(e.target.value)}
+                        placeholder={editingLoggedWorkoutId ? 'e.g. Upper body session' : 'e.g. Upper body pump'}
+                      />
+                    </div>
+                    {editingLoggedWorkoutId && (
+                      <div className="space-y-1.5">
+                        <Label>Workout date</Label>
+                        <Input
+                          type="date"
+                          value={manualWorkoutDate}
+                          onChange={(e) => setManualWorkoutDate(e.target.value)}
+                        />
+                      </div>
+                    )}
                   </div>
                 )}
 
-              <Button variant="brand" className="mt-4 w-full" onClick={handleLogManualWorkout}>
-                  {editingLoggedWorkoutId ? 'Update Logged Workout' : manualAction === 'save' ? 'Save Workout' : 'Log Workout'}
-                </Button>
+                <div className="mt-4 flex flex-col gap-2">
+                  <Button variant="brand" className="w-full" onClick={handleLogManualWorkout}>
+                    {editingLoggedWorkoutId ? 'Update Logged Workout' : manualAction === 'save' ? 'Save Workout' : 'Log Workout'}
+                  </Button>
+                  {editingLoggedWorkoutId && (
+                    <Button variant="outline" className="w-full" onClick={closeLoggedWorkoutEditor}>
+                      Close Editor
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -4592,7 +5041,7 @@ export default function WorkoutsPage() {
         <TabsContent value="saved" className="mt-6 space-y-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-lg font-semibold">Saved and premade workouts</p>
+              <p className="text-lg font-semibold">Saved workouts</p>
               <p className="mt-1 text-sm text-muted-foreground">Start a workout you already know, or edit it before you run it.</p>
             </div>
             <Button variant="outline" className="gap-2" onClick={() => { setEditingWorkout(null); setBuilderOpen(true) }}>
@@ -4747,11 +5196,13 @@ export default function WorkoutsPage() {
               <p className="mt-1 text-xs text-muted-foreground">This is where account-specific workout plans will appear.</p>
             </div>
           )}
+        </TabsContent>
 
+        <TabsContent value="premade" className="mt-6 space-y-6">
           <div className="space-y-4">
             <div>
-              <p className="text-sm font-semibold">Premade workouts</p>
-              <p className="text-xs text-muted-foreground">Use these as-is or tweak one into your own saved workout.</p>
+              <p className="text-lg font-semibold">Premade workouts</p>
+              <p className="mt-1 text-sm text-muted-foreground">Use these as-is or tweak one into your own saved workout.</p>
             </div>
 
             {/* Search + filters */}
@@ -4855,7 +5306,7 @@ export default function WorkoutsPage() {
             ) : (
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 {filteredPremadeWorkouts.map((workout) => (
-                  <SavedWorkoutCard key={workout.id} workout={{ ...workout, source: 'premade' }} averageDurationMin={averageDurationByWorkoutId.get(workout.id)} onStart={startWorkout} onEdit={(item) => { setEditingWorkout(item); setBuilderOpen(true) }} />
+                  <SavedWorkoutCard key={workout.id} workout={{ ...workout, source: 'premade' }} averageDurationMin={averageDurationByWorkoutId.get(workout.id)} onStart={startWorkout} onPreview={setPreviewWorkout} onEdit={(item) => { setEditingWorkout(item); setBuilderOpen(true) }} />
                 ))}
               </div>
             )}
@@ -4970,6 +5421,78 @@ export default function WorkoutsPage() {
 
               setActiveWorkoutSession(null)
               setRunningWorkout(null)
+            }}
+          />
+        )}
+      </Dialog>
+
+      <Dialog open={!!editingLoggedWorkoutSession} onOpenChange={(open) => { if (!open) closeLoggedWorkoutEditor({ silent: true }) }}>
+        {editingLoggedWorkoutSession && (
+          <ActiveWorkoutModal
+            workout={editingLoggedWorkoutSession.log.workout}
+            metProfile={getMetProfile(user)}
+            unitSystem={unitSystem}
+            workoutLogs={workoutLogs}
+            initialExercises={editingLoggedWorkoutSession.exercises}
+            onClose={closeLoggedWorkoutEditor}
+            onPause={closeLoggedWorkoutEditor}
+            onSessionChange={(exercises) => {
+              setEditingLoggedWorkoutSession((current) => current ? { ...current, exercises } : current)
+            }}
+            mode="edit-log"
+            lockedTiming={{
+              date: editingLoggedWorkoutSession.log.date,
+              startedAt: editingLoggedWorkoutSession.log.started_at,
+              completedAt: editingLoggedWorkoutSession.log.completed_at,
+              durationMin: editingLoggedWorkoutSession.log.duration_min,
+            }}
+            onComplete={({ exercises, caloriesBurned, totalVolumeKg }) => {
+              const currentLog = editingLoggedWorkoutSession.log
+              const performedExercises = normalizeActiveExercisesForWorkout(exercises)
+              const performedMuscleGroups = Array.from(new Set(performedExercises.flatMap((exercise) => exercise.exercise.muscle_groups)))
+
+              const performedWorkout: Workout = {
+                ...currentLog.workout,
+                exercises: performedExercises,
+                muscle_groups: (performedMuscleGroups.length > 0 ? performedMuscleGroups : currentLog.workout.muscle_groups) as Workout['muscle_groups'],
+                updated_at: new Date().toISOString(),
+              }
+
+              updateWorkoutLog(currentLog.id, {
+                id: currentLog.id,
+                user_id: currentLog.user_id,
+                workout_id: currentLog.workout_id,
+                workout: performedWorkout,
+                date: currentLog.date,
+                started_at: currentLog.started_at,
+                completed_at: currentLog.completed_at,
+                duration_min: currentLog.duration_min,
+                calories_burned_kcal: caloriesBurned,
+                total_volume_kg: totalVolumeKg,
+                exercises: exercises.map((exercise) => ({
+                  exercise_id: exercise.exercise.id,
+                  exercise_name: exercise.exercise.name,
+                  sets: exercise.sets.map((set) => ({
+                    set_number: set.set_number,
+                    set_type: set.set_type || 'standard',
+                    drop_from_set_number: set.drop_from_set_number,
+                    drop_set_index: set.drop_set_index,
+                    target_reps: set.reps,
+                    actual_reps: set.actual_reps ?? set.reps,
+                    weight_kg: set.actual_weight ?? set.weight_kg ?? 0,
+                    speed_mph: set.actual_speed_mph,
+                    incline_pct: set.actual_incline_pct,
+                    machine_level: set.actual_machine_level,
+                    resistance_level: set.actual_resistance_level,
+                    watts: set.actual_watts,
+                    cadence_rpm: set.actual_cadence_rpm,
+                  })),
+                })),
+                rating: currentLog.rating,
+              })
+
+              toast.success('Workout updated without changing the original logged time.')
+              closeLoggedWorkoutEditor({ silent: true })
             }}
           />
         )}

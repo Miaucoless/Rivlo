@@ -719,15 +719,15 @@ function TodayRemindersCard({
             </div>
           </div>
 
-          <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+          <div className="grid gap-2 grid-cols-[minmax(0,1.55fr)_132px] sm:grid-cols-[minmax(0,1fr)_148px]">
             <Input
               value={title}
               onChange={(event) => setTitle(event.target.value)}
-              className="h-10 rounded-xl border-border bg-background/70"
+              className="h-10 min-w-0 rounded-xl border-border bg-background/70 pr-4 text-[13px] sm:text-sm"
               placeholder={entryKind === 'note' ? 'e.g. Talk to coach after training' : 'e.g. Evening walk'}
             />
             {entryKind === 'reminder' ? (
-              <div className="relative h-10 min-w-0">
+              <div className="relative h-10 min-w-0 w-[132px] sm:w-[148px]">
                 <Input
                   type="time"
                   value={time}
@@ -741,7 +741,7 @@ function TodayRemindersCard({
                   placeholder="Add time"
                   readOnly
                   tabIndex={-1}
-                  className="pointer-events-none h-10 rounded-xl border-border bg-background/70 pl-10 pr-3 text-sm text-muted-foreground"
+                  className="pointer-events-none h-10 rounded-xl border-border bg-background/70 pl-10 pr-2 text-[13px] text-muted-foreground"
                 />
               </div>
             ) : null}
@@ -1197,9 +1197,10 @@ export default function DashboardPage() {
         ].map((stat) => {
           const Icon = stat.icon
           return (
-            <motion.div key={stat.label} variants={stagger.item}>
-              <Card className="hover-lift">
-                <CardContent className="p-3 sm:p-5">
+            <motion.div key={stat.label} variants={stagger.item} className="h-full">
+              <Card className="hover-lift h-full">
+                <CardContent className="flex min-h-[9.75rem] flex-col justify-between p-3 sm:min-h-[10.5rem] sm:p-5">
+                  <div>
                   <div className="flex items-start justify-between mb-2 sm:mb-3">
                     <p className="text-xs text-muted-foreground font-medium">{stat.label}</p>
                     <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center ${stat.iconClass}`}>
@@ -1210,8 +1211,9 @@ export default function DashboardPage() {
                   <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
                     {stat.sub}
                   </p>
+                  </div>
                   {stat.pct !== undefined && (
-                    <div className="mt-3">
+                    <div className="mt-4">
                       <div className="progress-track">
                         <div
                           className={`progress-fill ${stat.barColor}`}

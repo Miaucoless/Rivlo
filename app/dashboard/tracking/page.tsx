@@ -24,6 +24,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { useAppStore } from '@/store/useAppStore'
 import { formatWeightForInput, formatWeightValue, getTodayISO, getWeightUnitLabel, kgToLbs, lbsToKg, percentage } from '@/lib/utils'
 import { toast } from 'sonner'
+import MuscleDistributionPanel from '@/components/tracking/MuscleDistributionPanel'
 
 function TrackingEmptyState({
   icon: Icon,
@@ -368,6 +369,7 @@ export default function TrackingPage() {
   const [editingEntry, setEditingEntry] = useState<any>(null)
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [nutritionMetric, setNutritionMetric] = useState<'calories' | 'protein'>('calories')
+  const [selectedPrExercise, setSelectedPrExercise] = useState<string | null>(null)
 
   const handleDeleteWeight = (id: string) => {
     if (confirm('Are you sure you want to delete this weight entry?')) {
@@ -472,31 +474,113 @@ export default function TrackingPage() {
     loggedNutritionDays: calorieHistory.length,
   })
 
-  // Personal records — derived from actual logged workout sets
-  const prMap = new Map<string, { weight: number; date: string }>()
-  for (const log of workoutLogs) {
-    for (const exercise of log.exercises) {
-      for (const set of exercise.sets) {
-        const w = set.weight_kg ?? 0
-        if (w <= 0) continue
-        const existing = prMap.get(exercise.exercise_name)
-        if (!existing || w > existing.weight) {
-          prMap.set(exercise.exercise_name, { weight: w, date: log.date })
+  const prProgressions = (() => {
+    const byExercise = new Map<string, Array<{ isoDate: string; weightKg: number; workoutName: string }>>()
+
+    workoutLogs.forEach((log) => {
+      log.exercises.forEach((exercise) => {
+        const bestSetWeight = exercise.sets.reduce((max, set) => Math.max(max, Number(set.weight_kg ?? 0)), 0)
+        if (!Number.isFinite(bestSetWeight) || bestSetWeight <= 0) return
+
+        const nextEntries = byExercise.get(exercise.exercise_name) ?? []
+        nextEntries.push({
+          isoDate: log.date,
+          weightKg: bestSetWeight,
+          workoutName: log.workout.name,
+        })
+        byExercise.set(exercise.exercise_name, nextEntries)
+      })
+    })
+
+    return new Map(
+      Array.from(byExercise.entries()).map(([exercise, entries]) => {
+        const dedupedByDate = new Map<string, { isoDate: string; weightKg: number; workoutName: string }>()
+
+        entries.forEach((entry) => {
+          const existing = dedupedByDate.get(entry.isoDate)
+          if (!existing || entry.weightKg >= existing.weightKg) {
+            dedupedByDate.set(entry.isoDate, entry)
+          }
+        })
+
+        const progression = Array.from(dedupedByDate.values())
+          .sort((a, b) => a.isoDate.localeCompare(b.isoDate))
+          .map((entry) => ({
+            ...entry,
+            displayDate: format(new Date(entry.isoDate), 'MM/dd'),
+            weight:
+              unitSystem === 'metric'
+                ? Math.round(entry.weightKg * 10) / 10
+                : Math.round(kgToLbs(entry.weightKg) * 10) / 10,
+          }))
+
+        return [exercise, progression]
+      })
+    )
+  })()
+
+  const prs = Array.from(prProgressions.entries())
+    .map(([exercise, progression]) => {
+      if (progression.length < 2) return null
+
+      let runningBest = progression[0].weightKg
+      let latestPrEntry: (typeof progression)[number] | null = null
+
+      for (let i = 1; i < progression.length; i += 1) {
+        const entry = progression[i]
+        if (entry.weightKg > runningBest) {
+          runningBest = entry.weightKg
+          latestPrEntry = entry
         }
       }
-    }
-  }
-  // Sort by weight desc, take top 10
-  const prs = Array.from(prMap.entries())
-    .sort((a, b) => b[1].weight - a[1].weight)
-    .slice(0, 10)
-    .map(([name, { weight, date }]) => ({
-      exercise: name,
-      weight: formatWeightValue(weight, unitSystem),
-      date: format(new Date(date), 'MMM d, yyyy'),
-      // Mark as new PR if achieved in the last 7 days
-      new: (new Date().getTime() - new Date(date).getTime()) < 7 * 24 * 60 * 60 * 1000,
+
+      if (!latestPrEntry) return null
+
+      return {
+        achievedAt: latestPrEntry.isoDate,
+        weightKg: latestPrEntry.weightKg,
+        exercise,
+        weight: formatWeightValue(latestPrEntry.weightKg, unitSystem),
+        date: format(new Date(latestPrEntry.isoDate), 'MMM d, yyyy'),
+        // A PR is only "new" if it beat an existing baseline and happened recently.
+        new: (new Date().getTime() - new Date(latestPrEntry.isoDate).getTime()) < 7 * 24 * 60 * 60 * 1000,
+      }
+    })
+    .filter((pr): pr is {
+      achievedAt: string
+      weightKg: number
+      exercise: string
+      weight: string
+      date: string
+      new: boolean
+    } => pr !== null)
+    .sort((a, b) => {
+      if (a.new !== b.new) return Number(b.new) - Number(a.new)
+      if (a.achievedAt !== b.achievedAt) return b.achievedAt.localeCompare(a.achievedAt)
+      return b.weightKg - a.weightKg
+    })
+    .map((pr, index) => ({
+      ...pr,
+      rank: index + 1,
     }))
+
+  const resolvedSelectedPrExercise =
+    selectedPrExercise && prs.some((pr) => pr.exercise === selectedPrExercise)
+      ? selectedPrExercise
+      : null
+
+  const selectedPr = prs.find((pr) => pr.exercise === resolvedSelectedPrExercise) ?? null
+  const selectedPrProgress = selectedPr ? (prProgressions.get(selectedPr.exercise) ?? []) : []
+  const selectedPrFirstWeight = selectedPrProgress[0]?.weight
+  const selectedPrLatestWeight = selectedPrProgress[selectedPrProgress.length - 1]?.weight
+  const selectedPrDelta =
+    selectedPrFirstWeight != null && selectedPrLatestWeight != null
+      ? Math.round((selectedPrLatestWeight - selectedPrFirstWeight) * 10) / 10
+      : null
+  const topPrByWeight = prs.reduce<(typeof prs)[number] | null>((best, pr) => {
+    if (!best || pr.weightKg > best.weightKg) return pr
+    return best
+  }, null)
 
   const handleExport = () => {
     const escapeHtml = (value: string) =>
@@ -545,9 +629,22 @@ export default function TrackingPage() {
 
       const points = data.map((point, index) => ({
         ...point,
+        index,
         x: toX(index),
         y: toY(point.value),
       }))
+      const labelStep = Math.max(1, Math.ceil(data.length / 6))
+      const minValue = Math.min(...rawValues)
+      const maxValue = Math.max(...rawValues)
+      const shouldShowPointLabel = (index: number, value: number) =>
+        data.length <= 8
+        || index === 0
+        || index === data.length - 1
+        || value === minValue
+        || value === maxValue
+        || index % labelStep === 0
+      const shouldShowAxisLabel = (index: number) =>
+        index === 0 || index === data.length - 1 || index % labelStep === 0
 
       const linePath = points
         .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`)
@@ -578,6 +675,7 @@ export default function TrackingPage() {
           <path d="${linePath}" fill="none" stroke="${stroke}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
           ${points.map((point) => `
             <g>
+              ${shouldShowPointLabel(point.index, point.value) ? `
               <text
                 x="${point.x.toFixed(2)}"
                 y="${(point.y - 14).toFixed(2)}"
@@ -585,10 +683,10 @@ export default function TrackingPage() {
                 fill="#f5f7f6"
                 font-size="11"
                 font-weight="700"
-              >${point.value % 1 === 0 ? point.value.toFixed(0) : point.value.toFixed(1)}${ySuffix}</text>
+              >${point.value % 1 === 0 ? point.value.toFixed(0) : point.value.toFixed(1)}${ySuffix}</text>` : ''}
               <circle cx="${point.x.toFixed(2)}" cy="${point.y.toFixed(2)}" r="4.5" fill="${stroke}" />
               <circle cx="${point.x.toFixed(2)}" cy="${point.y.toFixed(2)}" r="8" fill="${stroke}" fill-opacity="0.16" />
-              <text x="${point.x.toFixed(2)}" y="${height - 12}" text-anchor="middle" fill="rgba(245,247,246,0.58)" font-size="11">${escapeHtml(point.label)}</text>
+              ${shouldShowAxisLabel(point.index) ? `<text x="${point.x.toFixed(2)}" y="${height - 12}" text-anchor="middle" fill="rgba(245,247,246,0.58)" font-size="11">${escapeHtml(point.label)}</text>` : ''}
             </g>
           `).join('')}
         </svg>
@@ -617,6 +715,9 @@ export default function TrackingPage() {
       const groupWidth = chartWidth / data.length
       const barWidth = Math.min(34, groupWidth * 0.58)
       const toY = (value: number) => padding.top + ((max - value) / max) * chartHeight
+      const labelStep = Math.max(1, Math.ceil(data.length / 6))
+      const shouldShowLabel = (index: number) =>
+        data.length <= 8 || index === 0 || index === data.length - 1 || index % labelStep === 0
 
       const ticks = Array.from({ length: 4 }, (_, index) => {
         const value = (max / 3) * index
@@ -639,6 +740,7 @@ export default function TrackingPage() {
             const targetY = toY(point.target)
             return `
               <g>
+                ${shouldShowLabel(index) ? `
                 <text
                   x="${centerX.toFixed(2)}"
                   y="${Math.max(padding.top + 12, barY - 8).toFixed(2)}"
@@ -646,10 +748,10 @@ export default function TrackingPage() {
                   fill="#f5f7f6"
                   font-size="11"
                   font-weight="700"
-                >${Math.round(point.value)}</text>
+                >${Math.round(point.value)}</text>` : ''}
                 <rect x="${(centerX - barWidth / 2).toFixed(2)}" y="${barY.toFixed(2)}" width="${barWidth.toFixed(2)}" height="${barHeight.toFixed(2)}" rx="10" fill="${barColor}" />
                 <line x1="${(centerX - barWidth / 2 - 6).toFixed(2)}" y1="${targetY.toFixed(2)}" x2="${(centerX + barWidth / 2 + 6).toFixed(2)}" y2="${targetY.toFixed(2)}" stroke="${targetColor}" stroke-width="2.5" stroke-linecap="round" />
-                <text x="${centerX.toFixed(2)}" y="${height - 12}" text-anchor="middle" fill="rgba(245,247,246,0.58)" font-size="11">${escapeHtml(point.label)}</text>
+                ${shouldShowLabel(index) ? `<text x="${centerX.toFixed(2)}" y="${height - 12}" text-anchor="middle" fill="rgba(245,247,246,0.58)" font-size="11">${escapeHtml(point.label)}</text>` : ''}
               </g>
             `
           }).join('')}
@@ -1149,101 +1251,15 @@ export default function TrackingPage() {
         })}
       </div>
 
-      <Card className="border-primary/15 bg-[linear-gradient(135deg,rgba(16,185,129,0.07),rgba(255,255,255,0.02))]">
-        <CardContent className="p-5">
-          <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
-            <div className="max-w-2xl">
-              <div className="flex flex-wrap items-center gap-2">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-primary">Connected Recommendation</p>
-                <Badge variant="outline" className="border-primary/20 bg-background/70 text-[10px]">
-                  {connectedRecommendation.status}
-                </Badge>
-              </div>
-              <h3 className="mt-2 text-lg font-semibold tracking-tight text-foreground">{connectedRecommendation.title}</h3>
-              <p className="mt-2 text-sm leading-6 text-muted-foreground">{connectedRecommendation.body}</p>
-              <div className="mt-4 grid gap-2 sm:grid-cols-3">
-                {connectedRecommendation.supportingPoints.map((point) => (
-                  <div key={point} className="rounded-xl border border-border/60 bg-background/70 px-3 py-3 text-sm text-muted-foreground">
-                    {point}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="xl:w-[280px]">
-              <div className="rounded-2xl border border-border/60 bg-background/80 p-4">
-                <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Read From Your Data</p>
-                <div className="mt-3 space-y-3">
-                  <div>
-                    <div className="mb-1 flex items-center justify-between text-xs">
-                      <span className="text-muted-foreground">Calorie adherence</span>
-                      <span className="font-medium">{percentage(Math.round(avgCalories), user.calorie_target)}%</span>
-                    </div>
-                    <div className="h-2 overflow-hidden rounded-full bg-muted">
-                      <div className="h-full rounded-full bg-primary transition-all duration-300" style={{ width: `${Math.min(percentage(Math.round(avgCalories), user.calorie_target), 100)}%` }} />
-                    </div>
-                  </div>
-                  <div>
-                    <div className="mb-1 flex items-center justify-between text-xs">
-                      <span className="text-muted-foreground">Protein adherence</span>
-                      <span className="font-medium">{percentage(Math.round(avgProtein), user.protein_target_g)}%</span>
-                    </div>
-                    <div className="h-2 overflow-hidden rounded-full bg-muted">
-                      <div className="h-full rounded-full bg-primary/80 transition-all duration-300" style={{ width: `${Math.min(percentage(Math.round(avgProtein), user.protein_target_g), 100)}%` }} />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5">
-                      <p className="text-muted-foreground">Workouts</p>
-                      <p className="mt-1 font-medium text-foreground">{workoutsThisWeek} this week</p>
-                    </div>
-                    <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5">
-                      <p className="text-muted-foreground">Weight trend</p>
-                      <p className="mt-1 font-medium text-foreground">
-                        {recentWeightDeltaKg == null
-                          ? 'Not enough data'
-                          : `${recentWeightDeltaKg < 0 ? 'Down' : 'Up'} ${formatWeightValue(Math.abs(recentWeightDeltaKg), unitSystem)}`}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-                <Button asChild variant="outline" size="sm" className="mt-4 w-full gap-1.5">
-                  <Link href={connectedRecommendation.actionHref}>
-                    {connectedRecommendation.actionLabel}
-                    <ChevronRight className="h-3.5 w-3.5" />
-                  </Link>
-                </Button>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Charts */}
-      <Tabs defaultValue="weight">
-        <div className="flex items-center justify-between mb-4">
+      <Tabs defaultValue="workouts">
+        <div className="mb-4">
           <TabsList>
+            <TabsTrigger value="workouts">Workouts</TabsTrigger>
             <TabsTrigger value="weight">Weight</TabsTrigger>
             <TabsTrigger value="nutrition">Nutrition</TabsTrigger>
             <TabsTrigger value="prs">Personal Records</TabsTrigger>
           </TabsList>
-
-          {/* Time range selector */}
-          <div className="flex gap-1">
-            {(['2w', '1m', '3m', 'all'] as const).map((r) => (
-              <button
-                key={r}
-                onClick={() => setTimeRange(r)}
-                className={`px-3 py-1 text-xs rounded-lg transition-all ${
-                  timeRange === r
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:bg-accent'
-                }`}
-              >
-                {r}
-              </button>
-            ))}
-          </div>
         </div>
 
         {/* Weight tab */}
@@ -1423,20 +1439,111 @@ export default function TrackingPage() {
               )}
             </CardContent>
           </Card>
+
+          <Card className="mt-4 border-primary/15 bg-[linear-gradient(135deg,rgba(16,185,129,0.07),rgba(255,255,255,0.02))]">
+            <CardContent className="p-5">
+              <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+                <div className="max-w-2xl">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-primary">Connected Recommendation</p>
+                    <Badge variant="outline" className="border-primary/20 bg-background/70 text-[10px]">
+                      {connectedRecommendation.status}
+                    </Badge>
+                  </div>
+                  <h3 className="mt-2 text-lg font-semibold tracking-tight text-foreground">{connectedRecommendation.title}</h3>
+                  <p className="mt-2 text-sm leading-6 text-muted-foreground">{connectedRecommendation.body}</p>
+                  <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                    {connectedRecommendation.supportingPoints.map((point) => (
+                      <div key={point} className="rounded-xl border border-border/60 bg-background/70 px-3 py-3 text-sm text-muted-foreground">
+                        {point}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="xl:w-[280px]">
+                  <div className="rounded-2xl border border-border/60 bg-background/80 p-4">
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Read From Your Data</p>
+                    <div className="mt-3 space-y-3">
+                      <div>
+                        <div className="mb-1 flex items-center justify-between text-xs">
+                          <span className="text-muted-foreground">Calorie adherence</span>
+                          <span className="font-medium">{percentage(Math.round(avgCalories), user.calorie_target)}%</span>
+                        </div>
+                        <div className="h-2 overflow-hidden rounded-full bg-muted">
+                          <div className="h-full rounded-full bg-primary transition-all duration-300" style={{ width: `${Math.min(percentage(Math.round(avgCalories), user.calorie_target), 100)}%` }} />
+                        </div>
+                      </div>
+                      <div>
+                        <div className="mb-1 flex items-center justify-between text-xs">
+                          <span className="text-muted-foreground">Protein adherence</span>
+                          <span className="font-medium">{percentage(Math.round(avgProtein), user.protein_target_g)}%</span>
+                        </div>
+                        <div className="h-2 overflow-hidden rounded-full bg-muted">
+                          <div className="h-full rounded-full bg-primary/80 transition-all duration-300" style={{ width: `${Math.min(percentage(Math.round(avgProtein), user.protein_target_g), 100)}%` }} />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5">
+                          <p className="text-muted-foreground">Workouts</p>
+                          <p className="mt-1 font-medium text-foreground">{workoutsThisWeek} this week</p>
+                        </div>
+                        <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5">
+                          <p className="text-muted-foreground">Weight trend</p>
+                          <p className="mt-1 font-medium text-foreground">
+                            {recentWeightDeltaKg == null
+                              ? 'Not enough data'
+                              : `${recentWeightDeltaKg < 0 ? 'Down' : 'Up'} ${formatWeightValue(Math.abs(recentWeightDeltaKg), unitSystem)}`}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    <Button asChild variant="outline" size="sm" className="mt-4 w-full gap-1.5">
+                      <Link href={connectedRecommendation.actionHref}>
+                        {connectedRecommendation.actionLabel}
+                        <ChevronRight className="h-3.5 w-3.5" />
+                      </Link>
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* PRs tab */}
         <TabsContent value="prs">
           <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm">Personal Records</CardTitle>
+            <CardHeader className="pb-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <CardTitle className="text-sm">Personal Records</CardTitle>
+                  <p className="mt-1 text-xs text-muted-foreground">Recent and strongest logged PRs, with a tap-to-view progress chart for each lift.</p>
+                </div>
+                {prs.length > 0 && (
+                  <div className="grid grid-cols-3 gap-2 sm:w-auto">
+                    <div className="rounded-xl border border-border/50 bg-muted/30 px-3 py-2 text-center">
+                      <p className="font-data text-lg font-semibold">{prs.length}</p>
+                      <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Tracked</p>
+                    </div>
+                    <div className="rounded-xl border border-border/50 bg-muted/30 px-3 py-2 text-center">
+                      <p className="font-data text-lg font-semibold">{prs.filter((pr) => pr.new).length}</p>
+                      <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">This Week</p>
+                    </div>
+                    <div className="rounded-xl border border-border/50 bg-muted/30 px-3 py-2 text-center">
+                      <p className="font-data text-lg font-semibold">{topPrByWeight?.weight ?? '—'}</p>
+                      <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Top Lift</p>
+                    </div>
+                  </div>
+                )}
+              </div>
             </CardHeader>
             <CardContent>
               {prs.length === 0 ? (
                 <TrackingEmptyState
                   icon={Trophy}
                   title="No personal records yet"
-                  body="Log weighted workouts and Rivora will surface your best lifts here automatically."
+                  body="A lift shows up here once you repeat it and beat your previous best weight."
                 >
                   <Button asChild size="sm" variant="outline" className="gap-1.5 text-xs">
                     <a href="/dashboard/workouts">Open Workouts</a>
@@ -1444,28 +1551,102 @@ export default function TrackingPage() {
                 </TrackingEmptyState>
               ) : (
                 <div className="space-y-3">
-                  {prs.map((pr, i) => (
-                    <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-muted/40 hover:bg-muted/70 transition-colors">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-emerald-500/10 flex items-center justify-center">
-                          <Trophy className="w-4 h-4 text-emerald-500" />
-                        </div>
-                        <div>
-                          <p className="font-semibold text-sm">{pr.exercise}</p>
-                          <p className="text-xs text-muted-foreground">{pr.date}</p>
-                        </div>
+                  <div className="space-y-3">
+                    {prs.map((pr) => (
+                      <div
+                        key={`${pr.exercise}-${pr.date}`}
+                        className={`w-full rounded-2xl border bg-gradient-to-r p-4 text-left transition-colors ${
+                          selectedPr?.exercise === pr.exercise
+                            ? 'border-emerald-500/45 from-emerald-500/10 via-muted/20 to-background'
+                            : 'border-border/50 from-muted/45 via-muted/20 to-background hover:border-border hover:bg-muted/40'
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => setSelectedPrExercise((current) => (current === pr.exercise ? null : pr.exercise))}
+                          className="w-full text-left"
+                        >
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="flex items-start gap-3">
+                              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-500">
+                                <Trophy className="h-5 w-5" />
+                              </div>
+                              <div className="min-w-0">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <Badge variant="outline" className="text-[10px]">#{pr.rank}</Badge>
+                                  <p className="text-sm font-semibold">{pr.exercise}</p>
+                                  {pr.new && <Badge variant="success" className="text-[10px]">New PR</Badge>}
+                                </div>
+                                <p className="mt-1 text-xs text-muted-foreground">Hit on {pr.date}</p>
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2 sm:min-w-[13rem]">
+                              <div className="rounded-xl border border-border/40 bg-background/80 px-3 py-2">
+                                <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Best Weight</p>
+                                <p className="mt-1 font-data text-lg font-semibold">{pr.weight}</p>
+                              </div>
+                              <div className="rounded-xl border border-border/40 bg-background/80 px-3 py-2">
+                                <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Action</p>
+                                <p className="mt-1 text-sm font-medium text-foreground">
+                                  {selectedPr?.exercise === pr.exercise
+                                    ? 'Viewing progress'
+                                    : 'View progress'}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        </button>
+
+                        {selectedPr?.exercise === pr.exercise && selectedPrProgress.length > 0 && (
+                          <div className="mt-4 border-t border-border/40 pt-4">
+                            <div className="mb-3 flex flex-wrap items-center gap-2">
+                              <Badge variant="secondary" className="text-[10px]">
+                                {selectedPrProgress.length} sessions
+                              </Badge>
+                              <Badge variant="secondary" className="text-[10px]">
+                                {selectedPrDelta == null
+                                  ? 'No change yet'
+                                  : `${selectedPrDelta > 0 ? '+' : ''}${selectedPrDelta}${unitSystem === 'metric' ? ' kg' : ' lb'}`}
+                              </Badge>
+                            </div>
+                            <ResponsiveContainer width="100%" height={170}>
+                              <LineChart data={selectedPrProgress} margin={{ top: 4, right: 10, left: 0, bottom: 0 }}>
+                                <CartesianGrid strokeDasharray="3 3" />
+                                <XAxis dataKey="displayDate" tick={{ fontSize: 10 }} />
+                                <YAxis tick={{ fontSize: 10 }} width={42} />
+                                <Tooltip content={<CustomTooltip unitSystem={unitSystem} />} cursor={{ fill: 'rgba(16, 185, 129, 0.08)' }} />
+                                <Line
+                                  type="monotone"
+                                  dataKey="weight"
+                                  stroke="#10b981"
+                                  strokeWidth={2.25}
+                                  dot={{ r: 3, fill: '#10b981' }}
+                                  activeDot={{ r: 5 }}
+                                  name="weight"
+                                />
+                              </LineChart>
+                            </ResponsiveContainer>
+                            {selectedPrProgress.length === 1 && (
+                              <p className="mt-2 text-xs text-muted-foreground">
+                                First logged PR on {selectedPrProgress[0].displayDate}
+                              </p>
+                            )}
+                          </div>
+                        )}
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold tabular-nums">{pr.weight}</span>
-                        {pr.new && <Badge variant="success" className="text-xs">New PR! 🎉</Badge>}
-                      </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
               )}
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* Workouts tab */}
+        <TabsContent value="workouts">
+          <MuscleDistributionPanel />
+        </TabsContent>
+
       </Tabs>
 
       {/* Edit Weight Dialog */}

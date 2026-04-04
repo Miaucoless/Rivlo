@@ -9,7 +9,9 @@ import {
   subMinutes,
 } from 'date-fns'
 import type {
+  SplitSchedule,
   UserProfile,
+  WorkoutSplit,
   WorkoutLog,
   WeightEntry,
   JournalEntry,
@@ -30,10 +32,12 @@ import type {
 } from '@/types'
 import {
   DEMO_USER,
+  RECIPES,
   WEIGHT_HISTORY,
   JOURNAL_ENTRIES,
   TODAY_MEALS,
   TODAY_TOTALS,
+  WORKOUTS,
   type MealLogEntry,
 } from '@/lib/content-library'
 import {
@@ -62,6 +66,7 @@ import {
 import { updateProfile as updateProfileCloud } from '@/lib/auth'
 import { toast } from 'sonner'
 import { formatWeightValue, getTodayISO } from '@/lib/utils'
+import { buildDefaultSchedule } from '@/lib/split-schedule'
 
 interface AppStore {
   savedMeals: SavedMealTemplate[]
@@ -243,6 +248,51 @@ function calculateActivityStreak(state: Pick<AppStore, 'weightHistory' | 'journa
 }
 
 const pendingCloudWriteQueue: Array<() => Promise<void>> = []
+function getSplitPreferencesStorageKey(userId: string) {
+  return `rivora-split-preferences:${userId}`
+}
+
+function readStoredSplitPreferences(userId: string): { workout_split?: WorkoutSplit; split_schedule?: SplitSchedule } | null {
+  if (typeof window === 'undefined') return null
+
+  try {
+    const raw = window.localStorage.getItem(getSplitPreferencesStorageKey(userId))
+    if (!raw) return null
+    return JSON.parse(raw) as { workout_split?: WorkoutSplit; split_schedule?: SplitSchedule }
+  } catch {
+    return null
+  }
+}
+
+function writeStoredSplitPreferences(userId: string, preferences: { workout_split?: WorkoutSplit; split_schedule?: SplitSchedule }) {
+  if (typeof window === 'undefined') return
+
+  try {
+    window.localStorage.setItem(getSplitPreferencesStorageKey(userId), JSON.stringify(preferences))
+  } catch {
+    // ignore
+  }
+}
+
+function mergeUserWithStoredSplitPreferences(user: UserProfile | null): UserProfile | null {
+  if (!user) return null
+
+  const stored = readStoredSplitPreferences(user.id)
+  if (!stored) {
+    return {
+      ...user,
+      split_schedule: user.split_schedule ?? buildDefaultSchedule(user.workout_split),
+    }
+  }
+
+  const workoutSplit = stored.workout_split ?? user.workout_split
+  return {
+    ...user,
+    workout_split: workoutSplit,
+    split_schedule: stored.split_schedule ?? user.split_schedule ?? buildDefaultSchedule(workoutSplit),
+  }
+}
+
 let flushingPendingCloudWrites = false
 let isHydratingFromCloud = false
 
@@ -480,6 +530,147 @@ function generateDemoSupplements(): SupplementEntry[] {
   ]
 }
 
+function generateDemoSavedMeals(): SavedMealTemplate[] {
+  const now = new Date().toISOString()
+  return [
+    {
+      id: 'demo-saved-meal-yogurt-bowl',
+      name: 'Alex Protein Yogurt Bowl',
+      meal_type: 'breakfast',
+      macros: { calories: 385, protein_g: 32, carbs_g: 45, fat_g: 6 },
+      items: [
+        { input: 'Greek yogurt', matched_name: 'Greek yogurt (0% fat)', amount: 200, unit: 'g', macros: { calories: 114, protein_g: 20, carbs_g: 8, fat_g: 1 } },
+        { input: 'Mixed berries', matched_name: 'Mixed berries', amount: 100, unit: 'g', macros: { calories: 57, protein_g: 1, carbs_g: 14, fat_g: 0 } },
+        { input: 'Granola', matched_name: 'Granola', amount: 30, unit: 'g', macros: { calories: 135, protein_g: 4, carbs_g: 21, fat_g: 6 } },
+        { input: 'Honey', matched_name: 'Honey', amount: 15, unit: 'g', macros: { calories: 45, protein_g: 0, carbs_g: 12, fat_g: 0 } },
+      ],
+      updated_at: now,
+    },
+    {
+      id: 'demo-saved-meal-chicken-bowl',
+      name: 'Weekday Chicken Rice Bowl',
+      meal_type: 'lunch',
+      macros: { calories: 548, protein_g: 52, carbs_g: 48, fat_g: 12 },
+      items: [
+        { input: 'Chicken breast', matched_name: 'Chicken breast', amount: 6, unit: 'oz', macros: { calories: 280, protein_g: 52, carbs_g: 0, fat_g: 6 } },
+        { input: 'Jasmine rice', matched_name: 'Jasmine rice (cooked)', amount: 1, unit: 'cup', macros: { calories: 205, protein_g: 4, carbs_g: 45, fat_g: 0 } },
+        { input: 'Broccoli', matched_name: 'Broccoli', amount: 1, unit: 'cup', macros: { calories: 34, protein_g: 3, carbs_g: 7, fat_g: 0 } },
+        { input: 'Tahini', matched_name: 'Tahini', amount: 1, unit: 'tbsp', macros: { calories: 89, protein_g: 3, carbs_g: 3, fat_g: 8 } },
+      ],
+      updated_at: now,
+    },
+    {
+      id: 'demo-saved-meal-salmon-dinner',
+      name: 'Salmon Dinner Plate',
+      meal_type: 'dinner',
+      macros: { calories: 612, protein_g: 48, carbs_g: 42, fat_g: 24 },
+      items: [
+        { input: 'Salmon fillet', matched_name: 'Salmon fillet', amount: 7, unit: 'oz', macros: { calories: 416, protein_g: 40, carbs_g: 0, fat_g: 26 } },
+        { input: 'Sweet potato', matched_name: 'Sweet potato', amount: 1, unit: 'large', macros: { calories: 172, protein_g: 3, carbs_g: 40, fat_g: 0 } },
+        { input: 'Asparagus', matched_name: 'Asparagus', amount: 1, unit: 'cup', macros: { calories: 20, protein_g: 2, carbs_g: 4, fat_g: 0 } },
+      ],
+      updated_at: now,
+    },
+    {
+      id: 'demo-saved-meal-protein-wrap',
+      name: 'Tuna Crunch Wrap',
+      meal_type: 'lunch',
+      macros: { calories: 470, protein_g: 41, carbs_g: 31, fat_g: 18 },
+      items: [
+        { input: 'Tuna', matched_name: 'Tuna in water', amount: 1, unit: 'can', macros: { calories: 120, protein_g: 26, carbs_g: 0, fat_g: 1 } },
+        { input: 'Whole wheat wrap', matched_name: 'Whole wheat wrap', amount: 1, unit: 'wrap', macros: { calories: 210, protein_g: 8, carbs_g: 31, fat_g: 6 } },
+        { input: 'Greek yogurt mayo mix', matched_name: 'Greek yogurt mayo mix', amount: 2, unit: 'tbsp', macros: { calories: 60, protein_g: 3, carbs_g: 2, fat_g: 4 } },
+        { input: 'Celery', matched_name: 'Celery', amount: 0.5, unit: 'cup', macros: { calories: 10, protein_g: 0, carbs_g: 2, fat_g: 0 } },
+      ],
+      updated_at: now,
+    },
+  ]
+}
+
+function generateDemoSavedWorkouts(): Workout[] {
+  const now = new Date().toISOString()
+  return WORKOUTS.slice(0, 5).map((workout, index) => ({
+    ...workout,
+    id: `demo-${workout.id}`,
+    name: index < 3 ? `${workout.name} Template` : workout.name,
+    description: workout.description || 'Saved to demo mode so you can preview, edit, and reuse it.',
+    source: 'custom',
+    updated_at: now,
+  }))
+}
+
+function generateDemoWaterLogs(): Record<string, WaterEntry[]> {
+  const entries: Record<string, WaterEntry[]> = {}
+  const dayConfigs = [
+    [500, 750, 600],
+    [400, 600, 350],
+    [750, 500, 500, 250],
+    [600, 450],
+    [500, 500, 500],
+  ]
+
+  dayConfigs.forEach((amounts, index) => {
+    const date = format(subDays(new Date(), index), 'yyyy-MM-dd')
+    entries[date] = amounts.map((amountMl, amountIndex) => ({
+      id: `demo-water-${index}-${amountIndex}`,
+      user_id: DEMO_USER.id,
+      date,
+      amount_ml: amountMl,
+      logged_at: new Date(`${date}T${String(8 + amountIndex * 3).padStart(2, '0')}:15:00`).toISOString(),
+    }))
+  })
+
+  return entries
+}
+
+function generateDemoWeeklyMealPlan(savedMeals: SavedMealTemplate[]): WeeklyMealPlan {
+  const weekStart = format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd')
+  const byId = Object.fromEntries(savedMeals.map((meal) => [meal.id, meal]))
+  const recipeBreakfast = RECIPES.find((recipe) => recipe.id === 'r1') ?? RECIPES[0]
+  const recipeLunch = RECIPES.find((recipe) => recipe.id === 'r2') ?? RECIPES[1]
+  const recipeDinner = RECIPES.find((recipe) => recipe.id === 'r3') ?? RECIPES[2]
+
+  return {
+    id: 'wmp_demo',
+    user_id: DEMO_USER.id,
+    week_start: weekStart,
+    days: {
+      monday: {
+        breakfast: [{ type: 'saved', savedMeal: byId['demo-saved-meal-yogurt-bowl'] }],
+        lunch: [{ type: 'recipe', recipe: recipeLunch }],
+        dinner: [{ type: 'saved', savedMeal: byId['demo-saved-meal-salmon-dinner'] }],
+        snack: [],
+      },
+      tuesday: {
+        breakfast: [{ type: 'recipe', recipe: recipeBreakfast }],
+        lunch: [{ type: 'saved', savedMeal: byId['demo-saved-meal-chicken-bowl'] }],
+        dinner: [{ type: 'recipe', recipe: recipeDinner }],
+        snack: [],
+      },
+      wednesday: {
+        breakfast: [{ type: 'saved', savedMeal: byId['demo-saved-meal-yogurt-bowl'] }],
+        lunch: [{ type: 'saved', savedMeal: byId['demo-saved-meal-protein-wrap'] }],
+        dinner: [{ type: 'saved', savedMeal: byId['demo-saved-meal-salmon-dinner'] }],
+        snack: [],
+      },
+      thursday: {
+        breakfast: [{ type: 'recipe', recipe: recipeBreakfast }],
+        lunch: [{ type: 'recipe', recipe: recipeLunch }],
+        dinner: [{ type: 'saved', savedMeal: byId['demo-saved-meal-salmon-dinner'] }],
+        snack: [],
+      },
+      friday: {
+        breakfast: [{ type: 'saved', savedMeal: byId['demo-saved-meal-yogurt-bowl'] }],
+        lunch: [{ type: 'saved', savedMeal: byId['demo-saved-meal-chicken-bowl'] }],
+        dinner: [{ type: 'recipe', recipe: recipeDinner }],
+        snack: [],
+      },
+      saturday: { breakfast: [], lunch: [], dinner: [], snack: [] },
+      sunday: { breakfast: [], lunch: [], dinner: [], snack: [] },
+    },
+  }
+}
+
 function buildNotifications(state: NotificationInputs): Notification[] {
   const notifications: Notification[] = []
   const now = new Date()
@@ -651,8 +842,10 @@ export const useAppStore = create<AppStore>()(
       streak: 0,
 
       setUser: (user) => {
+        const mergedUser = mergeUserWithStoredSplitPreferences(user)
+
         set((state) => {
-          const isUserSwitch = !!user && state.user?.id !== user.id
+          const isUserSwitch = !!mergedUser && state.user?.id !== mergedUser.id
 
           if (isUserSwitch) {
             return withRefreshedNotifications(state, {
@@ -672,27 +865,27 @@ export const useAppStore = create<AppStore>()(
       weeklyMealPlan: null,
       groceryList: null,
       streak: 0,
-      syncStatus: 'idle',
+              syncStatus: 'idle',
       lastSyncedAt: null,
       pendingCloudWrites: 0,
               cloudHydratedUserId: null,
-              user,
-              isAuthenticated: !!user,
+              user: mergedUser,
+              isAuthenticated: !!mergedUser,
               isDemoMode: false,
-              notificationPreferences: user?.notification_preferences ?? DEFAULT_NOTIFICATION_PREFERENCES,
+              notificationPreferences: mergedUser?.notification_preferences ?? DEFAULT_NOTIFICATION_PREFERENCES,
             })
           }
 
           return withRefreshedNotifications(state, {
-            user,
-            isAuthenticated: !!user,
+            user: mergedUser,
+            isAuthenticated: !!mergedUser,
             isDemoMode: false,
-            notificationPreferences: user?.notification_preferences ?? state.notificationPreferences,
+            notificationPreferences: mergedUser?.notification_preferences ?? state.notificationPreferences,
           })
         })
 
-        if (user) {
-          void get().hydrateFromCloud(user.id)
+        if (mergedUser) {
+          void get().hydrateFromCloud(mergedUser.id)
         }
       },
 
@@ -889,6 +1082,13 @@ export const useAppStore = create<AppStore>()(
           }
         }
 
+        if (updates.workout_split != null || updates.split_schedule != null) {
+          writeStoredSplitPreferences(state.user.id, {
+            workout_split: (updates.workout_split ?? state.user.workout_split) as WorkoutSplit,
+            split_schedule: (updates.split_schedule ?? state.user.split_schedule ?? buildDefaultSchedule(updates.workout_split ?? state.user.workout_split)) as SplitSchedule,
+          })
+        }
+
         enqueueCloudWrite(set, async () => {
           const resp = await updateProfileCloud(state.user!.id, updates)
           if (!resp.success || !resp.user) {
@@ -907,34 +1107,32 @@ export const useAppStore = create<AppStore>()(
             throw new Error(resp.error || 'Profile sync failed.')
           }
 
-          set((s) => withRefreshedNotifications(s, { user: resp.user }))
+          set((s) => withRefreshedNotifications(s, { user: mergeUserWithStoredSplitPreferences(resp.user ?? null) }))
         })
       },
 
       loginDemo: () =>
-        set((state) => withRefreshedNotifications(state, {
-          user: DEMO_USER,
+        set((state) => {
+          const demoSavedMeals = generateDemoSavedMeals()
+          const demoSavedWorkouts = generateDemoSavedWorkouts()
+
+          return withRefreshedNotifications(state, {
+          user: {
+            ...DEMO_USER,
+            split_schedule: DEMO_USER.split_schedule ?? buildDefaultSchedule(DEMO_USER.workout_split),
+          },
           isAuthenticated: true,
           isDemoMode: true,
           cloudHydratedUserId: null,
+          savedMeals: demoSavedMeals,
+          customRecipes: [],
+          customWorkouts: demoSavedWorkouts,
           weightHistory: WEIGHT_HISTORY,
           journalEntries: JOURNAL_ENTRIES,
           workoutLogs: generateWorkoutLogs(),
           mealEntries: generateMealHistory(),
-          weeklyMealPlan: {
-            id: 'wmp_demo',
-            user_id: DEMO_USER.id,
-            week_start: format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd'),
-            days: {
-              monday: { breakfast: [], lunch: [], dinner: [], snack: [] },
-              tuesday: { breakfast: [], lunch: [], dinner: [], snack: [] },
-              wednesday: { breakfast: [], lunch: [], dinner: [], snack: [] },
-              thursday: { breakfast: [], lunch: [], dinner: [], snack: [] },
-              friday: { breakfast: [], lunch: [], dinner: [], snack: [] },
-              saturday: { breakfast: [], lunch: [], dinner: [], snack: [] },
-              sunday: { breakfast: [], lunch: [], dinner: [], snack: [] },
-            },
-          },
+          waterLogs: generateDemoWaterLogs(),
+          weeklyMealPlan: generateDemoWeeklyMealPlan(demoSavedMeals),
           groceryList: null,
           streak: 12,
           syncStatus: 'idle',
@@ -942,7 +1140,8 @@ export const useAppStore = create<AppStore>()(
           pendingCloudWrites: 0,
           supplements: generateDemoSupplements(),
           notificationPreferences: DEFAULT_NOTIFICATION_PREFERENCES,
-        })),
+        })
+      }),
 
       logout: () => {
         pendingCloudWriteQueue.length = 0
@@ -1828,8 +2027,9 @@ export const useAppStore = create<AppStore>()(
             protein_g: acc.protein_g + meal.macros.protein_g,
             carbs_g: acc.carbs_g + meal.macros.carbs_g,
             fat_g: acc.fat_g + meal.macros.fat_g,
+            fiber_g: acc.fiber_g + (meal.macros.fiber_g ?? 0),
           }),
-          { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 }
+          { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0, fiber_g: 0 }
         )
       },
 

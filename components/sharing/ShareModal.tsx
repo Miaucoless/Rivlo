@@ -10,6 +10,8 @@ import { Badge } from '@/components/ui/badge'
 import { Label } from '@/components/ui/label'
 import { Check, Copy, Link, Users, X, Loader2, Search } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
+import { createStoredDemoShare, DEMO_FRIENDS } from '@/lib/demo-shares'
+import { useAppStore } from '@/store/useAppStore'
 import { toast } from 'sonner'
 
 type Friend = {
@@ -42,6 +44,8 @@ async function getToken(): Promise<string | null> {
 }
 
 export function ShareModal({ open, onOpenChange, itemType, itemName, itemData }: ShareModalProps) {
+  const isDemoMode = useAppStore((state) => state.isDemoMode)
+  const user = useAppStore((state) => state.user)
   const [tab, setTab] = useState<'link' | 'friends'>('friends')
 
   // Link tab state
@@ -65,6 +69,12 @@ export function ShareModal({ open, onOpenChange, itemType, itemName, itemData }:
 
     setFriendsLoading(true)
     try {
+      if (isDemoMode) {
+        setFriends(DEMO_FRIENDS as Friend[])
+        setFriendsLoaded(true)
+        return
+      }
+
       const token = await getToken()
       if (!token) return
 
@@ -84,7 +94,7 @@ export function ShareModal({ open, onOpenChange, itemType, itemName, itemData }:
     } finally {
       setFriendsLoading(false)
     }
-  }, [friendsLoading])
+  }, [friendsLoading, isDemoMode])
 
   // Reset state when modal opens
   useEffect(() => {
@@ -110,6 +120,21 @@ export function ShareModal({ open, onOpenChange, itemType, itemName, itemData }:
 
   const createShare = useCallback(async (): Promise<{ share_id: string; url: string } | null> => {
     if (shareId && shareUrl) return { share_id: shareId, url: shareUrl }
+
+    if (isDemoMode) {
+      const share = createStoredDemoShare({
+        itemType,
+        itemName,
+        itemData,
+        ownerName: user?.name || 'Demo User',
+        message: message || undefined,
+      })
+      const url = typeof window !== 'undefined' ? `${window.location.origin}/share/${share.token}` : `/share/${share.token}`
+      setShareId(share.share_id)
+      setShareUrl(url)
+      return { share_id: share.share_id, url }
+    }
+
     const token = await getToken()
     if (!token) return null
     const res = await fetch('/api/share/create', {
@@ -122,7 +147,7 @@ export function ShareModal({ open, onOpenChange, itemType, itemName, itemData }:
     setShareId(data.share_id)
     setShareUrl(data.url)
     return data
-  }, [shareId, shareUrl, itemType, itemName, itemData, message])
+  }, [shareId, shareUrl, isDemoMode, itemType, itemName, itemData, message, user?.name])
 
   async function handleCopyLink() {
     setLinkLoading(true)
@@ -145,6 +170,14 @@ export function ShareModal({ open, onOpenChange, itemType, itemName, itemData }:
     try {
       const result = await createShare()
       if (!result) { toast.error('Could not create share.'); return }
+
+      if (isDemoMode) {
+        setSentTo(new Set([...Array.from(sentTo), ...Array.from(selectedIds)]))
+        setSelectedIds(new Set())
+        toast.success(`Sent to ${selectedIds.size} demo friend${selectedIds.size !== 1 ? 's' : ''}!`)
+        return
+      }
+
       const token = await getToken()
       if (!token) return
       const res = await fetch('/api/share/send', {
@@ -221,7 +254,7 @@ export function ShareModal({ open, onOpenChange, itemType, itemName, itemData }:
             ) : friends.length === 0 ? (
               <div className="py-6 text-center text-sm text-muted-foreground">
                 <p>No friends yet.</p>
-                <p className="text-xs mt-1">Add friends in Settings → Friends.</p>
+                <p className="text-xs mt-1">{isDemoMode ? 'Demo friends will appear here automatically.' : 'Add friends in Settings → Friends.'}</p>
               </div>
             ) : (
               <>

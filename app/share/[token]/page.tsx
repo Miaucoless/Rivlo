@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { useAppStore } from '@/store/useAppStore'
+import { getStoredDemoShareByToken } from '@/lib/demo-shares'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -117,6 +118,7 @@ export default function SharePage() {
   const savedMeals = useAppStore((state) => state.savedMeals)
   const customWorkouts = useAppStore((state) => state.customWorkouts)
   const setGroceryList = useAppStore((state) => state.setGroceryList)
+  const isDemoMode = useAppStore((state) => state.isDemoMode)
 
   const [item, setItem] = useState<SharedItem | null>(null)
   const [loading, setLoading] = useState(true)
@@ -124,29 +126,87 @@ export default function SharePage() {
   const [importing, setImporting] = useState(false)
   const [imported, setImported] = useState(false)
   const [authed, setAuthed] = useState<boolean | null>(null)
+  const [isStoredDemoShare, setIsStoredDemoShare] = useState(false)
 
   useEffect(() => {
+    if (isDemoMode || isStoredDemoShare) {
+      setAuthed(true)
+      return
+    }
+
     const supabase = createClient()
     supabase.auth.getSession().then(({ data }) => {
       setAuthed(!!data.session)
     })
-  }, [])
+  }, [isDemoMode, isStoredDemoShare])
 
   useEffect(() => {
     fetch(`/api/share/${token}`)
       .then(async (res) => {
-        if (res.status === 404) { setNotFound(true); return }
+        if (res.status === 404) {
+          const storedShare = getStoredDemoShareByToken(token)
+          if (storedShare) {
+            setItem(storedShare)
+            setIsStoredDemoShare(true)
+            setNotFound(false)
+            return
+          }
+          setNotFound(true)
+          return
+        }
         const data = await res.json()
         setItem(data)
       })
-      .catch(() => setNotFound(true))
+      .catch(() => {
+        const storedShare = getStoredDemoShareByToken(token)
+        if (storedShare) {
+          setItem(storedShare)
+          setIsStoredDemoShare(true)
+          setNotFound(false)
+          return
+        }
+        setNotFound(true)
+      })
       .finally(() => setLoading(false))
   }, [token])
 
   async function handleImport() {
-    if (!authed) return
+    if (!authed && !isDemoMode && !isStoredDemoShare) return
     setImporting(true)
     try {
+      if (isDemoMode || isStoredDemoShare) {
+        if (item?.item_type === 'saved_meal' && item.item_data) {
+          const meal = item.item_data as SavedMealTemplate
+          if (!savedMeals.some((savedMeal) => savedMeal.id === meal.id)) addSavedMeal(meal)
+        }
+
+        if (item?.item_type === 'workout' && item.item_data) {
+          const workout = item.item_data as Workout
+          if (!customWorkouts.some((savedWorkout) => savedWorkout.id === workout.id)) addCustomWorkout(workout)
+        }
+
+        if (item?.item_type === 'grocery_list' && item.item_data) {
+          setGroceryList(item.item_data as GroceryList)
+        }
+
+        if (friendShareId && typeof window !== 'undefined') {
+          try {
+            const raw = window.sessionStorage.getItem(IMPORTED_FRIEND_SHARE_STORAGE_KEY)
+            const existingIds = raw ? JSON.parse(raw) : []
+            const nextIds = Array.isArray(existingIds) ? existingIds.filter((value): value is string => typeof value === 'string') : []
+            if (!nextIds.includes(friendShareId)) nextIds.push(friendShareId)
+            window.sessionStorage.setItem(IMPORTED_FRIEND_SHARE_STORAGE_KEY, JSON.stringify(nextIds))
+          } catch {
+            // Ignore storage errors and continue
+          }
+        }
+
+        setImported(true)
+        toast.success(`${item?.item_name} added to your account!`)
+        router.back()
+        return
+      }
+
       const supabase = createClient()
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) { router.push(`/login?redirect=/share/${token}`); return }
