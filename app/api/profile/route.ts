@@ -6,11 +6,12 @@ export async function PATCH(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json()
-  const { name, username, avatar_url, bio, profile_visibility } = body
+  const { name, username, avatar_url, banner_url, bio, profile_visibility } = body
 
   const updates: Record<string, string | null> = {}
   if (name !== undefined) updates.name = name
   if (avatar_url !== undefined) updates.avatar_url = avatar_url
+  if (banner_url !== undefined) updates.banner_url = banner_url
   if (bio !== undefined) updates.bio = bio
   if (username !== undefined) updates.username = typeof username === 'string' && username.trim() ? username.toLowerCase() : null
   if (profile_visibility !== undefined) {
@@ -28,7 +29,7 @@ export async function PATCH(req: NextRequest) {
       .from('profiles')
       .update(nextUpdates)
       .eq('id', user.id)
-      .select('id, name, username, avatar_url, bio, profile_visibility')
+      .select('id, name, username, avatar_url, banner_url, bio, profile_visibility')
       .single()
   }
 
@@ -39,8 +40,23 @@ export async function PATCH(req: NextRequest) {
     !!error &&
     (error.message.includes('profile_visibility') || error.message.includes('schema cache'))
 
-  if (missingVisibilityColumn) {
-    const { profile_visibility: _ignored, ...fallbackUpdates } = updates
+  const missingUsernameColumn =
+    username !== undefined &&
+    !!error &&
+    (error.message.includes('username') || error.message.includes('schema cache'))
+
+  const missingBannerColumn =
+    banner_url !== undefined &&
+    !!error &&
+    (error.message.includes('banner_url') || error.message.includes('schema cache'))
+
+  if (missingVisibilityColumn || missingBannerColumn || missingUsernameColumn) {
+    const {
+      profile_visibility: _ignoredVisibility,
+      banner_url: _ignoredBanner,
+      username: _ignoredUsername,
+      ...fallbackUpdates
+    } = updates
     const retry = await performUpdate(fallbackUpdates)
     data = retry.data
     error = retry.error

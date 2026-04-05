@@ -12,7 +12,9 @@ CREATE TABLE IF NOT EXISTS profiles (
   id            UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
   email         TEXT UNIQUE NOT NULL,
   name          TEXT NOT NULL,
+  username      TEXT UNIQUE,
   avatar_url    TEXT,
+  banner_url    TEXT,
   bio           TEXT,
   profile_visibility TEXT NOT NULL DEFAULT 'public' CHECK (profile_visibility IN ('public', 'private')),
   height_cm     NUMERIC(5,1) NOT NULL DEFAULT 175,
@@ -61,7 +63,9 @@ ALTER TABLE profiles
 ALTER TABLE profiles
   ADD COLUMN IF NOT EXISTS goal_target_change_kg NUMERIC(5,2),
   ADD COLUMN IF NOT EXISTS goal_timeframe_weeks INTEGER,
+  ADD COLUMN IF NOT EXISTS username TEXT,
   ADD COLUMN IF NOT EXISTS bio TEXT,
+  ADD COLUMN IF NOT EXISTS banner_url TEXT,
   ADD COLUMN IF NOT EXISTS profile_visibility TEXT NOT NULL DEFAULT 'public'
   CHECK (profile_visibility IN ('public', 'private')),
   ADD COLUMN IF NOT EXISTS preferred_workout_time TEXT
@@ -82,6 +86,10 @@ ALTER TABLE profiles
   ADD COLUMN IF NOT EXISTS sms_notifications_enabled BOOLEAN NOT NULL DEFAULT false,
   ADD COLUMN IF NOT EXISTS sms_notifications_consent_at TIMESTAMPTZ,
   ADD COLUMN IF NOT EXISTS water_goal_ml INTEGER;
+
+CREATE UNIQUE INDEX IF NOT EXISTS profiles_username_unique_idx
+  ON profiles (LOWER(username))
+  WHERE username IS NOT NULL;
 
 -- ─── Meals / Nutrition ──────────────────────────────────────────────────────────
 
@@ -313,11 +321,12 @@ CREATE TRIGGER workout_templates_updated_at BEFORE UPDATE ON workout_templates
 CREATE OR REPLACE FUNCTION handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO public.profiles (id, email, name, unit_system)
+  INSERT INTO public.profiles (id, email, name, username, unit_system)
   VALUES (
     NEW.id,
     NEW.email,
     COALESCE(NEW.raw_user_meta_data->>'name', split_part(NEW.email, '@', 1)),
+    LOWER(REGEXP_REPLACE(COALESCE(NEW.raw_user_meta_data->>'username', split_part(NEW.email, '@', 1)), '[^a-zA-Z0-9_]+', '', 'g')),
     COALESCE(NEW.raw_user_meta_data->>'unit_system', 'imperial')
   );
   RETURN NEW;
@@ -333,11 +342,23 @@ CREATE TRIGGER on_auth_user_created
 
 CREATE TABLE IF NOT EXISTS user_app_state (
   user_id   UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-  saved_meals        JSONB NOT NULL DEFAULT '[]',
-  supplements        JSONB NOT NULL DEFAULT '[]',
-  calendar_reminders JSONB NOT NULL DEFAULT '[]',
+  saved_meals        JSONB NOT NULL DEFAULT '[]'::jsonb,
+  supplements        JSONB NOT NULL DEFAULT '[]'::jsonb,
+  calendar_reminders JSONB NOT NULL DEFAULT '[]'::jsonb,
+  social_posts       JSONB NOT NULL DEFAULT '[]'::jsonb,
+  social_follows     JSONB NOT NULL DEFAULT '[]'::jsonb,
+  social_saved_post_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+  social_liked_post_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+  social_post_comments JSONB NOT NULL DEFAULT '{}'::jsonb,
   updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE user_app_state
+  ADD COLUMN IF NOT EXISTS social_posts JSONB NOT NULL DEFAULT '[]'::jsonb,
+  ADD COLUMN IF NOT EXISTS social_follows JSONB NOT NULL DEFAULT '[]'::jsonb,
+  ADD COLUMN IF NOT EXISTS social_saved_post_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+  ADD COLUMN IF NOT EXISTS social_liked_post_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+  ADD COLUMN IF NOT EXISTS social_post_comments JSONB NOT NULL DEFAULT '{}'::jsonb;
 
 ALTER TABLE user_app_state ENABLE ROW LEVEL SECURITY;
 

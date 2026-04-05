@@ -1,5 +1,20 @@
 import { createClient } from '@/lib/supabase'
-import type { CalendarReminder, GroceryList, JournalEntry, Recipe, SavedMealTemplate, SupplementEntry, WaterEntry, WeightEntry, WeeklyMealPlan, Workout, WorkoutLog } from '@/types'
+import type {
+  CalendarReminder,
+  GroceryList,
+  JournalEntry,
+  Recipe,
+  SavedMealTemplate,
+  SocialFollowRelationship,
+  SocialPost,
+  SocialPostComment,
+  SupplementEntry,
+  WaterEntry,
+  WeightEntry,
+  WeeklyMealPlan,
+  Workout,
+  WorkoutLog,
+} from '@/types'
 import type { MealLogEntry } from '@/lib/content-library'
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -19,6 +34,11 @@ type CloudHydrationData = {
   customRecipes: Recipe[]
   customWorkouts: Workout[]
   waterLogs: Record<string, WaterEntry[]>
+  socialPosts: SocialPost[]
+  socialFollows: SocialFollowRelationship[]
+  socialSavedPostIds: string[]
+  socialLikedPostIds: string[]
+  socialPostComments: Record<string, SocialPostComment[]>
   dbNotifications: import('@/types').Notification[]
 }
 
@@ -35,18 +55,33 @@ export type CloudSeedPayload = {
   customRecipes: Recipe[]
   customWorkouts: Workout[]
   waterLogs: Record<string, WaterEntry[]>
+  socialPosts: SocialPost[]
+  socialFollows: SocialFollowRelationship[]
+  socialSavedPostIds: string[]
+  socialLikedPostIds: string[]
+  socialPostComments: Record<string, SocialPostComment[]>
 }
 
 type MetadataAppState = {
   savedMeals: SavedMealTemplate[]
   supplements: SupplementEntry[]
   calendarReminders: CalendarReminder[]
+  socialPosts: SocialPost[]
+  socialFollows: SocialFollowRelationship[]
+  socialSavedPostIds: string[]
+  socialLikedPostIds: string[]
+  socialPostComments: Record<string, SocialPostComment[]>
 }
 
 const EMPTY_METADATA_APP_STATE: MetadataAppState = {
   savedMeals: [],
   supplements: [],
   calendarReminders: [],
+  socialPosts: [],
+  socialFollows: [],
+  socialSavedPostIds: [],
+  socialLikedPostIds: [],
+  socialPostComments: {},
 }
 
 function isUuid(value: string) {
@@ -101,19 +136,48 @@ function parseJsonNotes<T>(raw: unknown): T | null {
 
 async function fetchMetadataAppState(userId: string): Promise<MetadataAppState> {
   const supabase = createClient()
+  const selectColumns = 'saved_meals, supplements, calendar_reminders, social_posts, social_follows, social_saved_post_ids, social_liked_post_ids, social_post_comments'
 
   // Try the proper table first (new path)
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from('user_app_state')
-    .select('saved_meals, supplements, calendar_reminders')
+    .select(selectColumns)
     .eq('user_id', userId)
     .maybeSingle()
+
+  const missingSocialColumns =
+    !!error &&
+    (
+      error.message.includes('social_posts') ||
+      error.message.includes('social_follows') ||
+      error.message.includes('social_saved_post_ids') ||
+      error.message.includes('social_liked_post_ids') ||
+      error.message.includes('social_post_comments') ||
+      error.message.includes('schema cache')
+    )
+
+  if (missingSocialColumns) {
+    const fallback = await supabase
+      .from('user_app_state')
+      .select('saved_meals, supplements, calendar_reminders')
+      .eq('user_id', userId)
+      .maybeSingle()
+    data = fallback.data
+    error = fallback.error
+  }
 
   if (!error && data) {
     return {
       savedMeals: Array.isArray(data.saved_meals) ? data.saved_meals : [],
       supplements: Array.isArray(data.supplements) ? data.supplements : [],
       calendarReminders: Array.isArray(data.calendar_reminders) ? data.calendar_reminders : [],
+      socialPosts: Array.isArray((data as any).social_posts) ? (data as any).social_posts : [],
+      socialFollows: Array.isArray((data as any).social_follows) ? (data as any).social_follows : [],
+      socialSavedPostIds: Array.isArray((data as any).social_saved_post_ids) ? (data as any).social_saved_post_ids : [],
+      socialLikedPostIds: Array.isArray((data as any).social_liked_post_ids) ? (data as any).social_liked_post_ids : [],
+      socialPostComments: typeof (data as any).social_post_comments === 'object' && (data as any).social_post_comments
+        ? (data as any).social_post_comments
+        : {},
     }
   }
 
@@ -128,18 +192,64 @@ async function fetchMetadataAppState(userId: string): Promise<MetadataAppState> 
     savedMeals: Array.isArray(appState.savedMeals) ? appState.savedMeals : [],
     supplements: Array.isArray(appState.supplements) ? appState.supplements : [],
     calendarReminders: Array.isArray(appState.calendarReminders) ? appState.calendarReminders : [],
+    socialPosts: Array.isArray(appState.socialPosts) ? appState.socialPosts : [],
+    socialFollows: Array.isArray(appState.socialFollows) ? appState.socialFollows : [],
+    socialSavedPostIds: Array.isArray(appState.socialSavedPostIds) ? appState.socialSavedPostIds : [],
+    socialLikedPostIds: Array.isArray(appState.socialLikedPostIds) ? appState.socialLikedPostIds : [],
+    socialPostComments: appState.socialPostComments && typeof appState.socialPostComments === 'object'
+      ? appState.socialPostComments
+      : {},
   }
 }
 
-export async function saveMetadataCloudState(userId: string, state: MetadataAppState) {
+export async function saveMetadataCloudState(userId: string, state: Partial<MetadataAppState>) {
   const supabase = createClient()
-  const { error } = await supabase.from('user_app_state').upsert({
+  const existingState = await fetchMetadataAppState(userId)
+  const nextState: MetadataAppState = {
+    savedMeals: state.savedMeals ?? existingState.savedMeals,
+    supplements: state.supplements ?? existingState.supplements,
+    calendarReminders: state.calendarReminders ?? existingState.calendarReminders,
+    socialPosts: state.socialPosts ?? existingState.socialPosts,
+    socialFollows: state.socialFollows ?? existingState.socialFollows,
+    socialSavedPostIds: state.socialSavedPostIds ?? existingState.socialSavedPostIds,
+    socialLikedPostIds: state.socialLikedPostIds ?? existingState.socialLikedPostIds,
+    socialPostComments: state.socialPostComments ?? existingState.socialPostComments,
+  }
+
+  let { error } = await supabase.from('user_app_state').upsert({
     user_id: userId,
-    saved_meals: state.savedMeals,
-    supplements: state.supplements,
-    calendar_reminders: state.calendarReminders,
+    saved_meals: nextState.savedMeals,
+    supplements: nextState.supplements,
+    calendar_reminders: nextState.calendarReminders,
+    social_posts: nextState.socialPosts,
+    social_follows: nextState.socialFollows,
+    social_saved_post_ids: nextState.socialSavedPostIds,
+    social_liked_post_ids: nextState.socialLikedPostIds,
+    social_post_comments: nextState.socialPostComments,
     updated_at: new Date().toISOString(),
   }, { onConflict: 'user_id' })
+
+  const missingSocialColumns =
+    !!error &&
+    (
+      error.message.includes('social_posts') ||
+      error.message.includes('social_follows') ||
+      error.message.includes('social_saved_post_ids') ||
+      error.message.includes('social_liked_post_ids') ||
+      error.message.includes('social_post_comments') ||
+      error.message.includes('schema cache')
+    )
+
+  if (missingSocialColumns) {
+    const retry = await supabase.from('user_app_state').upsert({
+      user_id: userId,
+      saved_meals: nextState.savedMeals,
+      supplements: nextState.supplements,
+      calendar_reminders: nextState.calendarReminders,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'user_id' })
+    error = retry.error
+  }
 
   // RLS violations (code 42501) mean the session has expired — local data is
   // preserved and the sync will succeed on the next valid session.
@@ -453,6 +563,11 @@ export async function fetchCloudState(userId: string): Promise<CloudHydrationDat
     customRecipes,
     customWorkouts,
     waterLogs,
+    socialPosts: metadataState.socialPosts,
+    socialFollows: metadataState.socialFollows,
+    socialSavedPostIds: metadataState.socialSavedPostIds,
+    socialLikedPostIds: metadataState.socialLikedPostIds,
+    socialPostComments: metadataState.socialPostComments,
     dbNotifications: (notificationsResp.data ?? []).map((n: Record<string, unknown>) => ({
       id: n.id as string,
       type: n.type as 'info' | 'success' | 'warning' | 'error' | 'share_received',
@@ -637,6 +752,11 @@ export async function seedCloudFromLocal(userId: string, payload: CloudSeedPaylo
     savedMeals: payload.savedMeals.length > 0 ? payload.savedMeals : existingMetadata.savedMeals,
     supplements: payload.supplements.length > 0 ? payload.supplements : existingMetadata.supplements,
     calendarReminders: payload.calendarReminders.length > 0 ? payload.calendarReminders : existingMetadata.calendarReminders,
+    socialPosts: payload.socialPosts.length > 0 ? payload.socialPosts : existingMetadata.socialPosts,
+    socialFollows: payload.socialFollows.length > 0 ? payload.socialFollows : existingMetadata.socialFollows,
+    socialSavedPostIds: payload.socialSavedPostIds.length > 0 ? payload.socialSavedPostIds : existingMetadata.socialSavedPostIds,
+    socialLikedPostIds: payload.socialLikedPostIds.length > 0 ? payload.socialLikedPostIds : existingMetadata.socialLikedPostIds,
+    socialPostComments: Object.keys(payload.socialPostComments).length > 0 ? payload.socialPostComments : existingMetadata.socialPostComments,
   }))
 
   await Promise.all(tasks)

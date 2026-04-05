@@ -44,6 +44,7 @@ export function mergeSocialProfiles(
       name: currentUser.name,
       username: currentUser.username || currentUser.name.toLowerCase().replace(/[^a-z0-9]+/g, ''),
       avatar_url: currentUser.avatar_url,
+      banner_url: currentUser.banner_url,
       bio: currentUser.bio,
       profile_visibility: currentUser.profile_visibility ?? 'public',
     })

@@ -892,8 +892,7 @@ export function TopBar() {
                 { label: 'Calendar',   href: '/dashboard/calendar',     icon: Calendar },
                 { label: 'Journal',    href: '/dashboard/journal',      icon: BookOpen },
                 { label: 'Supplements',href: '/dashboard/supplements',  icon: Pill },
-                { label: 'Shared With Me', href: '/dashboard/shared', icon: Users },
-                { label: 'My Profile', href: '/dashboard/profile', icon: Settings },
+                { label: 'Shared With Me', href: '/dashboard/shared', icon: MessageSquareText },
               ].map(({ label, href, icon: Icon }) => {
                 const isActive = pathname === href || pathname.startsWith(href + '/')
                 const hasUnreadShared = href === '/dashboard/shared' && unreadSharedCount > 0

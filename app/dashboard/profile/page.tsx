@@ -4,7 +4,7 @@ import type { ChangeEvent, ReactNode } from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { format } from 'date-fns'
-import { Camera, Globe2, Loader2, Lock, MessageSquareText, PencilLine, Repeat2, Settings, Share2, Trash2, UserCheck, Users, UtensilsCrossed, Dumbbell } from 'lucide-react'
+import { Globe2, Loader2, Lock, MessageSquareText, PencilLine, Repeat2, Settings, Share2, Trash2, UserCheck, Users, UtensilsCrossed, Dumbbell } from 'lucide-react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
@@ -16,7 +16,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { PeopleDialog } from '@/components/feed/PeopleDialog'
 import { SocialPostDetailDialog } from '@/components/feed/SocialPostDetailDialog'
-import { getSocialCreators } from '@/lib/social-feed'
+import { DEFAULT_SOCIAL_POSTS, getSocialCreators } from '@/lib/social-feed'
 import { getFollowerCount, getFollowingCount, mergeSocialProfiles } from '@/lib/social-connections'
 import type { SocialPost } from '@/types'
 
@@ -61,6 +61,7 @@ export default function ProfilePage() {
   const isDemoMode = useAppStore((state) => state.isDemoMode)
   const socialPosts = useAppStore((state) => state.socialPosts)
   const socialFollows = useAppStore((state) => state.socialFollows)
+  const socialSavedPostIds = useAppStore((state) => state.socialSavedPostIds)
   const savedMeals = useAppStore((state) => state.savedMeals)
   const customWorkouts = useAppStore((state) => state.customWorkouts)
   const updateProfile = useAppStore((state) => state.updateProfile)
@@ -68,12 +69,15 @@ export default function ProfilePage() {
   const acceptFollowRequest = useAppStore((state) => state.acceptFollowRequest)
   const declineFollowRequest = useAppStore((state) => state.declineFollowRequest)
   const avatarInputRef = useRef<HTMLInputElement>(null)
+  const bannerInputRef = useRef<HTMLInputElement>(null)
+  const tabsListRef = useRef<HTMLDivElement>(null)
 
   const [draft, setDraft] = useState({
     name: user?.name ?? '',
     username: user?.username ?? '',
     bio: user?.bio ?? '',
     avatar_url: user?.avatar_url ?? '',
+    banner_url: user?.banner_url ?? '',
     profile_visibility: user?.profile_visibility ?? 'public',
   })
   const [saving, setSaving] = useState(false)
@@ -91,9 +95,14 @@ export default function ProfilePage() {
       username: user?.username ?? '',
       bio: user?.bio ?? '',
       avatar_url: user?.avatar_url ?? '',
+      banner_url: user?.banner_url ?? '',
       profile_visibility: user?.profile_visibility ?? 'public',
     })
-  }, [user?.avatar_url, user?.bio, user?.name, user?.profile_visibility, user?.username])
+  }, [user?.avatar_url, user?.banner_url, user?.bio, user?.name, user?.profile_visibility, user?.username])
+
+  useEffect(() => {
+    tabsListRef.current?.scrollTo({ left: 0 })
+  }, [])
 
   useEffect(() => {
     let active = true
@@ -143,6 +152,10 @@ export default function ProfilePage() {
     if (!user) return []
     return socialPosts.filter((post) => post.user.id === user.id)
   }, [socialPosts, user])
+  const browseablePosts = useMemo(() => [
+    ...socialPosts,
+    ...DEFAULT_SOCIAL_POSTS.filter((post) => !socialPosts.some((existing) => existing.id === post.id)),
+  ], [socialPosts])
 
   const socialProfiles = useMemo(() => mergeSocialProfiles(socialPosts, getSocialCreators(), user), [socialPosts, user])
   const peopleById = useMemo(() => new Map(socialProfiles.map((profile) => [profile.id, profile])), [socialProfiles])
@@ -162,7 +175,12 @@ export default function ProfilePage() {
     .filter((item) => item.profile), [peopleById, socialFollows, user?.id])
   const totalSaves = ownPosts.reduce((sum, post) => sum + post.stats.saved, 0)
   const totalReposts = ownPosts.reduce((sum, post) => sum + post.stats.remixed, 0)
-  const savedPosts = useMemo(() => [...ownPosts].filter((post) => post.stats.saved > 0).sort((a, b) => b.stats.saved - a.stats.saved), [ownPosts])
+  const savedPosts = useMemo(
+    () => socialSavedPostIds
+      .map((postId) => browseablePosts.find((post) => post.id === postId))
+      .filter(Boolean) as SocialPost[],
+    [browseablePosts, socialSavedPostIds]
+  )
   const repostedPosts = useMemo(() => [...ownPosts].filter((post) => post.stats.remixed > 0).sort((a, b) => b.stats.remixed - a.stats.remixed), [ownPosts])
 
   if (!user) return null
@@ -184,6 +202,27 @@ export default function ProfilePage() {
     const reader = new FileReader()
     reader.onload = () => {
       setDraft((current) => ({ ...current, avatar_url: String(reader.result ?? '') }))
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const handleBannerSelect = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    if (!file.type.startsWith('image/')) {
+      toast.error('Choose an image file for your banner.')
+      return
+    }
+
+    if (file.size > 6 * 1024 * 1024) {
+      toast.error('Keep banner images under 6 MB.')
+      return
+    }
+
+    const reader = new FileReader()
+    reader.onload = () => {
+      setDraft((current) => ({ ...current, banner_url: String(reader.result ?? '') }))
     }
     reader.readAsDataURL(file)
   }
@@ -212,6 +251,7 @@ export default function ProfilePage() {
         username: username || undefined,
         bio: bio || undefined,
         avatar_url: draft.avatar_url || undefined,
+        banner_url: draft.banner_url || undefined,
         profile_visibility: profileVisibility,
       })
       toast.success('Profile updated!')
@@ -235,6 +275,7 @@ export default function ProfilePage() {
           username: username || null,
           bio: bio || null,
           avatar_url: draft.avatar_url || null,
+          banner_url: draft.banner_url || null,
           profile_visibility: profileVisibility,
         }),
       })
@@ -247,6 +288,7 @@ export default function ProfilePage() {
         username: payload?.username ?? (username || undefined),
         bio: payload?.bio ?? (bio || undefined),
         avatar_url: payload?.avatar_url ?? (draft.avatar_url || undefined),
+        banner_url: payload?.banner_url ?? (draft.banner_url || undefined),
         profile_visibility: payload?.profile_visibility ?? profileVisibility,
       })
       toast.success('Profile updated!')
@@ -261,37 +303,52 @@ export default function ProfilePage() {
   return (
     <div className="space-y-6">
       <Card className="overflow-hidden border-border/60">
-        <div className="h-24 bg-[linear-gradient(135deg,rgba(16,185,129,0.18),rgba(20,184,166,0.08),rgba(15,23,42,0.04))]" />
+        <div className="relative">
+          <div
+            className={`h-24 ${draft.banner_url ? 'bg-cover bg-center bg-no-repeat' : 'bg-[linear-gradient(135deg,rgba(16,185,129,0.18),rgba(20,184,166,0.08),rgba(15,23,42,0.04))]'}`}
+            style={draft.banner_url ? { backgroundImage: `linear-gradient(180deg,rgba(15,23,42,0.08),rgba(15,23,42,0.2)), url(${draft.banner_url})` } : undefined}
+          />
+          <button
+            type="button"
+            onClick={() => bannerInputRef.current?.click()}
+            className="absolute bottom-3 right-3 inline-flex h-9 w-9 items-center justify-center rounded-full border border-border/70 bg-background/90 text-muted-foreground shadow-sm backdrop-blur transition-colors hover:bg-background"
+            aria-label="Change banner image"
+          >
+            <PencilLine className="h-4 w-4" />
+          </button>
+          <input
+            ref={bannerInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleBannerSelect}
+          />
+        </div>
         <CardContent className="relative -mt-10 space-y-6 px-5 pb-5 pt-0 sm:px-6">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
               <div className="relative">
                 <button
                   type="button"
-                  onClick={() => {
-                    if (!isEditingProfile) return
-                    avatarInputRef.current?.click()
-                  }}
+                  onClick={() => avatarInputRef.current?.click()}
                   className={cn(
                     'flex h-20 w-20 items-center justify-center overflow-hidden rounded-3xl border-4 border-background bg-gradient-to-br from-emerald-400 to-teal-500 text-2xl font-bold text-white shadow-lg',
                     draft.avatar_url ? 'bg-cover bg-center bg-no-repeat' : '',
-                    isEditingProfile ? 'cursor-pointer' : 'cursor-default'
+                    'cursor-pointer'
                   )}
                   style={draft.avatar_url ? { backgroundImage: `url(${draft.avatar_url})` } : undefined}
-                  aria-label={isEditingProfile ? 'Change profile photo' : 'Profile photo'}
+                  aria-label="Change profile photo"
                 >
                   {!draft.avatar_url ? nameOrFallback(draft.name || user.name) : null}
                 </button>
-                {isEditingProfile ? (
-                  <button
-                    type="button"
-                    onClick={() => avatarInputRef.current?.click()}
-                    className="absolute -bottom-2 -right-2 inline-flex h-9 w-9 items-center justify-center rounded-full border border-border bg-background shadow-sm transition-colors hover:bg-muted"
-                    aria-label="Upload profile photo"
-                  >
-                    <Camera className="h-4 w-4" />
-                  </button>
-                ) : null}
+                <button
+                  type="button"
+                  onClick={() => avatarInputRef.current?.click()}
+                  className="absolute -bottom-2 -right-2 inline-flex h-9 w-9 items-center justify-center rounded-full border border-border bg-background text-muted-foreground shadow-sm transition-colors hover:bg-muted"
+                  aria-label="Upload profile photo"
+                >
+                  <PencilLine className="h-4 w-4" />
+                </button>
                 <input
                   ref={avatarInputRef}
                   type="file"
@@ -354,7 +411,7 @@ export default function ProfilePage() {
                     maxLength={220}
                   />
                   <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <span>Profile photo, bio, and username update everywhere your account appears.</span>
+                    <span>Profile photo, banner, bio, and username update everywhere your account appears.</span>
                     <span>{draft.bio.length}/220</span>
                   </div>
                 </label>
@@ -401,7 +458,7 @@ export default function ProfilePage() {
                 <div>
                   <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Bio</p>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    {user.bio || 'No bio yet. Click Edit Profile to add one.'}
+                    {user.bio || 'No bio yet. Use the edit control to add one.'}
                   </p>
                 </div>
                 <div>
@@ -436,6 +493,7 @@ export default function ProfilePage() {
                         username: user.username ?? '',
                         bio: user.bio ?? '',
                         avatar_url: user.avatar_url ?? '',
+                        banner_url: user.banner_url ?? '',
                         profile_visibility: user.profile_visibility ?? 'public',
                       })
                       setIsEditingProfile(false)
@@ -447,11 +505,13 @@ export default function ProfilePage() {
               ) : (
                 <Button
                   type="button"
-                  className="h-11 rounded-2xl"
+                  variant="ghost"
+                  size="icon"
+                  className="h-9 w-9 self-end rounded-full text-muted-foreground"
                   onClick={() => setIsEditingProfile(true)}
+                  aria-label="Edit profile"
                 >
-                  <PencilLine className="mr-2 h-4 w-4" />
-                  Edit Profile
+                  <PencilLine className="h-4 w-4" />
                 </Button>
               )}
               <Button asChild type="button" variant="outline" className="h-11 rounded-2xl">
@@ -466,7 +526,7 @@ export default function ProfilePage() {
       </Card>
 
       <Tabs defaultValue="posts" className="space-y-4">
-        <TabsList className="flex w-full flex-nowrap gap-1 overflow-x-auto rounded-2xl bg-muted/40 p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <TabsList ref={tabsListRef} className="flex w-full justify-start flex-nowrap gap-1 overflow-x-auto rounded-2xl bg-muted/40 p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <TabsTrigger value="posts" className="shrink-0 rounded-xl">Posts</TabsTrigger>
           <TabsTrigger value="comments" className="shrink-0 rounded-xl">Comments</TabsTrigger>
           <TabsTrigger value="saves" className="shrink-0 rounded-xl">Saves</TabsTrigger>
@@ -576,7 +636,7 @@ export default function ProfilePage() {
           {savedPosts.length === 0 ? (
             <EmptyState
               title="No saves yet"
-              detail="When people save your posts, those posts will show up here first."
+              detail="Posts you save from the feed will show up here so you can get back to them quickly."
             />
           ) : (
             <div className="grid gap-4 lg:grid-cols-2">
@@ -589,7 +649,7 @@ export default function ProfilePage() {
                         <h3 className="mt-1 font-semibold">{post.title}</h3>
                       </div>
                       <div className="rounded-full border border-border/60 bg-muted/30 px-3 py-1 text-xs text-muted-foreground">
-                        {post.stats.saved} saves
+                        Saved
                       </div>
                     </div>
                     <p className="line-clamp-3 text-sm text-muted-foreground">{post.caption}</p>

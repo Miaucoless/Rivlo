@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { createClient } from '@/lib/supabase'
 import { useAppStore } from '@/store/useAppStore'
 import {
   DEFAULT_SOCIAL_POSTS,
@@ -36,10 +37,24 @@ import { SocialPostUseDialog, type SocialUseDialogPayload } from '@/components/f
 import { SocialPostComposerDialog } from '@/components/feed/SocialPostComposerDialog'
 import { categorizeIngredient, estimatePrice } from '@/lib/grocery-generator'
 import { buildSocialProfileHref, canViewPost, getFollowRelationship, mergeSocialProfiles } from '@/lib/social-connections'
-import type { CalendarReminder, SocialFeedFilter, SocialFeedSort, SocialPost, SocialPostDraft, SocialPostUser } from '@/types'
+import type { CalendarReminder, SocialFeedFilter, SocialFeedSort, SocialFollowRelationship, SocialPost, SocialPostDraft, SocialPostUser } from '@/types'
 import { toast } from 'sonner'
 
 const FEED_BATCH_SIZE = 6
+
+type PublicSocialPayload = {
+  posts: SocialPost[]
+  profiles: SocialPostUser[]
+  follows: SocialFollowRelationship[]
+}
+
+async function getToken() {
+  const supabase = createClient()
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+  return session?.access_token ?? null
+}
 
 export default function FeedPage() {
   const {
@@ -86,19 +101,76 @@ export default function FeedPage() {
   const [actionMode, setActionMode] = useState<'use' | null>(null)
   const [composerOpen, setComposerOpen] = useState(false)
   const [composerDraft, setComposerDraft] = useState<SocialPostDraft | null>(null)
+  const [remotePublicPosts, setRemotePublicPosts] = useState<SocialPost[]>([])
+  const [remoteProfiles, setRemoteProfiles] = useState<SocialPostUser[]>([])
+  const [remoteFollows, setRemoteFollows] = useState<SocialFollowRelationship[]>([])
   const sentinelRef = useRef<HTMLDivElement | null>(null)
   const pathname = usePathname()
   const router = useRouter()
   const searchParams = useSearchParams()
   const viewerId = user?.id ?? (isDemoMode ? 'demo-user-001' : null)
 
+  useEffect(() => {
+    let active = true
+
+    async function loadPublicFeed() {
+      if (!viewerId || isDemoMode) {
+        if (active) {
+          setRemotePublicPosts([])
+          setRemoteProfiles([])
+          setRemoteFollows([])
+        }
+        return
+      }
+
+      try {
+        const token = await getToken()
+        if (!token) return
+
+        const res = await fetch('/api/social/public', {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store',
+        })
+
+        if (!res.ok) throw new Error('Could not load public posts right now.')
+        const payload = await res.json() as PublicSocialPayload
+
+        if (!active) return
+        setRemotePublicPosts(Array.isArray(payload.posts) ? payload.posts : [])
+        setRemoteProfiles(Array.isArray(payload.profiles) ? payload.profiles : [])
+        setRemoteFollows(Array.isArray(payload.follows) ? payload.follows : [])
+      } catch (error) {
+        if (!active) return
+        console.error('Public social feed load failed:', error)
+      }
+    }
+
+    void loadPublicFeed()
+
+    return () => {
+      active = false
+    }
+  }, [isDemoMode, socialPosts.length, socialFollows.length, viewerId])
+
+  const allFollows = useMemo(() => {
+    const deduped = new Map<string, SocialFollowRelationship>()
+    for (const relationship of [...socialFollows, ...remoteFollows]) {
+      deduped.set(`${relationship.followerId}:${relationship.followingId}`, relationship)
+    }
+    return Array.from(deduped.values())
+  }, [remoteFollows, socialFollows])
+
   const allPosts = useMemo(() => {
     const seededPosts = DEFAULT_SOCIAL_POSTS
-    return [
+    const combinedPosts = [
       ...socialPosts,
-      ...seededPosts.filter((defaultPost) => !socialPosts.some((post) => post.id === defaultPost.id)),
+      ...remotePublicPosts.filter((remotePost) => !socialPosts.some((post) => post.id === remotePost.id)),
     ]
-  }, [socialPosts])
+    return [
+      ...combinedPosts,
+      ...seededPosts.filter((defaultPost) => !combinedPosts.some((post) => post.id === defaultPost.id)),
+    ]
+  }, [remotePublicPosts, socialPosts])
 
   // Explore: all posts marked public (no follow required)
   const explorePosts = useMemo(() => (
@@ -108,20 +180,20 @@ export default function FeedPage() {
   // Following: posts by people the viewer follows (accepted) + own posts
   const followingPosts = useMemo(() => {
     const followedIds = new Set(
-      socialFollows
+      allFollows
         .filter((r) => r.followerId === viewerId && r.status === 'accepted')
         .map((r) => r.followingId)
     )
     return allPosts.filter((post) => post.user.id === viewerId || followedIds.has(post.user.id))
-  }, [allPosts, socialFollows, viewerId])
+  }, [allPosts, allFollows, viewerId])
 
   const visibleFeedPosts = activeTab === 'following' ? followingPosts : explorePosts
 
   const socialProfiles = useMemo(() => (
-    mergeSocialProfiles(socialPosts, [], user)
+    mergeSocialProfiles(allPosts, remoteProfiles, user)
       .filter((profile) => profile.id !== viewerId)
       .sort((a, b) => a.name.localeCompare(b.name))
-  ), [socialPosts, user, viewerId])
+  ), [allPosts, remoteProfiles, user, viewerId])
 
   const filteredPeople = useMemo(() => {
     const lookup = deferredPeopleQuery.trim().toLowerCase()
@@ -200,12 +272,12 @@ export default function FeedPage() {
     if (!requestedPostId) return
 
     const requestedPost = allPosts.find((post) => post.id === requestedPostId)
-    if (!requestedPost || !canViewPost(requestedPost, viewerId, socialFollows)) return
+    if (!requestedPost || !canViewPost(requestedPost, viewerId, allFollows)) return
 
     setFilter('all')
     setSelectedPost(requestedPost)
     setDetailOpen(true)
-  }, [allPosts, searchParams, socialFollows, viewerId])
+  }, [allPosts, allFollows, searchParams, viewerId])
 
   const visiblePosts = filteredPosts.slice(0, visibleCount)
   const hasMore = visibleCount < filteredPosts.length
@@ -226,6 +298,7 @@ export default function FeedPage() {
         name: user.name,
         username: user.username || user.name.toLowerCase().replace(/[^a-z0-9]+/g, ''),
         avatar_url: user.avatar_url,
+        banner_url: user.banner_url,
         bio: user.bio,
         profile_visibility: user.profile_visibility,
       }
@@ -532,6 +605,8 @@ export default function FeedPage() {
                           saved={socialSavedPostIds.includes(post.id)}
                           liked={socialLikedPostIds.includes(post.id)}
                           onOpen={openPost}
+                          onToggleSave={(nextPost) => toggleSaveSocialPost(nextPost.id, nextPost)}
+                          onToggleLike={(nextPost) => toggleLikeSocialPost(nextPost.id, nextPost)}
                         />
                       ))}
                     </AnimatePresence>
@@ -676,11 +751,11 @@ export default function FeedPage() {
         }}
         onToggleSave={() => {
           if (!activePost || (activePost.type !== 'meal' && activePost.type !== 'workout')) return
-          toggleSaveSocialPost(activePost.id)
+          toggleSaveSocialPost(activePost.id, activePost)
         }}
         onToggleLike={() => {
           if (!activePost) return
-          toggleLikeSocialPost(activePost.id)
+          toggleLikeSocialPost(activePost.id, activePost)
         }}
         onAddComment={(body) => {
           if (!activePost) return

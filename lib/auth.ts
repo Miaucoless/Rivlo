@@ -13,9 +13,16 @@ function normalizeProfile(profile: Partial<UserProfile> | null | undefined): Use
   if (!profile) return null
 
   const workoutSplit = profile.workout_split || 'ppl'
+  const rawUsername = typeof profile.username === 'string' ? profile.username.trim().toLowerCase() : ''
+  const fallbackUsername =
+    rawUsername ||
+    (typeof profile.name === 'string'
+      ? profile.name.toLowerCase().replace(/[^a-z0-9_]+/g, '')
+      : '')
 
   return {
     ...profile,
+    username: fallbackUsername || undefined,
     workout_split: workoutSplit,
     split_schedule: profile.split_schedule ?? buildDefaultSchedule(workoutSplit),
     profile_visibility: profile.profile_visibility === 'private' ? 'private' : 'public',

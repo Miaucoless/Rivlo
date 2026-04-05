@@ -19,6 +19,7 @@ export interface UserProfile {
   email: string
   name: string
   avatar_url?: string
+  banner_url?: string
   bio?: string
   username?: string
   profile_visibility?: 'public' | 'private'
@@ -312,6 +313,7 @@ export interface SocialPostUser {
   name: string
   username: string
   avatar_url?: string
+  banner_url?: string
   bio?: string
   profile_visibility?: 'public' | 'private'
 }

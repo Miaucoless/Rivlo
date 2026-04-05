@@ -55,19 +55,40 @@ export async function GET(req: NextRequest) {
   const escapedLookup = normalizedLookup.replace(/[%_,]/g, (char) => `\\${char}`)
 
   if (isEmail) {
-    const { data } = await db
+    let { data, error } = await db
       .from('profiles')
       .select('id, name, username, avatar_url')
       .eq('email', q)
       .neq('id', user.id)
+
+    if (error && (error.message.includes('username') || error.message.includes('schema cache'))) {
+      const fallback = await db
+        .from('profiles')
+        .select('id, name, avatar_url')
+        .eq('email', q)
+        .neq('id', user.id)
+      data = fallback.data?.map((profile) => ({ ...profile, username: undefined })) ?? []
+    }
+
     results = data ?? []
   } else {
-    const { data } = await db
+    let { data, error } = await db
       .from('profiles')
       .select('id, name, username, avatar_url')
       .or(`username.ilike.%${escapedLookup}%,name.ilike.%${escapedLookup}%`)
       .neq('id', user.id)
       .limit(20)
+
+    if (error && (error.message.includes('username') || error.message.includes('schema cache'))) {
+      const fallback = await db
+        .from('profiles')
+        .select('id, name, avatar_url')
+        .ilike('name', `%${escapedLookup}%`)
+        .neq('id', user.id)
+        .limit(20)
+      data = fallback.data?.map((profile) => ({ ...profile, username: undefined })) ?? []
+    }
+
     results = data ?? []
   }
 

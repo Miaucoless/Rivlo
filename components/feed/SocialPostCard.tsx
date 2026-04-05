@@ -21,11 +21,15 @@ export function SocialPostCard({
   saved,
   liked,
   onOpen,
+  onToggleSave,
+  onToggleLike,
 }: {
   post: SocialPost
   saved: boolean
   liked: boolean
   onOpen: (post: SocialPost) => void
+  onToggleSave: (post: SocialPost) => void
+  onToggleLike: (post: SocialPost) => void
 }) {
   const router = useRouter()
   const badge = getSocialPostBadge(post)
@@ -44,6 +48,8 @@ export function SocialPostCard({
   const touchStartX = useRef(0)
   const touchDeltaX = useRef(0)
   const didSwipe = useRef(false)
+  const lastTapAt = useRef(0)
+  const suppressNextOpen = useRef(false)
 
   const hasMultiple = mediaItems.length > 1
   const currentMedia = mediaItems[mediaIndex]
@@ -78,6 +84,29 @@ export function SocialPostCard({
     }
   }
 
+  const handleOpen = () => {
+    if (suppressNextOpen.current || didSwipe.current) {
+      suppressNextOpen.current = false
+      return
+    }
+    onOpen(post)
+  }
+
+  const handleCardTouchEnd = (event: React.TouchEvent) => {
+    if (didSwipe.current) return
+    const target = event.target as HTMLElement
+    if (target.closest('button')) return
+
+    const now = Date.now()
+    if (now - lastTapAt.current < 280) {
+      suppressNextOpen.current = true
+      event.preventDefault()
+      event.stopPropagation()
+      onToggleLike(post)
+    }
+    lastTapAt.current = now
+  }
+
   return (
     <motion.div
       layout
@@ -87,11 +116,12 @@ export function SocialPostCard({
       whileHover={{ y: -2, scale: 1.01 }}
       whileTap={{ scale: 0.995 }}
       transition={{ duration: 0.18, ease: [0.22, 0.61, 0.36, 1] }}
-      onClick={() => { if (!didSwipe.current) onOpen(post) }}
+      onClick={handleOpen}
+      onTouchEnd={handleCardTouchEnd}
       onKeyDown={(event) => {
         if (event.key === 'Enter' || event.key === ' ') {
           event.preventDefault()
-          onOpen(post)
+          handleOpen()
         }
       }}
       role="button"
@@ -180,16 +210,22 @@ export function SocialPostCard({
             <h3 className="truncate text-base font-semibold tracking-tight text-foreground sm:text-lg">{post.title}</h3>
             <p className="mt-1 line-clamp-2 text-sm leading-6 text-muted-foreground">{post.caption}</p>
           </div>
-          <div
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation()
+              onToggleSave(post)
+            }}
             className={cn(
               'mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border transition-colors',
               saved
                 ? 'border-primary/20 bg-primary/10 text-primary'
                 : 'border-border/70 bg-background/90 text-muted-foreground'
             )}
+            aria-label={saved ? 'Unsave post' : 'Save post'}
           >
             <Bookmark className={cn('h-4 w-4', saved ? 'fill-current' : '')} />
-          </div>
+          </button>
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
@@ -236,10 +272,18 @@ export function SocialPostCard({
         ) : null}
 
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          <span className={cn('inline-flex items-center gap-1', liked ? 'text-rose-400' : '')}>
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation()
+              onToggleLike(post)
+            }}
+            className={cn('inline-flex items-center gap-1 transition-colors hover:text-rose-400', liked ? 'text-rose-400' : '')}
+            aria-label={liked ? 'Unlike post' : 'Like post'}
+          >
             <Heart className={cn('h-3.5 w-3.5', liked ? 'fill-current' : '')} />
             {formatCompactNumber(post.stats.likes ?? 0)}
-          </span>
+          </button>
           <span className="text-border">•</span>
           <span className="inline-flex items-center gap-1">
             <MessageCircle className="h-3.5 w-3.5" />

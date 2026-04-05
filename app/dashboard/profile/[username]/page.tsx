@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useParams, useSearchParams } from 'next/navigation'
 import { addDays, format } from 'date-fns'
@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PeopleDialog } from '@/components/feed/PeopleDialog'
 import { SocialPostDetailDialog } from '@/components/feed/SocialPostDetailDialog'
 import { SocialPostUseDialog, type SocialUseDialogPayload } from '@/components/feed/SocialPostUseDialog'
+import { createClient } from '@/lib/supabase'
 import {
   DEFAULT_SOCIAL_POSTS,
   buildRecipeFromPost,
@@ -23,8 +24,22 @@ import {
 import { canViewProfile, getFollowerCount, getFollowingCount, getFollowRelationship, mergeSocialProfiles } from '@/lib/social-connections'
 import { categorizeIngredient, estimatePrice } from '@/lib/grocery-generator'
 import { useAppStore } from '@/store/useAppStore'
-import type { CalendarReminder, SocialPost, SocialPostUser } from '@/types'
+import type { CalendarReminder, SocialFollowRelationship, SocialPost, SocialPostUser } from '@/types'
 import { toast } from 'sonner'
+
+type PublicSocialPayload = {
+  posts: SocialPost[]
+  profiles: SocialPostUser[]
+  follows: SocialFollowRelationship[]
+}
+
+async function getToken() {
+  const supabase = createClient()
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+  return session?.access_token ?? null
+}
 
 export default function PublicProfilePage() {
   const params = useParams<{ username: string }>()
@@ -35,6 +50,9 @@ export default function PublicProfilePage() {
   const [selectedPost, setSelectedPost] = useState<SocialPost | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
   const [actionMode, setActionMode] = useState<'use' | null>(null)
+  const [remotePublicPosts, setRemotePublicPosts] = useState<SocialPost[]>([])
+  const [remoteProfiles, setRemoteProfiles] = useState<SocialPostUser[]>([])
+  const [remoteFollows, setRemoteFollows] = useState<SocialFollowRelationship[]>([])
 
   const {
     user,
@@ -57,16 +75,70 @@ export default function PublicProfilePage() {
     addCustomWorkout,
     addCalendarReminder,
   } = useAppStore()
+  const viewerId = user?.id ?? null
+
+  useEffect(() => {
+    let active = true
+
+    async function loadPublicSocialData() {
+      if (!viewerId) {
+        if (active) {
+          setRemotePublicPosts([])
+          setRemoteProfiles([])
+          setRemoteFollows([])
+        }
+        return
+      }
+
+      try {
+        const token = await getToken()
+        if (!token) return
+
+        const res = await fetch('/api/social/public', {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store',
+        })
+
+        if (!res.ok) throw new Error('Could not load this profile right now.')
+        const payload = await res.json() as PublicSocialPayload
+
+        if (!active) return
+        setRemotePublicPosts(Array.isArray(payload.posts) ? payload.posts : [])
+        setRemoteProfiles(Array.isArray(payload.profiles) ? payload.profiles : [])
+        setRemoteFollows(Array.isArray(payload.follows) ? payload.follows : [])
+      } catch (error) {
+        if (!active) return
+        console.error('Public profile preload failed:', error)
+      }
+    }
+
+    void loadPublicSocialData()
+    return () => {
+      active = false
+    }
+  }, [socialFollows.length, socialPosts.length, viewerId])
+
+  const allFollows = useMemo(() => {
+    const deduped = new Map<string, SocialFollowRelationship>()
+    for (const relationship of [...socialFollows, ...remoteFollows]) {
+      deduped.set(`${relationship.followerId}:${relationship.followingId}`, relationship)
+    }
+    return Array.from(deduped.values())
+  }, [remoteFollows, socialFollows])
 
   const allPosts = useMemo(() => {
     const seededPosts = DEFAULT_SOCIAL_POSTS
-    return [
+    const combinedPosts = [
       ...socialPosts,
-      ...seededPosts.filter((post) => !socialPosts.some((existing) => existing.id === post.id)),
+      ...remotePublicPosts.filter((post) => !socialPosts.some((existing) => existing.id === post.id)),
     ]
-  }, [socialPosts])
+    return [
+      ...combinedPosts,
+      ...seededPosts.filter((post) => !combinedPosts.some((existing) => existing.id === post.id)),
+    ]
+  }, [remotePublicPosts, socialPosts])
 
-  const directory = useMemo(() => mergeSocialProfiles(allPosts, getSocialCreators(), user), [allPosts, user])
+  const directory = useMemo(() => mergeSocialProfiles(allPosts, [...getSocialCreators(), ...remoteProfiles], user), [allPosts, remoteProfiles, user])
   const fallbackName = searchParams.get('name')?.trim() || null
   const normalizedFallbackName = fallbackName?.toLowerCase() ?? null
   const currentUserMatches = user?.username?.toLowerCase() === requestedUsername
@@ -88,7 +160,6 @@ export default function PublicProfilePage() {
         } : null)
   ), [currentUserMatches, directory, fallbackName, normalizedFallbackName, requestedUsername, seededCreator, user?.id])
 
-  const viewerId = user?.id ?? null
   const profilePosts = useMemo(
     () => (profileUser ? allPosts.filter((post) => post.user.id === profileUser.id) : []),
     [allPosts, profileUser]
@@ -105,10 +176,10 @@ export default function PublicProfilePage() {
     [allPosts, profileUser]
   )
 
-  const canSeePosts = profileUser ? canViewProfile(profileUser, viewerId, socialFollows) : false
-  const relationship = profileUser ? getFollowRelationship(socialFollows, viewerId, profileUser.id) : null
-  const followerCount = profileUser ? getFollowerCount(socialFollows, profileUser.id) : 0
-  const followingCount = profileUser ? getFollowingCount(socialFollows, profileUser.id) : 0
+  const canSeePosts = profileUser ? canViewProfile(profileUser, viewerId, allFollows) : false
+  const relationship = profileUser ? getFollowRelationship(allFollows, viewerId, profileUser.id) : null
+  const followerCount = profileUser ? getFollowerCount(allFollows, profileUser.id) : 0
+  const followingCount = profileUser ? getFollowingCount(allFollows, profileUser.id) : 0
   const selectedPostSaved = selectedPost ? socialSavedPostIds.includes(selectedPost.id) : false
   const selectedPostLiked = selectedPost ? socialLikedPostIds.includes(selectedPost.id) : false
   const selectedPostComments = selectedPost ? (socialPostComments[selectedPost.id] ?? []) : []
@@ -117,18 +188,18 @@ export default function PublicProfilePage() {
   const peopleById = useMemo(() => new Map(directory.map((person) => [person.id, person])), [directory])
   const followerProfiles = useMemo(() => {
     if (!profileUser) return []
-    return socialFollows
+    return allFollows
       .filter((item) => item.followingId === profileUser.id && item.status === 'accepted')
       .map((item) => peopleById.get(item.followerId))
       .filter(Boolean) as SocialPostUser[]
-  }, [peopleById, profileUser, socialFollows])
+  }, [allFollows, peopleById, profileUser])
   const followingProfiles = useMemo(() => {
     if (!profileUser) return []
-    return socialFollows
+    return allFollows
       .filter((item) => item.followerId === profileUser.id && item.status === 'accepted')
       .map((item) => peopleById.get(item.followingId))
       .filter(Boolean) as SocialPostUser[]
-  }, [peopleById, profileUser, socialFollows])
+  }, [allFollows, peopleById, profileUser])
 
   if (!profileUser) {
     return (
@@ -261,7 +332,10 @@ export default function PublicProfilePage() {
       </Button>
 
       <Card className="overflow-hidden border-border/60">
-        <div className="h-28 bg-[linear-gradient(135deg,rgba(16,185,129,0.2),rgba(20,184,166,0.08),rgba(15,23,42,0.04))]" />
+        <div
+          className={`h-28 ${profileUser?.banner_url ? 'bg-cover bg-center bg-no-repeat' : 'bg-[linear-gradient(135deg,rgba(16,185,129,0.2),rgba(20,184,166,0.08),rgba(15,23,42,0.04))]'}`}
+          style={profileUser?.banner_url ? { backgroundImage: `linear-gradient(180deg,rgba(15,23,42,0.08),rgba(15,23,42,0.2)), url(${profileUser.banner_url})` } : undefined}
+        />
         <CardContent className="relative -mt-10 space-y-6 px-5 pb-6 pt-0 sm:px-6">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
@@ -389,12 +463,12 @@ export default function PublicProfilePage() {
         }}
         onToggleSave={() => {
           if (!selectedPost) return
-          toggleSaveSocialPost(selectedPost.id)
+          toggleSaveSocialPost(selectedPost.id, selectedPost)
           toast.success(selectedPostSaved ? 'Removed from saves.' : 'Saved post.')
         }}
         onToggleLike={() => {
           if (!selectedPost) return
-          toggleLikeSocialPost(selectedPost.id)
+          toggleLikeSocialPost(selectedPost.id, selectedPost)
           toast.success(selectedPostLiked ? 'Removed like.' : 'Liked post.')
         }}
         onAddComment={(body) => {

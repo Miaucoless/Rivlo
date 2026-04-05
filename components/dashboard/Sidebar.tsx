@@ -17,7 +17,7 @@ import {
   Flame,
   Trophy,
   Pill,
-  Inbox,
+  MessageSquareText,
   Compass,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -33,7 +33,7 @@ const NAV_ITEMS = [
   { label: 'Calendar', href: '/dashboard/calendar', icon: Calendar },
   { label: 'Journal', href: '/dashboard/journal', icon: BookOpen },
   { label: 'Supplements', href: '/dashboard/supplements', icon: Pill },
-  { label: 'Shared With Me', href: '/dashboard/shared', icon: Inbox },
+  { label: 'Shared With Me', href: '/dashboard/shared', icon: MessageSquareText },
 ]
 
 export function Sidebar() {

@@ -194,8 +194,8 @@ interface AppStore {
   cancelFollowRequest: (followingId: string) => void
   unfollowUser: (followingId: string) => void
   setSocialComposerPrefill: (draft: SocialPostDraft | null) => void
-  toggleSaveSocialPost: (postId: string) => void
-  toggleLikeSocialPost: (postId: string) => void
+  toggleSaveSocialPost: (postId: string, sourcePost?: SocialPost) => void
+  toggleLikeSocialPost: (postId: string, sourcePost?: SocialPost) => void
   addCommentToSocialPost: (postId: string, body: string) => void
   incrementSocialPostStats: (postId: string, updates: Partial<SocialPostStats>) => void
 
@@ -851,6 +851,42 @@ function withRefreshedNotifications(current: NotificationInputs, updates: Partia
   }
 }
 
+function buildSocialMetadataState(state: Pick<AppStore, 'socialPosts' | 'socialFollows' | 'socialSavedPostIds' | 'socialLikedPostIds' | 'socialPostComments'>) {
+  return {
+    socialPosts: state.socialPosts,
+    socialFollows: state.socialFollows,
+    socialSavedPostIds: state.socialSavedPostIds,
+    socialLikedPostIds: state.socialLikedPostIds,
+    socialPostComments: state.socialPostComments,
+  }
+}
+
+function queueSocialMetadataSync(set: any, get: () => AppStore) {
+  const { user, isDemoMode } = get()
+  if (!user || isDemoMode) return
+
+  enqueueCloudWrite(set, async () => {
+    const state = get()
+    await saveMetadataCloudState(user.id, buildSocialMetadataState(state))
+  })
+}
+
+function upsertSocialPostOverride(
+  posts: SocialPost[],
+  postId: string,
+  updater: (post: SocialPost) => SocialPost,
+  sourcePost?: SocialPost
+) {
+  const existing = posts.find((post) => post.id === postId)
+  if (existing) {
+    return posts.map((post) => (post.id === postId ? updater(post) : post))
+  }
+
+  const fallbackPost = sourcePost ?? DEFAULT_SOCIAL_POSTS.find((post) => post.id === postId)
+  if (!fallbackPost) return posts
+  return [updater(fallbackPost), ...posts]
+}
+
 export const useAppStore = create<AppStore>()(
   persist(
     (set, get) => ({
@@ -1031,6 +1067,11 @@ export const useAppStore = create<AppStore>()(
           customRecipes: localOnlyRecipes,
           customWorkouts: localOnlyWorkoutTemplates,
           waterLogs: Object.keys(localOnlyWaterLogs).length > 0 ? localOnlyWaterLogs : {},
+          socialPosts: cloud.socialPosts.length === 0 ? localState.socialPosts : cloud.socialPosts,
+          socialFollows: cloud.socialFollows.length === 0 ? localState.socialFollows : cloud.socialFollows,
+          socialSavedPostIds: cloud.socialSavedPostIds.length === 0 ? localState.socialSavedPostIds : cloud.socialSavedPostIds,
+          socialLikedPostIds: cloud.socialLikedPostIds.length === 0 ? localState.socialLikedPostIds : cloud.socialLikedPostIds,
+          socialPostComments: Object.keys(cloud.socialPostComments).length === 0 ? localState.socialPostComments : cloud.socialPostComments,
         }
 
         console.log('🌱 Seed payload prepared:', {
@@ -1054,7 +1095,12 @@ export const useAppStore = create<AppStore>()(
           !!seedPayload.groceryList ||
           seedPayload.customRecipes.length > 0 ||
           seedPayload.customWorkouts.length > 0 ||
-          Object.keys(seedPayload.waterLogs).length > 0
+          Object.keys(seedPayload.waterLogs).length > 0 ||
+          seedPayload.socialPosts.length > 0 ||
+          seedPayload.socialFollows.length > 0 ||
+          seedPayload.socialSavedPostIds.length > 0 ||
+          seedPayload.socialLikedPostIds.length > 0 ||
+          Object.keys(seedPayload.socialPostComments).length > 0
 
         let finalCloud = cloud
 
@@ -1080,6 +1126,11 @@ export const useAppStore = create<AppStore>()(
             customRecipes: finalCloud.customRecipes,
             customWorkouts,
             waterLogs: finalCloud.waterLogs,
+            socialPosts: finalCloud.socialPosts,
+            socialFollows: finalCloud.socialFollows,
+            socialSavedPostIds: finalCloud.socialSavedPostIds,
+            socialLikedPostIds: finalCloud.socialLikedPostIds,
+            socialPostComments: finalCloud.socialPostComments,
             cloudHydratedUserId: userId,
           }
           const refreshed = withRefreshedNotifications(state, updates)
@@ -1119,12 +1170,19 @@ export const useAppStore = create<AppStore>()(
         set((state) => {
           const nextUser = state.user ? { ...state.user, ...updates } : null
 
-          // If avatar changed, patch it on all posts authored by this user
+          // If profile visuals changed, patch them on all posts authored by this user
           const nextSocialPosts =
-            updates.avatar_url != null && state.user
+            (updates.avatar_url != null || updates.banner_url != null) && state.user
               ? state.socialPosts.map((post) =>
                   post.user.id === state.user!.id
-                    ? { ...post, user: { ...post.user, avatar_url: updates.avatar_url } }
+                    ? {
+                        ...post,
+                        user: {
+                          ...post.user,
+                          avatar_url: updates.avatar_url ?? post.user.avatar_url,
+                          banner_url: updates.banner_url ?? post.user.banner_url,
+                        },
+                      }
                     : post
                 )
               : state.socialPosts
@@ -2099,6 +2157,7 @@ export const useAppStore = create<AppStore>()(
               name: state.user.name,
               username: state.user.username || slugifyUsername(state.user.name),
               avatar_url: state.user.avatar_url,
+              banner_url: state.user.banner_url,
               bio: state.user.bio,
               profile_visibility: state.user.profile_visibility,
             }
@@ -2113,6 +2172,8 @@ export const useAppStore = create<AppStore>()(
           socialPosts: [nextPost, ...current.socialPosts],
         }))
 
+        queueSocialMetadataSync(set, get)
+
         return nextPost.id
       },
 
@@ -2125,6 +2186,7 @@ export const useAppStore = create<AppStore>()(
             Object.entries(state.socialPostComments).filter(([key]) => key !== postId)
           ),
         }))
+        queueSocialMetadataSync(set, get)
       },
 
       requestToFollowUser: (target) => {
@@ -2150,6 +2212,7 @@ export const useAppStore = create<AppStore>()(
             ...current.socialFollows,
           ],
         }))
+        queueSocialMetadataSync(set, get)
         return status
       },
 
@@ -2162,6 +2225,7 @@ export const useAppStore = create<AppStore>()(
               : item
           )),
         }))
+        queueSocialMetadataSync(set, get)
       },
 
       declineFollowRequest: (followerId) => {
@@ -2171,6 +2235,7 @@ export const useAppStore = create<AppStore>()(
             (item) => !(item.followerId === followerId && item.followingId === ownerId && item.status === 'pending')
           ),
         }))
+        queueSocialMetadataSync(set, get)
       },
 
       cancelFollowRequest: (followingId) => {
@@ -2180,6 +2245,7 @@ export const useAppStore = create<AppStore>()(
             (item) => !(item.followerId === viewerId && item.followingId === followingId && item.status === 'pending')
           ),
         }))
+        queueSocialMetadataSync(set, get)
       },
 
       unfollowUser: (followingId) => {
@@ -2189,54 +2255,65 @@ export const useAppStore = create<AppStore>()(
             (item) => !(item.followerId === viewerId && item.followingId === followingId)
           ),
         }))
+        queueSocialMetadataSync(set, get)
       },
 
       setSocialComposerPrefill: (draft) => {
         set({ socialComposerPrefill: draft })
       },
 
-      toggleSaveSocialPost: (postId) => {
+      toggleSaveSocialPost: (postId, sourcePost) => {
         set((state) => {
           const alreadySaved = state.socialSavedPostIds.includes(postId)
           return {
             socialSavedPostIds: alreadySaved
               ? state.socialSavedPostIds.filter((id) => id !== postId)
               : [postId, ...state.socialSavedPostIds],
-            socialPosts: state.socialPosts.map((post) => {
-              if (post.id !== postId) return post
-              const nextSaved = Math.max(0, post.stats.saved + (alreadySaved ? -1 : 1))
-              return {
-                ...post,
-                stats: {
-                  ...post.stats,
-                  saved: nextSaved,
-                },
-              }
-            }),
+            socialPosts: upsertSocialPostOverride(
+              state.socialPosts,
+              postId,
+              (post) => {
+                const nextSaved = Math.max(0, post.stats.saved + (alreadySaved ? -1 : 1))
+                return {
+                  ...post,
+                  stats: {
+                    ...post.stats,
+                    saved: nextSaved,
+                  },
+                }
+              },
+              sourcePost
+            ),
           }
         })
+        queueSocialMetadataSync(set, get)
       },
 
-      toggleLikeSocialPost: (postId) => {
+      toggleLikeSocialPost: (postId, sourcePost) => {
         set((state) => {
           const alreadyLiked = state.socialLikedPostIds.includes(postId)
           return {
             socialLikedPostIds: alreadyLiked
               ? state.socialLikedPostIds.filter((id) => id !== postId)
               : [postId, ...state.socialLikedPostIds],
-            socialPosts: state.socialPosts.map((post) => {
-              if (post.id !== postId) return post
-              const nextLikes = Math.max(0, (post.stats.likes ?? 0) + (alreadyLiked ? -1 : 1))
-              return {
-                ...post,
-                stats: {
-                  ...post.stats,
-                  likes: nextLikes,
-                },
-              }
-            }),
+            socialPosts: upsertSocialPostOverride(
+              state.socialPosts,
+              postId,
+              (post) => {
+                const nextLikes = Math.max(0, (post.stats.likes ?? 0) + (alreadyLiked ? -1 : 1))
+                return {
+                  ...post,
+                  stats: {
+                    ...post.stats,
+                    likes: nextLikes,
+                  },
+                }
+              },
+              sourcePost
+            ),
           }
         })
+        queueSocialMetadataSync(set, get)
       },
 
       addCommentToSocialPost: (postId, body) => {
@@ -2269,25 +2346,27 @@ export const useAppStore = create<AppStore>()(
             ...current.socialPostComments,
             [postId]: [nextComment, ...(current.socialPostComments[postId] ?? [])],
           },
-          socialPosts: current.socialPosts.map((post) => (
-            post.id === postId
-              ? {
-                  ...post,
-                  stats: {
-                    ...post.stats,
-                    comments: (post.stats.comments ?? 0) + 1,
-                  },
-                }
-              : post
-          )),
+          socialPosts: upsertSocialPostOverride(
+            current.socialPosts,
+            postId,
+            (post) => ({
+              ...post,
+              stats: {
+                ...post.stats,
+                comments: (post.stats.comments ?? 0) + 1,
+              },
+            })
+          ),
         }))
+        queueSocialMetadataSync(set, get)
       },
 
       incrementSocialPostStats: (postId, updates) => {
         set((state) => ({
-          socialPosts: state.socialPosts.map((post) => {
-            if (post.id !== postId) return post
-            return {
+          socialPosts: upsertSocialPostOverride(
+            state.socialPosts,
+            postId,
+            (post) => ({
               ...post,
               stats: {
                 used: Math.max(0, post.stats.used + (updates.used ?? 0)),
@@ -2297,9 +2376,10 @@ export const useAppStore = create<AppStore>()(
                 comments: Math.max(0, (post.stats.comments ?? 0) + (updates.comments ?? 0)),
                 remixed: Math.max(0, (post.stats.remixed ?? 0) + (updates.remixed ?? 0)),
               },
-            }
-          }),
+            })
+          ),
         }))
+        queueSocialMetadataSync(set, get)
       },
 
       getDailyMeals: (date) => {
