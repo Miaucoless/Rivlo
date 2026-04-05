@@ -19,7 +19,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useAppStore } from '@/store/useAppStore'
-import { getCurrentUser, signInWithEmail } from '@/lib/auth'
+import { signInWithEmail } from '@/lib/auth'
 import { toast } from 'sonner'
 
 const dailyFlowSteps = [
@@ -45,6 +45,38 @@ const dailyFlowSteps = [
     accent: 'from-amber-400/20 via-orange-400/10 to-transparent',
   },
 ] as const
+
+const VOLATILE_NAVIGATION_CACHE_NAMES = [
+  'start-url',
+  'pages',
+  'pages-rsc',
+  'pages-rsc-prefetch',
+  'next-static-js-assets',
+  'static-js-assets',
+  'next-data',
+] as const
+
+async function refreshClientNavigationState() {
+  if (typeof window === 'undefined') return
+
+  try {
+    if ('serviceWorker' in navigator) {
+      const registrations = await navigator.serviceWorker.getRegistrations()
+      await Promise.all(registrations.map((registration) => registration.update().catch(() => undefined)))
+    }
+
+    if ('caches' in window) {
+      const cacheKeys = await window.caches.keys()
+      const volatileCaches = cacheKeys.filter((cacheName) =>
+        VOLATILE_NAVIGATION_CACHE_NAMES.some((prefix) => cacheName === prefix || cacheName.includes(prefix))
+      )
+
+      await Promise.all(volatileCaches.map((cacheName) => window.caches.delete(cacheName)))
+    }
+  } catch (error) {
+    console.warn('Unable to refresh cached navigation state before continuing.', error)
+  }
+}
 
 export default function LoginPage() {
   const router = useRouter()
@@ -73,14 +105,24 @@ export default function LoginPage() {
   }, [])
 
   useEffect(() => {
-    void router.prefetch('/dashboard')
-    void router.prefetch('/onboarding')
+    void refreshClientNavigationState()
   }, [router])
+
+  const navigateAfterLogin = async (destination: string) => {
+    await refreshClientNavigationState()
+
+    if (typeof window !== 'undefined') {
+      window.location.replace(destination)
+      return
+    }
+
+    router.replace(destination)
+  }
 
   const handleDemoLogin = () => {
     loginDemo()
     toast.success('Welcome to the demo! 🎉')
-    router.push('/dashboard')
+    void navigateAfterLogin('/dashboard')
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -91,27 +133,23 @@ export default function LoginPage() {
     }
 
     setLoading(true)
-    const response = await signInWithEmail(email, password)
+    try {
+      const response = await signInWithEmail(email, password)
 
-    if (response.success && response.user) {
-      setUser(response.user)
-      toast.success('Welcome back! 👋')
-      const initialDestination =
-        response.usedFallbackProfile || response.user.onboarded ? '/dashboard' : '/onboarding'
-      router.replace(initialDestination)
-
-      if (response.usedFallbackProfile) {
-        void getCurrentUser().then((profile) => {
-          if (!profile) return
-          setUser(profile)
-          router.replace(profile.onboarded ? '/dashboard' : '/onboarding')
-        })
+      if (response.success && response.user) {
+        setUser(response.user)
+        toast.success('Welcome back! 👋')
+        const initialDestination = response.user.onboarded ? '/dashboard' : '/onboarding'
+        await navigateAfterLogin(initialDestination)
+        return
       }
-    } else {
-      toast.error(response.error || 'Failed to sign in')
-    }
 
-    setLoading(false)
+      toast.error(response.error || 'Failed to sign in')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to sign in')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
