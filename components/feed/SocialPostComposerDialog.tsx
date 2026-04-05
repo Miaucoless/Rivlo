@@ -573,7 +573,15 @@ export function SocialPostComposerDialog({
                   </Button>
                 </div>
                 <div className="mx-auto max-w-xl">
-                  <SocialPostCard post={previewPost} saved={false} liked={false} onOpen={() => {}} />
+                  <SocialPostCard
+                    post={previewPost}
+                    saved={false}
+                    liked={false}
+                    onOpen={() => {}}
+                    onToggleSave={() => {}}
+                    onToggleLike={() => {}}
+                    onAddComment={() => {}}
+                  />
                 </div>
               </div>
             ) : null}

@@ -361,24 +361,27 @@ export default function PublicProfilePage() {
                   </div>
                 </div>
                 {profileUser.bio ? <p className="max-w-2xl text-sm leading-6 text-muted-foreground">{profileUser.bio}</p> : null}
-                <div className="flex flex-wrap gap-2 text-sm">
+                <div className="flex flex-wrap items-end gap-x-8 gap-y-3 pt-1">
+                  <div className="min-w-[72px]">
+                    <p className="text-2xl font-semibold tracking-tight text-foreground">{profilePosts.length}</p>
+                    <p className="text-sm text-muted-foreground">Posts</p>
+                  </div>
                   <button
                     type="button"
                     onClick={() => setFollowersOpen(true)}
-                    className="rounded-full border border-border/60 bg-muted/30 px-3 py-1.5 text-muted-foreground transition-colors hover:bg-muted/50"
+                    className="min-w-[88px] text-left transition-opacity hover:opacity-80"
                   >
-                    <span className="font-semibold text-foreground">{followerCount}</span> Followers
+                    <p className="text-2xl font-semibold tracking-tight text-foreground">{followerCount}</p>
+                    <p className="text-sm text-muted-foreground">Followers</p>
                   </button>
                   <button
                     type="button"
                     onClick={() => setFollowingOpen(true)}
-                    className="rounded-full border border-border/60 bg-muted/30 px-3 py-1.5 text-muted-foreground transition-colors hover:bg-muted/50"
+                    className="min-w-[88px] text-left transition-opacity hover:opacity-80"
                   >
-                    <span className="font-semibold text-foreground">{followingCount}</span> Following
+                    <p className="text-2xl font-semibold tracking-tight text-foreground">{followingCount}</p>
+                    <p className="text-sm text-muted-foreground">Following</p>
                   </button>
-                  <div className="rounded-full border border-border/60 bg-muted/30 px-3 py-1.5 text-muted-foreground">
-                    <span className="font-semibold text-foreground">{profilePosts.length}</span> Posts
-                  </div>
                 </div>
               </div>
             </div>
@@ -551,6 +554,8 @@ function PostGrid({
           onClick={() => onOpenPost(post)}
         >
           <CardContent className="space-y-4 p-5">
+            <PostMediaPreview post={post} />
+
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
@@ -598,6 +603,30 @@ function PostGrid({
           </CardContent>
         </Card>
       ))}
+    </div>
+  )
+}
+
+function PostMediaPreview({ post }: { post: SocialPost }) {
+  const mediaItem = post.media?.[0] ?? (post.image ? { kind: 'image' as const, url: post.image } : null)
+  if (!mediaItem) return null
+
+  return (
+    <div className="overflow-hidden rounded-3xl border border-border/60 bg-muted/20">
+      {mediaItem.kind === 'video' ? (
+        <video
+          src={mediaItem.url}
+          className="h-52 w-full object-cover"
+          muted
+          playsInline
+          preload="metadata"
+        />
+      ) : (
+        <div
+          className="h-52 w-full bg-cover bg-center"
+          style={{ backgroundImage: `linear-gradient(180deg, rgba(15,23,42,0.04), rgba(15,23,42,0.18)), url("${mediaItem.url}")` }}
+        />
+      )}
     </div>
   )
 }

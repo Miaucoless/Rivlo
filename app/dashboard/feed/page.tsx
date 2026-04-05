@@ -400,9 +400,14 @@ export default function FeedPage() {
   }
 
   const publishPost = (draft: SocialPostDraft) => {
-    createSocialPost(draft)
+    const postId = createSocialPost(draft)
+    const createdPost = useAppStore.getState().socialPosts.find((post) => post.id === postId) ?? null
     setComposerDraft(null)
     setComposerOpen(false)
+    if (createdPost) {
+      setSelectedPost(createdPost)
+      setDetailOpen(true)
+    }
     toast.success('Post published to your feed.')
   }
 
@@ -607,6 +612,7 @@ export default function FeedPage() {
                           onOpen={openPost}
                           onToggleSave={(nextPost) => toggleSaveSocialPost(nextPost.id, nextPost)}
                           onToggleLike={(nextPost) => toggleLikeSocialPost(nextPost.id, nextPost)}
+                          onAddComment={(nextPost, body) => addCommentToSocialPost(nextPost.id, body)}
                         />
                       ))}
                     </AnimatePresence>

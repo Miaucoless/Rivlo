@@ -75,7 +75,7 @@ const SEARCH_ITEMS = [
   { href: '/dashboard/calendar', title: 'Calendar', description: 'Review upcoming plans and your workout and meal activity by date.', keywords: ['schedule', 'planner', 'dates', 'timeline'] },
   { href: '/dashboard/journal', title: 'Journal', description: 'Write reflections and search past entries by mood or topic.', keywords: ['notes', 'mindset', 'mood', 'reflection'] },
   { href: '/dashboard/supplements', title: 'Supplements', description: 'Track vitamins, herbals, medications, and reminder schedules in one place.', keywords: ['vitamins', 'medicine', 'herbal', 'pills'] },
-  { href: '/dashboard/shared', title: 'Shared With Me', description: 'Import shared items and reply on conversations with followers.', keywords: ['inbox', 'messages', 'shares', 'followers'] },
+  { href: '/dashboard/shared', title: 'Shared With Me', description: 'Review shared items and comment on the posts, meals, and workouts attached to them.', keywords: ['inbox', 'comments', 'shares', 'followers'] },
   { href: '/dashboard/profile', title: 'My Profile', description: 'Update your bio, profile photo, posts, and saved library at a glance.', keywords: ['account', 'bio', 'profile', 'posts'] },
   { href: '/dashboard/settings', title: 'Settings', description: 'Update profile details, preferences, and reminder settings.', keywords: ['preferences', 'account', 'profile', 'notifications'] },
 ] as const
@@ -119,6 +119,7 @@ export function TopBar() {
   const [friendSearching, setFriendSearching] = useState(false)
   const [friendSending, setFriendSending] = useState(false)
   const [friendsLoaded, setFriendsLoaded] = useState(false)
+  const [justSentRequestIds, setJustSentRequestIds] = useState<Set<string>>(new Set())
   const authTokenRef = useRef<string | null>(null)
 
   const getCachedToken = useCallback(async () => {
@@ -179,9 +180,27 @@ export function TopBar() {
   }, [addQuery, friendsTab, getCachedToken, isFriendsOpen])
 
   async function sendFriendRequest(addresseeId?: string, email?: string) {
+    if (addresseeId) {
+      setJustSentRequestIds((current) => {
+        const next = new Set(current)
+        next.add(addresseeId)
+        return next
+      })
+    }
+
     setFriendSending(true)
     const token = await getCachedToken()
-    if (!token) { setFriendSending(false); return }
+    if (!token) {
+      if (addresseeId) {
+        setJustSentRequestIds((current) => {
+          const next = new Set(current)
+          next.delete(addresseeId)
+          return next
+        })
+      }
+      setFriendSending(false)
+      return
+    }
     const body = addresseeId ? { addressee_id: addresseeId } : { email }
     const res = await fetch('/api/friends/request', {
       method: 'POST',
@@ -191,10 +210,19 @@ export function TopBar() {
     const data = await res.json()
     if (res.ok) {
       toast.success(data.message ?? 'Friend request sent!')
-      setAddQuery('')
-      setSearchResults([])
+      if (!addresseeId) {
+        setAddQuery('')
+        setSearchResults([])
+      }
       await loadFriends(true)
     } else {
+      if (addresseeId) {
+        setJustSentRequestIds((current) => {
+          const next = new Set(current)
+          next.delete(addresseeId)
+          return next
+        })
+      }
       toast.error(data.error ?? 'Could not send request.')
     }
     setFriendSending(false)
@@ -261,6 +289,10 @@ export function TopBar() {
   const acceptedFriends = friends.filter((f) => f.status === 'accepted')
   const incomingRequests = friends.filter((f) => f.status === 'pending' && f.addressee_id === user?.id)
   const outgoingRequests = friends.filter((f) => (f.status === 'pending' || f.status === 'invited') && f.requester_id === user?.id)
+  const outgoingRequestUserIds = useMemo(
+    () => new Set(outgoingRequests.map((f) => f.other_user?.id).filter((value): value is string => Boolean(value))),
+    [outgoingRequests]
+  )
   const pendingCount = incomingRequests.length
 
   const handleMobileNavClose = () => setIsMobileNavOpen(false)
@@ -411,7 +443,7 @@ export function TopBar() {
           <Button
             variant="ghost"
             size="icon-sm"
-            aria-label="Shared messages"
+            aria-label="Shared comments"
             className="text-muted-foreground relative"
             onClick={() => router.push('/dashboard/shared')}
           >
@@ -650,8 +682,14 @@ export function TopBar() {
                         <p className="text-xs font-medium truncate">{r.name}</p>
                         {r.username && <p className="text-xs text-muted-foreground">@{r.username}</p>}
                       </div>
-                      <Button size="sm" variant="outline" disabled={friendSending} onClick={() => sendFriendRequest(r.id)} className="h-7 text-xs">
-                        Add
+                      <Button
+                        size="sm"
+                        variant={outgoingRequestUserIds.has(r.id) || justSentRequestIds.has(r.id) ? 'secondary' : 'outline'}
+                        disabled={friendSending || outgoingRequestUserIds.has(r.id) || justSentRequestIds.has(r.id)}
+                        onClick={() => sendFriendRequest(r.id)}
+                        className="h-7 min-w-[58px] text-xs"
+                      >
+                        {outgoingRequestUserIds.has(r.id) || justSentRequestIds.has(r.id) ? 'Sent' : 'Add'}
                       </Button>
                     </div>
                   ))}

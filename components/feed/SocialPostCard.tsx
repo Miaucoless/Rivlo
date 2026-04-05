@@ -3,7 +3,7 @@
 import { useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useRouter } from 'next/navigation'
-import { Bookmark, ChevronLeft, ChevronRight, Heart, MessageCircle } from 'lucide-react'
+import { Bookmark, ChevronLeft, ChevronRight, Heart, MessageCircle, Send } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import type { PostMediaItem, SocialPost } from '@/types'
 import { formatCompactNumber, getSocialPostBadge, getSocialPostPreview } from '@/lib/social-feed'
@@ -23,6 +23,7 @@ export function SocialPostCard({
   onOpen,
   onToggleSave,
   onToggleLike,
+  onAddComment,
 }: {
   post: SocialPost
   saved: boolean
@@ -30,6 +31,7 @@ export function SocialPostCard({
   onOpen: (post: SocialPost) => void
   onToggleSave: (post: SocialPost) => void
   onToggleLike: (post: SocialPost) => void
+  onAddComment?: (post: SocialPost, body: string) => void
 }) {
   const router = useRouter()
   const badge = getSocialPostBadge(post)
@@ -50,6 +52,9 @@ export function SocialPostCard({
   const didSwipe = useRef(false)
   const lastTapAt = useRef(0)
   const suppressNextOpen = useRef(false)
+  const commentInputRef = useRef<HTMLInputElement>(null)
+  const [commentOpen, setCommentOpen] = useState(false)
+  const [commentText, setCommentText] = useState('')
 
   const hasMultiple = mediaItems.length > 1
   const currentMedia = mediaItems[mediaIndex]
@@ -105,6 +110,20 @@ export function SocialPostCard({
       onToggleLike(post)
     }
     lastTapAt.current = now
+  }
+
+  const handleCommentOpen = (event: React.MouseEvent) => {
+    event.stopPropagation()
+    setCommentOpen(true)
+    requestAnimationFrame(() => commentInputRef.current?.focus())
+  }
+
+  const handleCommentSubmit = () => {
+    const value = commentText.trim()
+    if (!value || !onAddComment) return
+    onAddComment(post, value)
+    setCommentText('')
+    setCommentOpen(false)
   }
 
   return (
@@ -285,15 +304,49 @@ export function SocialPostCard({
             {formatCompactNumber(post.stats.likes ?? 0)}
           </button>
           <span className="text-border">•</span>
-          <span className="inline-flex items-center gap-1">
+          <button
+            type="button"
+            onClick={handleCommentOpen}
+            className="inline-flex items-center gap-1 transition-colors hover:text-foreground"
+            aria-label="Comment on post"
+          >
             <MessageCircle className="h-3.5 w-3.5" />
             {formatCompactNumber(post.stats.comments ?? 0)}
-          </span>
-          <span className="text-border">•</span>
-          <span>Used {formatCompactNumber(post.stats.used)}</span>
-          <span className="text-border">•</span>
-          <span>Completed {formatCompactNumber(post.stats.completed)}</span>
+          </button>
         </div>
+
+        {commentOpen && onAddComment ? (
+          <div
+            className="flex items-center gap-2 rounded-2xl border border-border/70 bg-background/80 px-3 py-2"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <input
+              ref={commentInputRef}
+              value={commentText}
+              onChange={(event) => setCommentText(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') {
+                  setCommentOpen(false)
+                  setCommentText('')
+                  return
+                }
+                if (event.key !== 'Enter') return
+                event.preventDefault()
+                handleCommentSubmit()
+              }}
+              placeholder="Write a comment..."
+              className="h-8 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+            />
+            <button
+              type="button"
+              onClick={handleCommentSubmit}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-foreground text-background transition-colors hover:opacity-90"
+              aria-label="Post comment"
+            >
+              <Send className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        ) : null}
       </div>
     </motion.div>
   )

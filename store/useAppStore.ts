@@ -1,7 +1,7 @@
 'use client'
 
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware'
 import {
   format,
   startOfWeek,
@@ -885,6 +885,36 @@ function upsertSocialPostOverride(
   const fallbackPost = sourcePost ?? DEFAULT_SOCIAL_POSTS.find((post) => post.id === postId)
   if (!fallbackPost) return posts
   return [updater(fallbackPost), ...posts]
+}
+
+function isQuotaExceededError(error: unknown) {
+  if (typeof DOMException === 'undefined' || !(error instanceof DOMException)) return false
+  return error.name === 'QuotaExceededError' || error.code === 22
+}
+
+const safePersistStorage: StateStorage = {
+  getItem: (name) => {
+    if (typeof window === 'undefined') return null
+    return window.localStorage.getItem(name)
+  },
+  setItem: (name, value) => {
+    if (typeof window === 'undefined') return
+
+    try {
+      window.localStorage.setItem(name, value)
+    } catch (error) {
+      if (isQuotaExceededError(error)) {
+        console.warn('Skipping persisted Rivora cache update because browser storage is full.')
+        return
+      }
+
+      throw error
+    }
+  },
+  removeItem: (name) => {
+    if (typeof window === 'undefined') return
+    window.localStorage.removeItem(name)
+  },
 }
 
 export const useAppStore = create<AppStore>()(
@@ -2449,6 +2479,7 @@ export const useAppStore = create<AppStore>()(
     }),
     {
       name: 'rivora-store',
+      storage: createJSONStorage(() => safePersistStorage),
       version: 4,
       migrate: () => ({}), // clear stale state on version mismatch
       partialize: (state) => ({

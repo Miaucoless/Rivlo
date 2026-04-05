@@ -455,7 +455,7 @@ export function SharedConversations() {
           cache: 'no-store',
         })
         const data = await res.json().catch(() => null)
-        if (!res.ok) throw new Error(data?.error ?? 'Could not load conversations.')
+        if (!res.ok) throw new Error(data?.error ?? 'Could not load shared threads.')
 
         if (!active) return
 
@@ -479,7 +479,7 @@ export function SharedConversations() {
         }
       } catch (error) {
         if (active) setConversations([])
-        toast.error(error instanceof Error ? error.message : 'Could not load conversations.')
+        toast.error(error instanceof Error ? error.message : 'Could not load shared threads.')
       } finally {
         if (active) setLoading(false)
       }
@@ -545,11 +545,11 @@ export function SharedConversations() {
           cache: 'no-store',
         })
         const data = await res.json().catch(() => null)
-        if (!res.ok) throw new Error(data?.error ?? 'Could not load this conversation.')
+        if (!res.ok) throw new Error(data?.error ?? 'Could not load this shared thread.')
         if (active) setDetail(data as ConversationDetail)
       } catch (error) {
         if (active) setDetail(null)
-        toast.error(error instanceof Error ? error.message : 'Could not load this conversation.')
+        toast.error(error instanceof Error ? error.message : 'Could not load this shared thread.')
       } finally {
         hydratedDetailIdRef.current = null
         if (active) setDetailLoading(false)
@@ -634,7 +634,7 @@ export function SharedConversations() {
 
     try {
       const token = await getCachedToken()
-      if (!token) throw new Error('Sign in again to send a message.')
+      if (!token) throw new Error('Sign in again to add a comment.')
 
       const res = await fetch(`/api/share/conversations/${selectedId}`, {
         method: 'POST',
@@ -649,7 +649,7 @@ export function SharedConversations() {
       })
 
       const data = await res.json().catch(() => null)
-      if (!res.ok) throw new Error(data?.error ?? 'Could not send message.')
+      if (!res.ok) throw new Error(data?.error ?? 'Could not post comment.')
       setDraftMessage('')
 
       const refresh = await fetch(`/api/share/conversations/${selectedId}`, {
@@ -667,7 +667,7 @@ export function SharedConversations() {
         latest_preview: message,
       } : conversation).sort((left, right) => new Date(right.latest_at).getTime() - new Date(left.latest_at).getTime()))
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Could not send message.')
+      toast.error(error instanceof Error ? error.message : 'Could not post comment.')
     } finally {
       setSending(false)
     }
@@ -794,7 +794,7 @@ export function SharedConversations() {
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Messages</p>
-              <h2 className="mt-1 text-xl font-semibold tracking-tight">Shared conversations</h2>
+              <h2 className="mt-1 text-xl font-semibold tracking-tight">Shared comment threads</h2>
             </div>
             <div className="rounded-full border border-border/60 bg-muted/30 px-3 py-1 text-xs text-muted-foreground">
               {conversations.length}
@@ -806,7 +806,7 @@ export function SharedConversations() {
             <Input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search conversations"
+              placeholder="Search shared threads"
               className="h-11 rounded-2xl border-border/70 bg-background pl-10"
             />
           </div>
@@ -820,7 +820,7 @@ export function SharedConversations() {
           ) : filteredConversations.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center rounded-2xl border border-dashed border-border/60 px-5 text-center">
               <Inbox className="h-8 w-8 text-muted-foreground/45" />
-              <p className="mt-4 text-sm font-medium">No conversations yet</p>
+              <p className="mt-4 text-sm font-medium">No shared threads yet</p>
               <p className="mt-1 text-sm text-muted-foreground">
                 Conversations start when you share or receive a meal, workout, grocery list, or post.
               </p>
@@ -1015,7 +1015,7 @@ export function SharedConversations() {
                     <Textarea
                       value={draftMessage}
                       onChange={(event) => setDraftMessage(event.target.value)}
-                      placeholder="Send a message about this shared thread"
+                      placeholder="Write a comment about this shared item"
                       className="min-h-[62px] resize-none rounded-2xl border-border/70 bg-background"
                       maxLength={280}
                     />
@@ -1029,7 +1029,7 @@ export function SharedConversations() {
                     </Button>
                   </div>
                   <p className="mt-2 text-xs text-muted-foreground">
-                    Messages stay attached to the latest item shared in this conversation so the context is always clear.
+                    Comments stay attached to the latest shared item so the context stays clear.
                   </p>
                 </div>
               </>
@@ -1038,9 +1038,9 @@ export function SharedConversations() {
         ) : (
           <div className="flex h-full min-h-[420px] flex-col items-center justify-center px-5 text-center">
             <Users className="h-10 w-10 text-muted-foreground/45" />
-            <p className="mt-4 text-base font-semibold">Select a conversation</p>
+            <p className="mt-4 text-base font-semibold">Select a shared thread</p>
             <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-              Shared meals, workouts, grocery lists, and post replies will appear together here so the whole exchange stays in one place.
+              Shared meals, workouts, grocery lists, and post comments will appear together here so the feedback stays tied to the item.
             </p>
           </div>
         )}
@@ -1064,7 +1064,7 @@ export function SharedConversations() {
                 </div>
                 <DialogTitle className="mt-3 text-xl">{previewEntry.item_name}</DialogTitle>
                 <DialogDescription className="mt-1">
-                  Quick preview from this thread. You can add it to your account without leaving messages.
+                  Quick preview from this thread. You can add it to your account without leaving the comment view.
                 </DialogDescription>
               </DialogHeader>
 
@@ -1308,7 +1308,7 @@ export function SharedConversations() {
                 </Button>
                 {previewIsViewOnly ? (
                   <div className="flex h-10 items-center text-sm text-muted-foreground">
-                    {previewEntry.item_type === 'social_post' ? 'Social posts stay preview-only in messages.' : 'Weekly recaps stay preview-only in messages.'}
+                    {previewEntry.item_type === 'social_post' ? 'Social posts stay preview-only in shared comment threads.' : 'Weekly recaps stay preview-only in shared comment threads.'}
                   </div>
                 ) : importedInPreview ? (
                   <div className="flex h-10 items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-4 text-sm font-medium text-emerald-500">

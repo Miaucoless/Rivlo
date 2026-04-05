@@ -1,6 +1,7 @@
 'use client'
 
-import { useMemo, useEffect, useState } from 'react'
+import type { TouchEvent } from 'react'
+import { useMemo, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Apple, Bookmark, ChevronLeft, ChevronRight, Dumbbell, Heart, MessageCircle, Pill, Send, Share2, Trash2 } from 'lucide-react'
@@ -9,7 +10,6 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ShareModal } from '@/components/sharing/ShareModal'
 import type { SocialPost, SocialPostComment, UnitSystem } from '@/types'
-import { formatCompactNumber } from '@/lib/social-feed'
 import { buildSocialProfileHref } from '@/lib/social-connections'
 import { formatWeightValue } from '@/lib/utils'
 import { cn } from '@/lib/utils'
@@ -76,6 +76,7 @@ export function SocialPostDetailDialog({
   const [shareOpen, setShareOpen] = useState(false)
   const [mediaIndex, setMediaIndex] = useState(0)
   const [commentInput, setCommentInput] = useState('')
+  const swipeStartRef = useRef<{ x: number; y: number } | null>(null)
   const router = useRouter()
 
   const mediaItems = useMemo(() => {
@@ -97,6 +98,41 @@ export function SocialPostDetailDialog({
   const currentMedia = mediaItems[mediaIndex]
   const hasMultipleMedia = mediaItems.length > 1
 
+  const goToPreviousMedia = () => {
+    setMediaIndex((index) => Math.max(0, index - 1))
+  }
+
+  const goToNextMedia = () => {
+    setMediaIndex((index) => Math.min(mediaItems.length - 1, index + 1))
+  }
+
+  const handleMediaTouchStart = (event: TouchEvent<HTMLDivElement>) => {
+    const touch = event.touches[0]
+    if (!touch || !hasMultipleMedia) return
+    swipeStartRef.current = { x: touch.clientX, y: touch.clientY }
+  }
+
+  const handleMediaTouchEnd = (event: TouchEvent<HTMLDivElement>) => {
+    const start = swipeStartRef.current
+    swipeStartRef.current = null
+    if (!start || !hasMultipleMedia) return
+
+    const touch = event.changedTouches[0]
+    if (!touch) return
+
+    const deltaX = touch.clientX - start.x
+    const deltaY = touch.clientY - start.y
+
+    if (Math.abs(deltaX) < 44 || Math.abs(deltaX) < Math.abs(deltaY)) return
+
+    if (deltaX < 0) {
+      goToNextMedia()
+      return
+    }
+
+    goToPreviousMedia()
+  }
+
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
@@ -112,7 +148,11 @@ export function SocialPostDetailDialog({
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain">
             {mediaItems.length > 0 ? (
-              <div className="relative h-64 w-full overflow-hidden bg-black sm:h-80">
+              <div
+                className="relative h-64 w-full overflow-hidden bg-black sm:h-80"
+                onTouchStart={handleMediaTouchStart}
+                onTouchEnd={handleMediaTouchEnd}
+              >
                 <AnimatePresence mode="wait" initial={false}>
                   <motion.div
                     key={mediaIndex}
@@ -142,7 +182,7 @@ export function SocialPostDetailDialog({
                   <>
                     <button
                       type="button"
-                      onClick={() => setMediaIndex((i) => Math.max(0, i - 1))}
+                      onClick={goToPreviousMedia}
                       disabled={mediaIndex === 0}
                       className="absolute left-2 top-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm transition-opacity disabled:opacity-30"
                       aria-label="Previous"
@@ -151,7 +191,7 @@ export function SocialPostDetailDialog({
                     </button>
                     <button
                       type="button"
-                      onClick={() => setMediaIndex((i) => Math.min(mediaItems.length - 1, i + 1))}
+                      onClick={goToNextMedia}
                       disabled={mediaIndex === mediaItems.length - 1}
                       className="absolute right-2 top-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm transition-opacity disabled:opacity-30"
                       aria-label="Next"
@@ -256,19 +296,6 @@ export function SocialPostDetailDialog({
                   )}
                 </div>
 
-                <div className="grid gap-3 sm:grid-cols-4">
-                  {[
-                    { label: 'Completed', value: formatCompactNumber(post.stats.completed) },
-                    { label: 'Used', value: formatCompactNumber(post.stats.used) },
-                    { label: 'Saved', value: formatCompactNumber(post.stats.saved) },
-                    { label: 'Remixed', value: formatCompactNumber(post.stats.remixed) },
-                  ].map((stat) => (
-                    <div key={stat.label} className="rounded-2xl border border-border/70 bg-muted/15 px-4 py-3">
-                      <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">{stat.label}</p>
-                      <p className="mt-1 text-lg font-semibold">{stat.value}</p>
-                    </div>
-                  ))}
-                </div>
               </section>
 
               {post.type === 'meal' ? (
@@ -552,14 +579,6 @@ export function SocialPostDetailDialog({
                 </section>
               ) : (
                 <section className="space-y-6">
-                  <SectionHeading title="Post" subtitle="This is a general update post, so it doesn&apos;t include a linked meal or workout template." />
-
-                  <div className="rounded-3xl border border-border/70 bg-muted/10 p-5">
-                    <p className="text-sm leading-7 text-muted-foreground">
-                      {post.caption}
-                    </p>
-                  </div>
-
                   {post.tags.length > 0 ? (
                     <div className="space-y-3">
                       <SectionHeading title="Tags" />

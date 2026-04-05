@@ -4,7 +4,7 @@ import type { ChangeEvent, ReactNode } from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { format } from 'date-fns'
-import { Globe2, Loader2, Lock, MessageSquareText, PencilLine, Repeat2, Settings, Share2, Trash2, UserCheck, Users, UtensilsCrossed, Dumbbell } from 'lucide-react'
+import { Globe2, Loader2, Lock, MessageSquareText, PencilLine, Plus, Repeat2, Share2, Trash2, UserCheck, Users, UtensilsCrossed, Dumbbell } from 'lucide-react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
@@ -15,10 +15,11 @@ import { Input } from '@/components/ui/input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { PeopleDialog } from '@/components/feed/PeopleDialog'
+import { SocialPostComposerDialog } from '@/components/feed/SocialPostComposerDialog'
 import { SocialPostDetailDialog } from '@/components/feed/SocialPostDetailDialog'
 import { DEFAULT_SOCIAL_POSTS, getSocialCreators } from '@/lib/social-feed'
 import { getFollowerCount, getFollowingCount, mergeSocialProfiles } from '@/lib/social-connections'
-import type { SocialPost } from '@/types'
+import type { SocialPost, SocialPostUser } from '@/types'
 
 type ProfileComment = {
   id: string
@@ -63,11 +64,11 @@ export default function ProfilePage() {
   const socialFollows = useAppStore((state) => state.socialFollows)
   const socialSavedPostIds = useAppStore((state) => state.socialSavedPostIds)
   const savedMeals = useAppStore((state) => state.savedMeals)
+  const customRecipes = useAppStore((state) => state.customRecipes)
   const customWorkouts = useAppStore((state) => state.customWorkouts)
+  const createSocialPost = useAppStore((state) => state.createSocialPost)
   const updateProfile = useAppStore((state) => state.updateProfile)
   const removeSocialPost = useAppStore((state) => state.removeSocialPost)
-  const acceptFollowRequest = useAppStore((state) => state.acceptFollowRequest)
-  const declineFollowRequest = useAppStore((state) => state.declineFollowRequest)
   const avatarInputRef = useRef<HTMLInputElement>(null)
   const bannerInputRef = useRef<HTMLInputElement>(null)
   const tabsListRef = useRef<HTMLDivElement>(null)
@@ -86,6 +87,7 @@ export default function ProfilePage() {
   const [commentsLoading, setCommentsLoading] = useState(true)
   const [selectedPost, setSelectedPost] = useState<SocialPost | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
+  const [composerOpen, setComposerOpen] = useState(false)
   const [followersOpen, setFollowersOpen] = useState(false)
   const [followingOpen, setFollowingOpen] = useState(false)
 
@@ -158,6 +160,15 @@ export default function ProfilePage() {
   ], [socialPosts])
 
   const socialProfiles = useMemo(() => mergeSocialProfiles(socialPosts, getSocialCreators(), user), [socialPosts, user])
+  const currentSocialUser = useMemo<SocialPostUser>(() => ({
+    id: user.id,
+    name: user.name,
+    username: user.username || fallbackUsername(user.name),
+    avatar_url: user.avatar_url,
+    banner_url: user.banner_url,
+    bio: user.bio,
+    profile_visibility: user.profile_visibility ?? 'public',
+  }), [user])
   const peopleById = useMemo(() => new Map(socialProfiles.map((profile) => [profile.id, profile])), [socialProfiles])
   const followerCount = getFollowerCount(socialFollows, user?.id ?? '')
   const followingCount = getFollowingCount(socialFollows, user?.id ?? '')
@@ -169,10 +180,6 @@ export default function ProfilePage() {
     .filter((item) => item.followerId === user?.id && item.status === 'accepted')
     .map((item) => peopleById.get(item.followingId))
     .filter(Boolean), [peopleById, socialFollows, user?.id])
-  const pendingFollowRequests = useMemo(() => socialFollows
-    .filter((item) => item.followingId === user?.id && item.status === 'pending')
-    .map((item) => ({ relationship: item, profile: peopleById.get(item.followerId) }))
-    .filter((item) => item.profile), [peopleById, socialFollows, user?.id])
   const totalSaves = ownPosts.reduce((sum, post) => sum + post.stats.saved, 0)
   const totalReposts = ownPosts.reduce((sum, post) => sum + post.stats.remixed, 0)
   const savedPosts = useMemo(
@@ -311,10 +318,10 @@ export default function ProfilePage() {
           <button
             type="button"
             onClick={() => bannerInputRef.current?.click()}
-            className="absolute bottom-3 right-3 inline-flex h-9 w-9 items-center justify-center rounded-full border border-border/70 bg-background/90 text-muted-foreground shadow-sm backdrop-blur transition-colors hover:bg-background"
+            className="absolute bottom-3 right-3 inline-flex h-8 w-8 items-center justify-center rounded-full border border-border/70 bg-background/90 text-muted-foreground shadow-sm backdrop-blur transition-colors hover:bg-background"
             aria-label="Change banner image"
           >
-            <PencilLine className="h-4 w-4" />
+            <PencilLine className="h-3.5 w-3.5" />
           </button>
           <input
             ref={bannerInputRef}
@@ -344,10 +351,10 @@ export default function ProfilePage() {
                 <button
                   type="button"
                   onClick={() => avatarInputRef.current?.click()}
-                  className="absolute -bottom-2 -right-2 inline-flex h-9 w-9 items-center justify-center rounded-full border border-border bg-background text-muted-foreground shadow-sm transition-colors hover:bg-muted"
+                  className="absolute bottom-1 right-1 inline-flex h-7 w-7 items-center justify-center rounded-full border border-border/70 bg-background/90 text-muted-foreground shadow-sm backdrop-blur transition-colors hover:bg-background"
                   aria-label="Upload profile photo"
                 >
-                  <PencilLine className="h-4 w-4" />
+                  <PencilLine className="h-3.5 w-3.5" />
                 </button>
                 <input
                   ref={avatarInputRef}
@@ -368,14 +375,34 @@ export default function ProfilePage() {
                 </div>
 
                 {draft.bio ? <p className="max-w-2xl text-sm leading-6 text-muted-foreground">{draft.bio}</p> : null}
+
+                <div className="flex flex-wrap items-end gap-6 pt-1">
+                  <div className="min-w-[72px]">
+                    <p className="text-2xl font-semibold tracking-tight text-foreground">{ownPosts.length}</p>
+                    <p className="text-sm text-muted-foreground">Posts</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setFollowersOpen(true)}
+                    className="min-w-[88px] text-left transition-opacity hover:opacity-80"
+                  >
+                    <p className="text-2xl font-semibold tracking-tight text-foreground">{followerCount}</p>
+                    <p className="text-sm text-muted-foreground">Followers</p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFollowingOpen(true)}
+                    className="min-w-[88px] text-left transition-opacity hover:opacity-80"
+                  >
+                    <p className="text-2xl font-semibold tracking-tight text-foreground">{followingCount}</p>
+                    <p className="text-sm text-muted-foreground">Following</p>
+                  </button>
+                </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 sm:min-w-[320px] lg:grid-cols-3">
-              <StatCard label="Posts" value={ownPosts.length} icon={<Share2 className="h-4 w-4" />} />
+            <div className="grid grid-cols-1 gap-3 sm:min-w-[220px] lg:grid-cols-1">
               <StatCard label="Comments" value={comments.length} icon={<MessageSquareText className="h-4 w-4" />} />
-              <StatCard label="Following" value={followingCount} icon={<UserCheck className="h-4 w-4" />} onClick={() => setFollowingOpen(true)} />
-              <StatCard label="Followers" value={followerCount} icon={<Users className="h-4 w-4" />} onClick={() => setFollowersOpen(true)} />
               <StatCard label="Saves" value={totalSaves} icon={<UtensilsCrossed className="h-4 w-4" />} />
               <StatCard label="Reposts" value={totalReposts} icon={<Repeat2 className="h-4 w-4" />} />
             </div>
@@ -453,23 +480,7 @@ export default function ProfilePage() {
                   </div>
                 </div>
               </div>
-            ) : (
-              <div className="space-y-4 rounded-2xl border border-border/60 bg-muted/20 p-4">
-                <div>
-                  <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Bio</p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {user.bio || 'No bio yet. Use the edit control to add one.'}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Profile visibility</p>
-                  <div className="mt-1 inline-flex items-center gap-2 rounded-full border border-border/60 bg-background px-3 py-1.5 text-xs font-medium text-muted-foreground">
-                    {user.profile_visibility === 'private' ? <Lock className="h-3.5 w-3.5" /> : <Globe2 className="h-3.5 w-3.5" />}
-                    {user.profile_visibility === 'private' ? 'Private' : 'Public'}
-                  </div>
-                </div>
-              </div>
-            )}
+            ) : null}
 
             <div className="flex flex-col gap-2">
               {isEditingProfile ? (
@@ -514,12 +525,6 @@ export default function ProfilePage() {
                   <PencilLine className="h-4 w-4" />
                 </Button>
               )}
-              <Button asChild type="button" variant="outline" className="h-11 rounded-2xl">
-                <Link href="/dashboard/settings?tab=profile">
-                  <Settings className="mr-2 h-4 w-4" />
-                  Open Settings
-                </Link>
-              </Button>
             </div>
           </div>
         </CardContent>
@@ -531,71 +536,79 @@ export default function ProfilePage() {
           <TabsTrigger value="comments" className="shrink-0 rounded-xl">Comments</TabsTrigger>
           <TabsTrigger value="saves" className="shrink-0 rounded-xl">Saves</TabsTrigger>
           <TabsTrigger value="reposts" className="shrink-0 rounded-xl">Reposts</TabsTrigger>
-          <TabsTrigger value="requests" className="shrink-0 rounded-xl">Requests</TabsTrigger>
           <TabsTrigger value="saved-meals" className="shrink-0 rounded-xl">Saved Meals</TabsTrigger>
           <TabsTrigger value="saved-workouts" className="shrink-0 rounded-xl">Saved Workouts</TabsTrigger>
         </TabsList>
 
         <TabsContent value="posts" className="mt-0">
-          {ownPosts.length === 0 ? (
-            <EmptyState
-              title="No posts yet"
-              detail="Your published meals and workouts will show up here once you post them to the feed."
-            />
-          ) : (
-            <div className="grid gap-4 lg:grid-cols-2">
-              {ownPosts.map((post) => (
-                <Card
-                  key={post.id}
-                  className="cursor-pointer border-border/60 transition-colors hover:border-primary/30"
-                  onClick={() => {
-                    setSelectedPost(post)
-                    setDetailOpen(true)
-                  }}
-                >
-                  <CardContent className="space-y-4 p-5">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                          {post.type === 'meal' ? 'Meal post' : post.type === 'workout' ? 'Workout post' : post.type === 'day' ? 'Day post' : 'Post'}
-                        </p>
-                        <h3 className="mt-1 text-lg font-semibold">{post.title}</h3>
-                      </div>
-                      <div className="rounded-full border border-border/60 bg-muted/30 px-3 py-1 text-xs text-muted-foreground">
-                        {format(new Date(post.createdAt), 'MMM d')}
-                      </div>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium text-foreground">Your posts</p>
+                <p className="text-sm text-muted-foreground">Create and manage everything you publish to the feed from here.</p>
+              </div>
+              <Button type="button" className="rounded-full" onClick={() => setComposerOpen(true)}>
+                <Plus className="mr-2 h-4 w-4" />
+                Create Post
+              </Button>
+            </div>
+
+            {ownPosts.length === 0 ? (
+              <EmptyState
+                title="No posts yet"
+                detail="Your published meals and workouts will show up here once you post them to the feed."
+              />
+            ) : (
+              <div className="grid gap-4 lg:grid-cols-2">
+                {ownPosts.map((post) => (
+                  <Card
+                    key={post.id}
+                    className="cursor-pointer border-border/60 transition-colors hover:border-primary/30"
+                    onClick={() => {
+                      setSelectedPost(post)
+                      setDetailOpen(true)
+                    }}
+                  >
+                    <CardContent className="space-y-4 p-5">
+                      <PostMediaPreview post={post} />
+
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                            {post.type === 'meal' ? 'Meal post' : post.type === 'workout' ? 'Workout post' : post.type === 'day' ? 'Day post' : 'Post'}
+                          </p>
+                          <h3 className="mt-1 text-lg font-semibold">{post.title}</h3>
+                        </div>
+                        <div className="rounded-full border border-border/60 bg-muted/30 px-3 py-1 text-xs text-muted-foreground">
+                          {format(new Date(post.createdAt), 'MMM d')}
+                        </div>
                     </div>
                     {post.caption ? <p className="line-clamp-3 text-sm text-muted-foreground">{post.caption}</p> : null}
-                    <div className="grid grid-cols-4 gap-2 text-center">
-                      <MiniStat label="Used" value={post.stats.used} />
-                      <MiniStat label="Done" value={post.stats.completed} />
-                      <MiniStat label="Saved" value={post.stats.saved} />
-                      <MiniStat label="Remixed" value={post.stats.remixed} />
-                    </div>
                     <div className="flex justify-end">
                       <Button
-                        type="button"
-                        variant="outline"
-                        className="rounded-full text-destructive hover:text-destructive"
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          removeSocialPost(post.id)
-                          if (selectedPost?.id === post.id) {
-                            setSelectedPost(null)
-                            setDetailOpen(false)
-                          }
-                          toast.success('Post deleted.')
-                        }}
-                      >
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        Delete
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
+                          type="button"
+                          variant="outline"
+                          className="rounded-full text-destructive hover:text-destructive"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            removeSocialPost(post.id)
+                            if (selectedPost?.id === post.id) {
+                              setSelectedPost(null)
+                              setDetailOpen(false)
+                            }
+                            toast.success('Post deleted.')
+                          }}
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Delete
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
         </TabsContent>
 
         <TabsContent value="comments" className="mt-0">
@@ -681,36 +694,6 @@ export default function ProfilePage() {
                       </div>
                     </div>
                     <p className="line-clamp-3 text-sm text-muted-foreground">{post.caption}</p>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-        </TabsContent>
-
-        <TabsContent value="requests" className="mt-0">
-          {pendingFollowRequests.length === 0 ? (
-            <EmptyState
-              title="No follow requests"
-              detail="Pending follow requests for private profiles will appear here."
-            />
-          ) : (
-            <div className="space-y-3">
-              {pendingFollowRequests.map(({ relationship, profile }) => (
-                <Card key={`${relationship.followerId}-${relationship.followingId}`} className="border-border/60">
-                  <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <p className="font-semibold">{profile?.name}</p>
-                      <p className="text-sm text-muted-foreground">@{profile?.username}</p>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button variant="outline" className="rounded-full" onClick={() => declineFollowRequest(relationship.followerId)}>
-                        Decline
-                      </Button>
-                      <Button className="rounded-full" onClick={() => acceptFollowRequest(relationship.followerId)}>
-                        Accept
-                      </Button>
-                    </div>
                   </CardContent>
                 </Card>
               ))}
@@ -814,6 +797,28 @@ export default function ProfilePage() {
         }}
       />
 
+      <SocialPostComposerDialog
+        open={composerOpen}
+        unitSystem={user.unit_system}
+        initialDraft={null}
+        currentUser={currentSocialUser}
+        availablePeople={socialProfiles.filter((profile) => profile.id !== user.id)}
+        savedMeals={savedMeals}
+        recipes={customRecipes}
+        workouts={customWorkouts}
+        onOpenChange={setComposerOpen}
+        onSubmit={(draft) => {
+          const postId = createSocialPost(draft)
+          const createdPost = useAppStore.getState().socialPosts.find((post) => post.id === postId) ?? null
+          setComposerOpen(false)
+          if (createdPost) {
+            setSelectedPost(createdPost)
+            setDetailOpen(true)
+          }
+          toast.success('Post published to your feed.')
+        }}
+      />
+
       <PeopleDialog
         open={followersOpen}
         onOpenChange={setFollowersOpen}
@@ -880,6 +885,30 @@ function EmptyState({ title, detail }: { title: string; detail: string }) {
         <p className="mt-2 text-sm text-muted-foreground">{detail}</p>
       </CardContent>
     </Card>
+  )
+}
+
+function PostMediaPreview({ post }: { post: SocialPost }) {
+  const mediaItem = post.media?.[0] ?? (post.image ? { kind: 'image' as const, url: post.image } : null)
+  if (!mediaItem) return null
+
+  return (
+    <div className="overflow-hidden rounded-3xl border border-border/60 bg-muted/20">
+      {mediaItem.kind === 'video' ? (
+        <video
+          src={mediaItem.url}
+          className="h-52 w-full object-cover"
+          muted
+          playsInline
+          preload="metadata"
+        />
+      ) : (
+        <div
+          className="h-52 w-full bg-cover bg-center"
+          style={{ backgroundImage: `linear-gradient(180deg, rgba(15,23,42,0.04), rgba(15,23,42,0.18)), url("${mediaItem.url}")` }}
+        />
+      )}
+    </div>
   )
 }
 
