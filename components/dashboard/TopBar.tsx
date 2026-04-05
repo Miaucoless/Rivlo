@@ -27,6 +27,7 @@ import {
 } from '@/components/ui/dialog'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { createClient } from '@/lib/supabase'
+import { getCloudHydrationProfileForPath, getCloudHydrationScopesForPath } from '@/lib/cloud-sync'
 import type { GroceryList, SavedMealTemplate } from '@/types'
 
 type Friendship = {
@@ -412,8 +413,11 @@ export function TopBar() {
               <button
                 type="button"
                 onClick={() => {
-                  void flushPendingCloudWrites()
-                  void syncNow()
+                  void syncNow({
+                    force: true,
+                    scopes: getCloudHydrationScopesForPath(pathname),
+                    profile: getCloudHydrationProfileForPath(pathname),
+                  })
                 }}
                 className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors ${
                   syncStatus === 'offline'

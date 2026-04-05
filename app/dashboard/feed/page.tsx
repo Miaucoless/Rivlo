@@ -41,11 +41,54 @@ import type { CalendarReminder, SocialFeedFilter, SocialFeedSort, SocialFollowRe
 import { toast } from 'sonner'
 
 const FEED_BATCH_SIZE = 6
+const SOCIAL_PUBLIC_CACHE_TTL_MS = 1000 * 60 * 3
+
+type CachedPublicSocialPayload = PublicSocialPayload & {
+  cachedAt: number
+}
 
 type PublicSocialPayload = {
   posts: SocialPost[]
   profiles: SocialPostUser[]
   follows: SocialFollowRelationship[]
+}
+
+function getPublicSocialCacheKey(userId: string, includeProfiles: boolean) {
+  return `rivora-social-public:${userId}:${includeProfiles ? 'profiles' : 'feed'}`
+}
+
+function readPublicSocialCache(userId: string, includeProfiles: boolean): PublicSocialPayload | null {
+  if (typeof window === 'undefined') return null
+
+  try {
+    const raw = window.sessionStorage.getItem(getPublicSocialCacheKey(userId, includeProfiles))
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as Partial<CachedPublicSocialPayload> | null
+    if (!parsed || typeof parsed.cachedAt !== 'number') return null
+    if (Date.now() - parsed.cachedAt > SOCIAL_PUBLIC_CACHE_TTL_MS) return null
+
+    return {
+      posts: Array.isArray(parsed.posts) ? parsed.posts : [],
+      profiles: Array.isArray(parsed.profiles) ? parsed.profiles : [],
+      follows: Array.isArray(parsed.follows) ? parsed.follows : [],
+    }
+  } catch {
+    return null
+  }
+}
+
+function writePublicSocialCache(userId: string, includeProfiles: boolean, payload: PublicSocialPayload) {
+  if (typeof window === 'undefined') return
+
+  try {
+    const nextPayload: CachedPublicSocialPayload = {
+      ...payload,
+      cachedAt: Date.now(),
+    }
+    window.sessionStorage.setItem(getPublicSocialCacheKey(userId, includeProfiles), JSON.stringify(nextPayload))
+  } catch {
+    // Ignore cache write failures.
+  }
 }
 
 async function getToken() {
@@ -123,11 +166,23 @@ export default function FeedPage() {
         return
       }
 
+      const includeProfiles = activeTab === 'people'
+      const cachedPayload = readPublicSocialCache(viewerId, includeProfiles)
+      if (cachedPayload) {
+        if (!active) return
+        setRemotePublicPosts(cachedPayload.posts)
+        setRemoteFollows(cachedPayload.follows)
+        if (includeProfiles) {
+          setRemoteProfiles(cachedPayload.profiles)
+        }
+        return
+      }
+
       try {
         const token = await getToken()
         if (!token) return
 
-        const res = await fetch('/api/social/public', {
+        const res = await fetch(`/api/social/public${includeProfiles ? '?includeProfiles=1' : ''}`, {
           headers: { Authorization: `Bearer ${token}` },
           cache: 'no-store',
         })
@@ -136,9 +191,17 @@ export default function FeedPage() {
         const payload = await res.json() as PublicSocialPayload
 
         if (!active) return
-        setRemotePublicPosts(Array.isArray(payload.posts) ? payload.posts : [])
-        setRemoteProfiles(Array.isArray(payload.profiles) ? payload.profiles : [])
-        setRemoteFollows(Array.isArray(payload.follows) ? payload.follows : [])
+        const nextPayload: PublicSocialPayload = {
+          posts: Array.isArray(payload.posts) ? payload.posts : [],
+          profiles: Array.isArray(payload.profiles) ? payload.profiles : [],
+          follows: Array.isArray(payload.follows) ? payload.follows : [],
+        }
+        setRemotePublicPosts(nextPayload.posts)
+        setRemoteFollows(nextPayload.follows)
+        if (includeProfiles) {
+          setRemoteProfiles(nextPayload.profiles)
+        }
+        writePublicSocialCache(viewerId, includeProfiles, nextPayload)
       } catch (error) {
         if (!active) return
         console.error('Public social feed load failed:', error)
@@ -150,7 +213,7 @@ export default function FeedPage() {
     return () => {
       active = false
     }
-  }, [isDemoMode, socialPosts.length, socialFollows.length, viewerId])
+  }, [activeTab, isDemoMode, viewerId])
 
   const allFollows = useMemo(() => {
     const deduped = new Map<string, SocialFollowRelationship>()

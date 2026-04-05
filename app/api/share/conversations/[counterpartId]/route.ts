@@ -72,11 +72,17 @@ export async function POST(
       return NextResponse.json({ error: 'There is nothing shared in this conversation yet.' }, { status: 400 })
     }
 
-    const { error } = await db.from('share_comments').insert({
-      share_id: targetShareId,
-      user_id: user.id,
-      body: message,
-    })
+    const createdAt = new Date().toISOString()
+    const { data: insertedComment, error } = await db
+      .from('share_comments')
+      .insert({
+        share_id: targetShareId,
+        user_id: user.id,
+        body: message,
+        created_at: createdAt,
+      })
+      .select('id, share_id, body, created_at')
+      .single()
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 })
@@ -92,7 +98,19 @@ export async function POST(
       created_at: new Date().toISOString(),
     })
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({
+      success: true,
+      message: insertedComment
+        ? {
+            id: `message-${insertedComment.id}`,
+            type: 'message' as const,
+            created_at: insertedComment.created_at,
+            body: insertedComment.body,
+            share_id: insertedComment.share_id,
+            direction: 'outgoing' as const,
+          }
+        : null,
+    })
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Could not send message.' }, { status: 500 })
   }

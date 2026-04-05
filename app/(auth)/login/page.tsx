@@ -60,16 +60,24 @@ async function refreshClientNavigationState() {
   if (typeof window === 'undefined') return
 
   try {
+    const isPreviewHost = window.location.hostname.endsWith('.vercel.app')
+
     if ('serviceWorker' in navigator) {
       const registrations = await navigator.serviceWorker.getRegistrations()
-      await Promise.all(registrations.map((registration) => registration.update().catch(() => undefined)))
+      await Promise.all(
+        registrations.map((registration) =>
+          (isPreviewHost ? registration.unregister() : registration.update()).catch(() => undefined)
+        )
+      )
     }
 
     if ('caches' in window) {
       const cacheKeys = await window.caches.keys()
-      const volatileCaches = cacheKeys.filter((cacheName) =>
-        VOLATILE_NAVIGATION_CACHE_NAMES.some((prefix) => cacheName === prefix || cacheName.includes(prefix))
-      )
+      const volatileCaches = isPreviewHost
+        ? cacheKeys
+        : cacheKeys.filter((cacheName) =>
+            VOLATILE_NAVIGATION_CACHE_NAMES.some((prefix) => cacheName === prefix || cacheName.includes(prefix))
+          )
 
       await Promise.all(volatileCaches.map((cacheName) => window.caches.delete(cacheName)))
     }

@@ -40,6 +40,54 @@ type CloudHydrationData = {
   socialLikedPostIds: string[]
   socialPostComments: Record<string, SocialPostComment[]>
   dbNotifications: import('@/types').Notification[]
+  fetchedScopes: CloudHydrationScope[]
+}
+
+export type CloudHydrationScope =
+  | 'metadata'
+  | 'meals'
+  | 'workouts'
+  | 'tracking'
+  | 'journal'
+  | 'planner'
+  | 'recipes'
+  | 'templates'
+  | 'water'
+  | 'notifications'
+
+export type CloudHydrationProfile = 'default' | 'dashboard' | 'calendar' | 'meals' | 'workouts'
+
+export const ALL_CLOUD_HYDRATION_SCOPES: CloudHydrationScope[] = [
+  'metadata',
+  'meals',
+  'workouts',
+  'tracking',
+  'journal',
+  'planner',
+  'recipes',
+  'templates',
+  'water',
+  'notifications',
+]
+
+export function getCloudHydrationProfileForPath(pathname: string): CloudHydrationProfile {
+  if (pathname.startsWith('/dashboard/dashboard') || pathname === '/dashboard') {
+    return 'dashboard'
+  }
+
+  if (pathname.startsWith('/dashboard/calendar')) {
+    return 'calendar'
+  }
+
+  if (pathname.startsWith('/dashboard/meals')) {
+    return 'meals'
+  }
+
+  if (pathname.startsWith('/dashboard/workouts')) {
+    return 'workouts'
+  }
+
+  return 'default'
 }
 
 export type CloudSeedPayload = {
@@ -62,6 +110,54 @@ export type CloudSeedPayload = {
   socialPostComments: Record<string, SocialPostComment[]>
 }
 
+export function getCloudHydrationScopesForPath(pathname: string): CloudHydrationScope[] {
+  if (pathname.startsWith('/dashboard/dashboard') || pathname === '/dashboard') {
+    return ['metadata', 'meals', 'workouts', 'tracking', 'journal', 'water', 'notifications']
+  }
+
+  if (pathname.startsWith('/dashboard/meals')) {
+    return ['metadata', 'meals', 'planner', 'recipes']
+  }
+
+  if (pathname.startsWith('/dashboard/workouts')) {
+    return ['workouts', 'templates', 'journal']
+  }
+
+  if (pathname.startsWith('/dashboard/tracking')) {
+    return ['tracking', 'workouts', 'meals']
+  }
+
+  if (pathname.startsWith('/dashboard/journal')) {
+    return ['journal']
+  }
+
+  if (pathname.startsWith('/dashboard/calendar')) {
+    return ['metadata', 'meals', 'workouts']
+  }
+
+  if (pathname.startsWith('/dashboard/supplements')) {
+    return ['metadata']
+  }
+
+  if (pathname.startsWith('/dashboard/feed')) {
+    return ['metadata', 'planner', 'recipes', 'templates']
+  }
+
+  if (pathname.startsWith('/dashboard/profile')) {
+    return ['metadata', 'recipes', 'templates']
+  }
+
+  if (pathname.startsWith('/dashboard/shared')) {
+    return ['metadata', 'planner', 'recipes', 'templates']
+  }
+
+  if (pathname.startsWith('/dashboard/settings')) {
+    return ['metadata']
+  }
+
+  return ['metadata']
+}
+
 type MetadataAppState = {
   savedMeals: SavedMealTemplate[]
   supplements: SupplementEntry[]
@@ -71,6 +167,10 @@ type MetadataAppState = {
   socialSavedPostIds: string[]
   socialLikedPostIds: string[]
   socialPostComments: Record<string, SocialPostComment[]>
+}
+
+type SaveMetadataCloudStateOptions = {
+  baseState?: MetadataAppState
 }
 
 const EMPTY_METADATA_APP_STATE: MetadataAppState = {
@@ -84,6 +184,21 @@ const EMPTY_METADATA_APP_STATE: MetadataAppState = {
   socialPostComments: {},
 }
 
+const metadataStateCache = new Map<string, MetadataAppState>()
+
+function cloneMetadataAppState(state: MetadataAppState): MetadataAppState {
+  return {
+    savedMeals: [...state.savedMeals],
+    supplements: [...state.supplements],
+    calendarReminders: [...state.calendarReminders],
+    socialPosts: [...state.socialPosts],
+    socialFollows: [...state.socialFollows],
+    socialSavedPostIds: [...state.socialSavedPostIds],
+    socialLikedPostIds: [...state.socialLikedPostIds],
+    socialPostComments: { ...state.socialPostComments },
+  }
+}
+
 async function fetchAuthMetadataAppState(
   supabase: ReturnType<typeof createClient>
 ): Promise<MetadataAppState> {
@@ -93,7 +208,7 @@ async function fetchAuthMetadataAppState(
   const appState = (authData.user.user_metadata as { app_state?: MetadataAppState } | undefined)?.app_state
   if (!appState) return EMPTY_METADATA_APP_STATE
 
-  return {
+  const normalizedState = {
     savedMeals: Array.isArray(appState.savedMeals) ? appState.savedMeals : [],
     supplements: Array.isArray(appState.supplements) ? appState.supplements : [],
     calendarReminders: Array.isArray(appState.calendarReminders) ? appState.calendarReminders : [],
@@ -105,6 +220,8 @@ async function fetchAuthMetadataAppState(
       ? appState.socialPostComments
       : {},
   }
+
+  return normalizedState
 }
 
 function isUuid(value: string) {
@@ -194,7 +311,7 @@ async function fetchMetadataAppState(userId: string): Promise<MetadataAppState> 
       ? await fetchAuthMetadataAppState(supabase)
       : EMPTY_METADATA_APP_STATE
 
-    return {
+    const normalizedState = {
       savedMeals: Array.isArray(data.saved_meals) ? data.saved_meals : [],
       supplements: Array.isArray(data.supplements) ? data.supplements : [],
       calendarReminders: Array.isArray(data.calendar_reminders) ? data.calendar_reminders : [],
@@ -214,14 +331,25 @@ async function fetchMetadataAppState(userId: string): Promise<MetadataAppState> 
         ? (data as any).social_post_comments
         : authFallback.socialPostComments,
     }
+
+    metadataStateCache.set(userId, cloneMetadataAppState(normalizedState))
+    return normalizedState
   }
 
-  return fetchAuthMetadataAppState(supabase)
+  const fallbackState = await fetchAuthMetadataAppState(supabase)
+  metadataStateCache.set(userId, cloneMetadataAppState(fallbackState))
+  return fallbackState
 }
 
-export async function saveMetadataCloudState(userId: string, state: Partial<MetadataAppState>) {
+export async function saveMetadataCloudState(
+  userId: string,
+  state: Partial<MetadataAppState>,
+  options?: SaveMetadataCloudStateOptions
+) {
   const supabase = createClient()
-  const existingState = await fetchMetadataAppState(userId)
+  const existingState = options?.baseState
+    ?? metadataStateCache.get(userId)
+    ?? await fetchMetadataAppState(userId)
   const nextState: MetadataAppState = {
     savedMeals: state.savedMeals ?? existingState.savedMeals,
     supplements: state.supplements ?? existingState.supplements,
@@ -281,6 +409,8 @@ export async function saveMetadataCloudState(userId: string, state: Partial<Meta
   // RLS violations (code 42501) mean the session has expired — local data is
   // preserved and the sync will succeed on the next valid session.
   if (error && error.code !== '42501') throw new Error(error.message)
+
+  metadataStateCache.set(userId, cloneMetadataAppState(nextState))
 }
 
 function mealToRow(userId: string, date: string, meal: MealLogEntry) {
@@ -433,8 +563,56 @@ function recipeFromRow(row: any): Recipe {
   }
 }
 
-export async function fetchCloudState(userId: string): Promise<CloudHydrationData | null> {
+export async function fetchCloudState(
+  userId: string,
+  scopes?: CloudHydrationScope[],
+  profile: CloudHydrationProfile = 'default'
+): Promise<CloudHydrationData | null> {
   const supabase = createClient()
+  const requestedScopes = new Set<CloudHydrationScope>(
+    scopes && scopes.length > 0 ? scopes : ALL_CLOUD_HYDRATION_SCOPES
+  )
+  const shouldFetch = (scope: CloudHydrationScope) => requestedScopes.has(scope)
+  const recentDaysIso = (days: number) => {
+    const date = new Date()
+    date.setDate(date.getDate() - days)
+    return date.toISOString().slice(0, 10)
+  }
+  const queryMealEntries = () => {
+    let query = supabase.from('meal_entries').select('*').eq('user_id', userId).order('logged_at', { ascending: false })
+    if (profile === 'dashboard') query = query.gte('date', recentDaysIso(21)).limit(120)
+    else if (profile === 'calendar') query = query.gte('date', recentDaysIso(45)).limit(220)
+    else if (profile === 'meals') query = query.gte('date', recentDaysIso(60)).limit(320)
+    return query
+  }
+  const queryWorkoutLogs = () => {
+    let query = supabase.from('workout_logs').select('*').eq('user_id', userId).order('date', { ascending: false })
+    if (profile === 'dashboard') query = query.limit(48)
+    else if (profile === 'calendar') query = query.limit(90)
+    else if (profile === 'workouts') query = query.limit(120)
+    return query
+  }
+  const queryWeightEntries = () => {
+    let query = supabase.from('weight_entries').select('*').eq('user_id', userId).order('date', { ascending: false })
+    if (profile === 'dashboard') query = query.limit(45)
+    return query
+  }
+  const queryJournalEntries = () => {
+    let query = supabase.from('journal_entries').select('*').eq('user_id', userId).order('date', { ascending: false })
+    if (profile === 'dashboard') query = query.limit(24)
+    else if (profile === 'workouts') query = query.limit(40)
+    return query
+  }
+  const queryWaterLogs = () => {
+    let query = supabase.from('water_logs').select('*').eq('user_id', userId).order('logged_at', { ascending: false })
+    if (profile === 'dashboard') query = query.gte('date', recentDaysIso(14)).limit(120)
+    return query
+  }
+  const queryNotifications = () => {
+    let query = supabase.from('notifications').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(50) as any
+    if (profile === 'dashboard') query = supabase.from('notifications').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(20) as any
+    return query
+  }
 
   const isMissingRelation = (err: unknown) => {
     if (!err || typeof err !== 'object') return false
@@ -464,23 +642,45 @@ export async function fetchCloudState(userId: string): Promise<CloudHydrationDat
     metadataState,
     notificationsResp,
   ] = await Promise.all([
-    supabase.from('meal_entries').select('*').eq('user_id', userId).order('logged_at', { ascending: false }),
-    supabase.from('workout_logs').select('*').eq('user_id', userId).order('date', { ascending: false }),
-    supabase.from('weight_entries').select('*').eq('user_id', userId).order('date', { ascending: false }),
-    supabase.from('journal_entries').select('*').eq('user_id', userId).order('date', { ascending: false }),
-    supabase.from('meal_plans').select('*').eq('user_id', userId).order('week_start', { ascending: false }).limit(1).maybeSingle(),
-    supabase.from('grocery_lists').select('*').eq('user_id', userId).order('week_start', { ascending: false }).limit(1).maybeSingle(),
-    supabase.from('recipes').select('*').eq('user_id', userId).order('created_at', { ascending: false }),
-    supabase.from('workout_templates').select('*').eq('user_id', userId).order('updated_at', { ascending: false }),
-    selectOrEmpty(
-      supabase.from('water_logs').select('*').eq('user_id', userId).order('logged_at', { ascending: false }),
-      [] as any[]
-    ),
-    fetchMetadataAppState(userId),
-    selectOrEmpty(
-      supabase.from('notifications').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(50) as any,
-      [] as any[]
-    ),
+    shouldFetch('meals')
+      ? queryMealEntries()
+      : Promise.resolve({ data: [] as any[], error: null }),
+    shouldFetch('workouts')
+      ? queryWorkoutLogs()
+      : Promise.resolve({ data: [] as any[], error: null }),
+    shouldFetch('tracking')
+      ? queryWeightEntries()
+      : Promise.resolve({ data: [] as any[], error: null }),
+    shouldFetch('journal')
+      ? queryJournalEntries()
+      : Promise.resolve({ data: [] as any[], error: null }),
+    shouldFetch('planner')
+      ? supabase.from('meal_plans').select('*').eq('user_id', userId).order('week_start', { ascending: false }).limit(1).maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+    shouldFetch('planner')
+      ? supabase.from('grocery_lists').select('*').eq('user_id', userId).order('week_start', { ascending: false }).limit(1).maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+    shouldFetch('recipes')
+      ? supabase.from('recipes').select('*').eq('user_id', userId).order('created_at', { ascending: false })
+      : Promise.resolve({ data: [] as any[], error: null }),
+    shouldFetch('templates')
+      ? supabase.from('workout_templates').select('*').eq('user_id', userId).order('updated_at', { ascending: false })
+      : Promise.resolve({ data: [] as any[], error: null }),
+    shouldFetch('water')
+      ? selectOrEmpty(
+          queryWaterLogs(),
+          [] as any[]
+        )
+      : Promise.resolve({ data: [] as any[], error: null }),
+    shouldFetch('metadata')
+      ? fetchMetadataAppState(userId)
+      : Promise.resolve(EMPTY_METADATA_APP_STATE),
+    shouldFetch('notifications')
+      ? selectOrEmpty(
+          queryNotifications(),
+          [] as any[]
+        )
+      : Promise.resolve({ data: [] as any[], error: null }),
   ])
 
   if (mealsResp.error || workoutsResp.error || weightsResp.error || journalsResp.error || recipesResp.error || customWorkoutsResp.error || waterLogsResp.error) {
@@ -604,6 +804,7 @@ export async function fetchCloudState(userId: string): Promise<CloudHydrationDat
       action_url: n.action_url as string | undefined,
       created_at: n.created_at as string,
     })),
+    fetchedScopes: [...requestedScopes],
   }
 }
 
@@ -784,7 +985,7 @@ export async function seedCloudFromLocal(userId: string, payload: CloudSeedPaylo
     socialSavedPostIds: payload.socialSavedPostIds.length > 0 ? payload.socialSavedPostIds : existingMetadata.socialSavedPostIds,
     socialLikedPostIds: payload.socialLikedPostIds.length > 0 ? payload.socialLikedPostIds : existingMetadata.socialLikedPostIds,
     socialPostComments: Object.keys(payload.socialPostComments).length > 0 ? payload.socialPostComments : existingMetadata.socialPostComments,
-  }))
+  }, { baseState: existingMetadata }))
 
   await Promise.all(tasks)
 }

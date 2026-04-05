@@ -74,6 +74,7 @@ type DemoConversation = ConversationSummary & ConversationDetail
 const DEMO_THREAD_STORAGE_KEY = 'rivora-demo-conversation-messages'
 const IMPORTED_FRIEND_SHARE_STORAGE_KEY = 'rivora-imported-friend-shares'
 const SHARED_CONVERSATIONS_CACHE_PREFIX = 'rivora-shared-conversations'
+const SHARED_CONVERSATIONS_CACHE_TTL_MS = 1000 * 60 * 3
 const TYPE_LABELS: Record<string, string> = {
   workout: 'Workout',
   saved_meal: 'Saved Meal',
@@ -270,16 +271,28 @@ function getSharedConversationCacheKey(userId: string) {
   return `${SHARED_CONVERSATIONS_CACHE_PREFIX}:${userId}`
 }
 
-function readSharedConversationCache(userId: string): ConversationSummary[] {
-  if (typeof window === 'undefined') return []
+function readSharedConversationCache(userId: string): { conversations: ConversationSummary[]; fresh: boolean } {
+  if (typeof window === 'undefined') return { conversations: [], fresh: false }
 
   try {
     const raw = window.sessionStorage.getItem(getSharedConversationCacheKey(userId))
-    if (!raw) return []
+    if (!raw) return { conversations: [], fresh: false }
     const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed as ConversationSummary[] : []
+    if (Array.isArray(parsed)) {
+      return {
+        conversations: parsed as ConversationSummary[],
+        fresh: false,
+      }
+    }
+
+    const conversations = Array.isArray(parsed?.conversations) ? parsed.conversations as ConversationSummary[] : []
+    const cachedAt = typeof parsed?.cachedAt === 'number' ? parsed.cachedAt : 0
+    return {
+      conversations,
+      fresh: Boolean(cachedAt) && Date.now() - cachedAt <= SHARED_CONVERSATIONS_CACHE_TTL_MS,
+    }
   } catch {
-    return []
+    return { conversations: [], fresh: false }
   }
 }
 
@@ -287,7 +300,10 @@ function writeSharedConversationCache(userId: string, conversations: Conversatio
   if (typeof window === 'undefined') return
 
   try {
-    window.sessionStorage.setItem(getSharedConversationCacheKey(userId), JSON.stringify(conversations))
+    window.sessionStorage.setItem(getSharedConversationCacheKey(userId), JSON.stringify({
+      cachedAt: Date.now(),
+      conversations,
+    }))
   } catch {
     // Ignore storage failures.
   }
@@ -460,11 +476,15 @@ export function SharedConversations() {
       }
 
       const cachedConversations = readSharedConversationCache(user.id)
-      if (cachedConversations.length > 0) {
-        setConversations(cachedConversations)
+      if (cachedConversations.conversations.length > 0) {
+        setConversations(cachedConversations.conversations)
         setLoading(false)
       } else {
         setLoading(true)
+      }
+
+      if (cachedConversations.fresh) {
+        return
       }
 
       try {
@@ -666,21 +686,30 @@ export function SharedConversations() {
       const data = await res.json().catch(() => null)
       if (!res.ok) throw new Error(data?.error ?? 'Could not post comment.')
       setDraftMessage('')
+      const nextMessage = data?.message as Extract<TimelineEntry, { type: 'message' }> | null
 
-      const refresh = await fetch(`/api/share/conversations/${selectedId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-        cache: 'no-store',
-      })
-      const refreshedData = await refresh.json().catch(() => null)
-      if (refresh.ok && refreshedData) {
-        setDetail(refreshedData as ConversationDetail)
+      if (nextMessage) {
+        setDetail((current) => current ? {
+          ...current,
+          timeline: [...current.timeline, nextMessage],
+        } : current)
       }
 
-      setConversations((current) => current.map((conversation) => conversation.id === selectedId ? {
-        ...conversation,
-        latest_at: new Date().toISOString(),
-        latest_preview: message,
-      } : conversation).sort((left, right) => new Date(right.latest_at).getTime() - new Date(left.latest_at).getTime()))
+      setConversations((current) => {
+        const nextConversations = current
+          .map((conversation) => conversation.id === selectedId ? {
+            ...conversation,
+            latest_at: nextMessage?.created_at ?? new Date().toISOString(),
+            latest_preview: message,
+          } : conversation)
+          .sort((left, right) => new Date(right.latest_at).getTime() - new Date(left.latest_at).getTime())
+
+        if (user?.id) {
+          writeSharedConversationCache(user.id, nextConversations)
+        }
+
+        return nextConversations
+      })
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not post comment.')
     } finally {

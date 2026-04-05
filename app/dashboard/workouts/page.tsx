@@ -3035,6 +3035,7 @@ export default function WorkoutsPage() {
     removeCustomWorkout,
     setSocialComposerPrefill,
     updateProfile,
+    syncNow,
   } = useAppStore()
 
   const [previewExercise, setPreviewExercise] = useState<Exercise | null>(null)
@@ -3073,6 +3074,7 @@ export default function WorkoutsPage() {
   const [exerciseFilterOpen, setExerciseFilterOpen] = useState(false)
 
   const [manualSearch, setManualSearch] = useState('')
+  const [loadingOlderHistory, setLoadingOlderHistory] = useState(false)
   const [manualAction, setManualAction] = useState<'log' | 'save'>('log')
   const [manualWorkoutName, setManualWorkoutName] = useState('')
   const [manualWorkoutDate, setManualWorkoutDate] = useState(getTodayISO())
@@ -3262,6 +3264,22 @@ export default function WorkoutsPage() {
 
   const totalCaloriesBurned = workoutLogs.reduce((sum, log) => sum + (log.calories_burned_kcal || 0), 0)
   const todayLoggedWorkouts = workoutLogs.filter((log) => log.date === getTodayISO())
+
+  const loadOlderWorkoutHistory = async () => {
+    setLoadingOlderHistory(true)
+    try {
+      await syncNow({
+        force: true,
+        scopes: ['workouts', 'templates', 'journal'],
+        profile: 'default',
+      })
+      toast.success('Loaded older workout history.')
+    } catch {
+      toast.error('Could not load older workout history.')
+    } finally {
+      setLoadingOlderHistory(false)
+    }
+  }
   const averageDurationByWorkoutId = useMemo(() => {
     const stats = new Map<string, { total: number; count: number }>()
 
@@ -4252,7 +4270,17 @@ export default function WorkoutsPage() {
                         <>
                           <div className="bg-muted/20 px-4 py-2.5 flex items-center justify-between">
                             <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground font-medium">Recent Workouts</p>
-                            <p className="text-[10px] text-muted-foreground">{workoutLogs.length} logged</p>
+                            <div className="flex items-center gap-2">
+                              <p className="text-[10px] text-muted-foreground">{workoutLogs.length} loaded</p>
+                              <button
+                                type="button"
+                                onClick={() => void loadOlderWorkoutHistory()}
+                                className="text-[10px] font-medium text-emerald-400 transition-colors hover:text-emerald-300 disabled:opacity-50"
+                                disabled={loadingOlderHistory}
+                              >
+                                {loadingOlderHistory ? 'Loading…' : 'Load older'}
+                              </button>
+                            </div>
                           </div>
                           {workoutLogs.slice().sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 5).map((log) => {
                             const totalSets = log.exercises.reduce((s, e) => s + e.sets.length, 0)

@@ -1,4 +1,16 @@
-import withPWA from '@ducanh2912/next-pwa'
+import withPWA, { runtimeCaching } from '@ducanh2912/next-pwa'
+
+const runtimeCachingWithoutDocumentRoutes = runtimeCaching.filter((entry) => {
+  const cacheName = entry.options?.cacheName
+  return (
+    cacheName !== 'start-url' &&
+    cacheName !== 'pages' &&
+    cacheName !== 'pages-rsc' &&
+    cacheName !== 'pages-rsc-prefetch'
+  )
+})
+
+const disablePwa = process.env.NODE_ENV !== 'production' || process.env.VERCEL_ENV === 'preview'
 
 const nextConfig = {
   typescript: {
@@ -22,12 +34,15 @@ const nextConfig = {
 }
 
 export default withPWA({
+  cacheStartUrl: false,
+  dynamicStartUrl: false,
   dest: 'public',
   cacheOnFrontEndNav: false,
   aggressiveFrontEndNavCaching: false,
   reloadOnOnline: true,
-  disable: process.env.NODE_ENV === 'development',
+  disable: disablePwa,
   workboxOptions: {
     disableDevLogs: true,
+    runtimeCaching: runtimeCachingWithoutDocumentRoutes,
   },
 })(nextConfig)

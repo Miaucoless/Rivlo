@@ -28,6 +28,10 @@ type FriendShareRow = {
   shared_items: SharedItemRow | SharedItemRow[] | null
 }
 
+const MAX_SHARE_SUMMARY_ROWS = 120
+const MAX_COMMENT_SUMMARY_ROWS = 160
+const MAX_CONVERSATIONS = 40
+
 export async function GET(_req: NextRequest) {
   const user = await getAuthUser(_req)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -53,7 +57,8 @@ export async function GET(_req: NextRequest) {
         )
       `)
       .eq('recipient_id', user.id)
-      .order('created_at', { ascending: false }),
+      .order('created_at', { ascending: false })
+      .limit(MAX_SHARE_SUMMARY_ROWS),
     db
       .from('shared_items')
       .select(`
@@ -72,7 +77,8 @@ export async function GET(_req: NextRequest) {
         )
       `)
       .eq('owner_id', user.id)
-      .order('created_at', { ascending: false }),
+      .order('created_at', { ascending: false })
+      .limit(MAX_SHARE_SUMMARY_ROWS),
   ])
 
   if (receivedError) return NextResponse.json({ error: receivedError.message }, { status: 500 })
@@ -122,7 +128,7 @@ export async function GET(_req: NextRequest) {
         .select('id, share_id, user_id, body, created_at')
         .in('share_id', shareIds)
         .order('created_at', { ascending: false })
-        .limit(250)
+        .limit(MAX_COMMENT_SUMMARY_ROWS)
     : { data: [], error: null }
 
   const { data: profiles, error: profileError } = counterpartIds.size > 0
@@ -203,7 +209,9 @@ export async function GET(_req: NextRequest) {
     applyEntry(counterpartId, preview, comment.created_at, 0)
   })
 
-  const conversations = [...conversationMap.values()].sort((left, right) => new Date(right.latest_at).getTime() - new Date(left.latest_at).getTime())
+  const conversations = [...conversationMap.values()]
+    .sort((left, right) => new Date(right.latest_at).getTime() - new Date(left.latest_at).getTime())
+    .slice(0, MAX_CONVERSATIONS)
   const selectedConversationId = _req.nextUrl.searchParams.get('selected')
 
   let initialDetail = null

@@ -3,7 +3,7 @@
 import React from 'react'
 
 import { useEffect, useRef } from 'react'
-import { useRouter } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { Sidebar } from '@/components/dashboard/Sidebar'
 import { BottomNav } from '@/components/dashboard/BottomNav'
@@ -13,6 +13,7 @@ import { ExposeStore } from '@/components/ExposeStore'
 import { useIsMobile } from '@/hooks/useIsMobile'
 import { useAppStore } from '@/store/useAppStore'
 import { useAuthInit } from '@/hooks/useAuthInit'
+import { getCloudHydrationProfileForPath, getCloudHydrationScopesForPath } from '@/lib/cloud-sync'
 
 export default function DashboardLayout({
   children,
@@ -22,6 +23,7 @@ export default function DashboardLayout({
   const { isAuthenticated, sidebarCollapsed, syncNow, flushPendingCloudWrites, user } = useAppStore()
   const isMobile = useIsMobile()
   const router = useRouter()
+  const pathname = usePathname()
   const { loading } = useAuthInit()
   const mainRef = useRef<HTMLElement>(null)
 
@@ -41,13 +43,16 @@ export default function DashboardLayout({
     let syncTimeoutId: ReturnType<typeof setTimeout> | null = null
     let initialSyncTimeoutId: ReturnType<typeof setTimeout> | null = null
 
+    const routeScopes = getCloudHydrationScopesForPath(pathname)
+    const routeProfile = getCloudHydrationProfileForPath(pathname)
+
     const triggerSync = async () => {
       if (syncing) return
       syncing = true
       // Safety net: if the request hangs, unblock future syncs after 30s
       syncTimeoutId = setTimeout(() => { syncing = false }, 30_000)
       try {
-        await syncNow()
+        await syncNow({ scopes: routeScopes, profile: routeProfile })
       } finally {
         if (syncTimeoutId) clearTimeout(syncTimeoutId)
         syncing = false
@@ -92,7 +97,7 @@ export default function DashboardLayout({
       if (initialSyncTimeoutId) clearTimeout(initialSyncTimeoutId)
       if (syncTimeoutId) clearTimeout(syncTimeoutId)
     }
-  }, [flushPendingCloudWrites, isAuthenticated, loading, syncNow])
+  }, [flushPendingCloudWrites, isAuthenticated, loading, pathname, syncNow])
 
   if (loading) {
     return (

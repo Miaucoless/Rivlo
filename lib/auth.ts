@@ -10,12 +10,67 @@ export type AuthResponse = {
   usedFallbackProfile?: boolean
 }
 
+type AuthBootstrapPayload = {
+  user?: {
+    id: string
+    email?: string | null
+    created_at?: string
+    updated_at?: string
+    user_metadata?: Record<string, unknown>
+  } | null
+  profile?: Partial<UserProfile> | null
+  session?: {
+    access_token: string
+    refresh_token: string
+  } | null
+  error?: string
+  pendingConfirmation?: boolean
+}
+
 const DEFAULT_NOTIFICATION_PREFERENCES = {
   daily_workout_reminder: true,
   meal_logging_reminder: true,
   weekly_progress_summary: false,
   goal_milestone_alerts: true,
 } as const
+
+function clearSupabaseBrowserSessionStorage() {
+  if (typeof window === 'undefined') return
+
+  try {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const storageKeysToRemove = new Set<string>([
+      'supabase.auth.token',
+      'sb-auth-token',
+    ])
+
+    if (url) {
+      const match = url.match(/^https:\/\/([^.]+)\.supabase\.co/i)
+      const projectRef = match?.[1]
+      if (projectRef) {
+        storageKeysToRemove.add(`sb-${projectRef}-auth-token`)
+        storageKeysToRemove.add(`sb-${projectRef}-auth-token-code-verifier`)
+      }
+    }
+
+    const clearMatchingStorage = (storage: Storage) => {
+      const keysToDelete: string[] = []
+      for (let index = 0; index < storage.length; index += 1) {
+        const key = storage.key(index)
+        if (!key) continue
+        if (storageKeysToRemove.has(key) || (key.startsWith('sb-') && key.includes('-auth-token'))) {
+          keysToDelete.push(key)
+        }
+      }
+      keysToDelete.forEach((key) => storage.removeItem(key))
+    }
+
+    clearMatchingStorage(window.localStorage)
+    clearMatchingStorage(window.sessionStorage)
+  } catch (error) {
+    console.warn('Unable to clear cached Supabase browser session state.', error)
+  }
+}
 
 function normalizeProfile(profile: Partial<UserProfile> | null | undefined): UserProfile | null {
   if (!profile) return null
@@ -107,6 +162,68 @@ function buildFallbackProfileFromAuthUser(authUser: {
   }
 }
 
+function buildProfileFromBootstrapPayload(payload: AuthBootstrapPayload): UserProfile | null {
+  if (!payload.user) return null
+  const fallbackUser = buildFallbackProfileFromAuthUser(payload.user)
+  return normalizeProfile(payload.profile) ?? fallbackUser
+}
+
+async function signInWithEmailDirect(
+  email: string,
+  password: string
+): Promise<AuthResponse> {
+  const supabase = createClient()
+
+  const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  })
+
+  if (authError) {
+    if (authError.message.toLowerCase().includes('email not confirmed')) {
+      return {
+        success: false,
+        error: 'Check your inbox and confirm your email before signing in.',
+        pendingConfirmation: true,
+      }
+    }
+
+    return { success: false, error: authError.message }
+  }
+
+  if (!authData.user) {
+    return { success: false, error: 'Failed to sign in' }
+  }
+
+  const fallbackUser = buildFallbackProfileFromAuthUser(authData.user)
+
+  const profileResult = await Promise.race([
+    supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', authData.user.id)
+      .single(),
+    new Promise<null>((resolve) => {
+      setTimeout(() => resolve(null), 1200)
+    }),
+  ])
+
+  if (!profileResult) {
+    return { success: true, user: fallbackUser, usedFallbackProfile: true }
+  }
+
+  if (profileResult.error || !profileResult.data) {
+    console.warn('Profile fetch was unavailable during sign-in, continuing with fallback profile.', profileResult.error)
+    return {
+      success: true,
+      user: fallbackUser,
+      usedFallbackProfile: true,
+    }
+  }
+
+  return { success: true, user: normalizeProfile(profileResult.data) ?? fallbackUser }
+}
+
 export async function signUpWithEmail(
   email: string,
   password: string,
@@ -160,58 +277,58 @@ export async function signInWithEmail(
   password: string
 ): Promise<AuthResponse> {
   try {
-    const supabase = createClient()
-
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
+    const response = await fetch('/api/auth/sign-in', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        email,
+        password,
+      }),
     })
 
-    if (authError) {
-      if (authError.message.toLowerCase().includes('email not confirmed')) {
-        return {
-          success: false,
-          error: 'Check your inbox and confirm your email before signing in.',
-          pendingConfirmation: true,
-        }
-      }
+    const payload = await response.json().catch(() => null) as AuthBootstrapPayload | null
 
-      return { success: false, error: authError.message }
+    if (!response.ok) {
+      return {
+        success: false,
+        error: payload?.error || 'Failed to sign in',
+        pendingConfirmation: payload?.pendingConfirmation,
+      }
     }
 
-    if (!authData.user) {
+    if (!payload?.session?.access_token || !payload.session.refresh_token || !payload.user) {
       return { success: false, error: 'Failed to sign in' }
     }
 
-    const fallbackUser = buildFallbackProfileFromAuthUser(authData.user)
+    const supabase = createClient()
+    const { error: sessionError } = await supabase.auth.setSession({
+      access_token: payload.session.access_token,
+      refresh_token: payload.session.refresh_token,
+    })
 
-    const profileResult = await Promise.race([
-      supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', authData.user.id)
-        .single(),
-      new Promise<null>((resolve) => {
-        setTimeout(() => resolve(null), 1200)
-      }),
-    ])
-
-    if (!profileResult) {
-      return { success: true, user: fallbackUser, usedFallbackProfile: true }
+    if (sessionError) {
+      return { success: false, error: sessionError.message }
     }
 
-    if (profileResult.error || !profileResult.data) {
-      console.warn('Profile fetch was unavailable during sign-in, continuing with fallback profile.', profileResult.error)
-      return {
-        success: true,
-        user: fallbackUser,
-        usedFallbackProfile: true,
-      }
+    const user = buildProfileFromBootstrapPayload(payload)
+    if (!user) {
+      return { success: false, error: 'Failed to sign in' }
     }
 
-    return { success: true, user: normalizeProfile(profileResult.data) ?? fallbackUser }
+    return {
+      success: true,
+      user,
+      usedFallbackProfile: !payload.profile,
+    }
   } catch (error) {
-    return { success: false, error: String(error) }
+    console.warn('Server-side sign-in path failed, retrying with the direct browser auth flow.', error)
+    try {
+      return await signInWithEmailDirect(email, password)
+    } catch (directError) {
+      return { success: false, error: String(directError) }
+    }
   }
 }
 
@@ -354,15 +471,19 @@ export async function confirmPasswordReset(
 export async function signOut(): Promise<AuthResponse> {
   try {
     const supabase = createClient()
-    const { error } = await supabase.auth.signOut({ scope: 'local' })
+    await Promise.race([
+      supabase.auth.signOut({ scope: 'local' }),
+      new Promise<{ error: null }>((resolve) => {
+        setTimeout(() => resolve({ error: null }), 1200)
+      }),
+    ])
 
-    if (error) {
-      return { success: false, error: error.message }
-    }
+    clearSupabaseBrowserSessionStorage()
 
     return { success: true }
   } catch (error) {
-    return { success: false, error: String(error) }
+    clearSupabaseBrowserSessionStorage()
+    return { success: true }
   }
 }
 
@@ -399,22 +520,51 @@ export async function getCurrentUser(): Promise<UserProfile | null> {
     const supabase = createClient()
 
     const { data, error } = await supabase.auth.getUser()
+    if (!error && data.user) {
+      const fallbackUser = buildFallbackProfileFromAuthUser(data.user)
 
-    if (error || !data.user) {
+      const profileResult = await Promise.race([
+        supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', data.user.id)
+          .single(),
+        new Promise<null>((resolve) => {
+          setTimeout(() => resolve(null), 1200)
+        }),
+      ])
+
+      if (!profileResult) {
+        return fallbackUser
+      }
+
+      if (profileResult.error || !profileResult.data) {
+        console.warn('Profile fetch was unavailable during auth bootstrap, continuing with fallback profile.', profileResult.error)
+        return fallbackUser
+      }
+
+      return normalizeProfile(profileResult.data) ?? fallbackUser
+    }
+
+    const { data: sessionData } = await supabase.auth.getSession()
+    const accessToken = sessionData.session?.access_token
+    if (!accessToken) {
       return null
     }
 
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', data.user.id)
-      .single()
+    const response = await fetch('/api/auth/me', {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+      cache: 'no-store',
+    })
 
-    if (profileError) {
+    if (!response.ok) {
       return null
     }
 
-    return normalizeProfile(profile)
+    const payload = await response.json().catch(() => null) as AuthBootstrapPayload | null
+    return buildProfileFromBootstrapPayload(payload ?? {})
   } catch (error) {
     return null
   }

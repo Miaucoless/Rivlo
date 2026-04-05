@@ -33,6 +33,50 @@ type PublicSocialPayload = {
   follows: SocialFollowRelationship[]
 }
 
+const PUBLIC_PROFILE_CACHE_TTL_MS = 1000 * 60 * 3
+
+type CachedPublicSocialPayload = PublicSocialPayload & {
+  cachedAt: number
+}
+
+function getPublicSocialCacheKey(userId: string) {
+  return `rivora-social-public:${userId}:profiles`
+}
+
+function readPublicSocialCache(userId: string): PublicSocialPayload | null {
+  if (typeof window === 'undefined') return null
+
+  try {
+    const raw = window.sessionStorage.getItem(getPublicSocialCacheKey(userId))
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as Partial<CachedPublicSocialPayload> | null
+    if (!parsed || typeof parsed.cachedAt !== 'number') return null
+    if (Date.now() - parsed.cachedAt > PUBLIC_PROFILE_CACHE_TTL_MS) return null
+
+    return {
+      posts: Array.isArray(parsed.posts) ? parsed.posts : [],
+      profiles: Array.isArray(parsed.profiles) ? parsed.profiles : [],
+      follows: Array.isArray(parsed.follows) ? parsed.follows : [],
+    }
+  } catch {
+    return null
+  }
+}
+
+function writePublicSocialCache(userId: string, payload: PublicSocialPayload) {
+  if (typeof window === 'undefined') return
+
+  try {
+    const nextPayload: CachedPublicSocialPayload = {
+      ...payload,
+      cachedAt: Date.now(),
+    }
+    window.sessionStorage.setItem(getPublicSocialCacheKey(userId), JSON.stringify(nextPayload))
+  } catch {
+    // Ignore cache write failures.
+  }
+}
+
 async function getToken() {
   const supabase = createClient()
   const {
@@ -90,11 +134,20 @@ export default function PublicProfilePage() {
         return
       }
 
+      const cachedPayload = readPublicSocialCache(viewerId)
+      if (cachedPayload) {
+        if (!active) return
+        setRemotePublicPosts(cachedPayload.posts)
+        setRemoteProfiles(cachedPayload.profiles)
+        setRemoteFollows(cachedPayload.follows)
+        return
+      }
+
       try {
         const token = await getToken()
         if (!token) return
 
-        const res = await fetch('/api/social/public', {
+        const res = await fetch('/api/social/public?includeProfiles=1', {
           headers: { Authorization: `Bearer ${token}` },
           cache: 'no-store',
         })
@@ -103,9 +156,15 @@ export default function PublicProfilePage() {
         const payload = await res.json() as PublicSocialPayload
 
         if (!active) return
-        setRemotePublicPosts(Array.isArray(payload.posts) ? payload.posts : [])
-        setRemoteProfiles(Array.isArray(payload.profiles) ? payload.profiles : [])
-        setRemoteFollows(Array.isArray(payload.follows) ? payload.follows : [])
+        const nextPayload: PublicSocialPayload = {
+          posts: Array.isArray(payload.posts) ? payload.posts : [],
+          profiles: Array.isArray(payload.profiles) ? payload.profiles : [],
+          follows: Array.isArray(payload.follows) ? payload.follows : [],
+        }
+        setRemotePublicPosts(nextPayload.posts)
+        setRemoteProfiles(nextPayload.profiles)
+        setRemoteFollows(nextPayload.follows)
+        writePublicSocialCache(viewerId, nextPayload)
       } catch (error) {
         if (!active) return
         console.error('Public profile preload failed:', error)
@@ -116,7 +175,7 @@ export default function PublicProfilePage() {
     return () => {
       active = false
     }
-  }, [socialFollows.length, socialPosts.length, viewerId])
+  }, [viewerId])
 
   const allFollows = useMemo(() => {
     const deduped = new Map<string, SocialFollowRelationship>()

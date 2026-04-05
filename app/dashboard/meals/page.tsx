@@ -4059,6 +4059,7 @@ export default function MealsPage() {
     customRecipes,
     removeCustomRecipe,
     setSocialComposerPrefill,
+    syncNow,
   } = useAppStore()
   const [createRecipeOpen, setCreateRecipeOpen] = useState(false)
   const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null)
@@ -4073,6 +4074,7 @@ export default function MealsPage() {
   const [savedMealFilterType, setSavedMealFilterType] = useState<string>('all')
   const [savedMealFilterTag, setSavedMealFilterTag] = useState<string>('all')
   const [activeTab, setActiveTab] = useState('today')
+  const [loadingOlderMealHistory, setLoadingOlderMealHistory] = useState(false)
   const [scannerOpen, setScannerOpen] = useState(false)
   const [scannerTarget, setScannerTarget] = useState<'today' | 'saved'>('today')
   const [scannerMealType, setScannerMealType] = useState<MealType>('breakfast')
@@ -4108,6 +4110,22 @@ export default function MealsPage() {
   const [plannerRecipeUnits, setPlannerRecipeUnits] = useState('1')
   const recipeLibrary = useRecipeLibrary(activeTab === 'recipes' || activeTab === 'planner')
   const [foodCatalog] = useKnownFoodCatalog(activeTab === 'grocery')
+
+  const loadOlderMealHistory = async () => {
+    setLoadingOlderMealHistory(true)
+    try {
+      await syncNow({
+        force: true,
+        scopes: ['metadata', 'meals', 'planner', 'recipes'],
+        profile: 'default',
+      })
+      toast.success('Loaded older meal history.')
+    } catch {
+      toast.error('Could not load older meal history.')
+    } finally {
+      setLoadingOlderMealHistory(false)
+    }
+  }
 
   const openPublishComposerForSavedMeal = (meal: SavedMealTemplate) => {
     setSocialComposerPrefill(buildSocialDraftFromSavedMeal(meal))
@@ -4785,6 +4803,20 @@ export default function MealsPage() {
 
         {/* Today log tab */}
         <TabsContent value="today" className="mt-8 space-y-8">
+          <div className="flex items-center justify-between rounded-2xl border border-border/60 bg-card/70 px-4 py-3">
+            <div>
+              <p className="text-sm font-medium">Today opens with recent meal history for speed.</p>
+              <p className="text-xs text-muted-foreground">Load older entries only when you need the deeper archive.</p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void loadOlderMealHistory()}
+              disabled={loadingOlderMealHistory}
+            >
+              {loadingOlderMealHistory ? 'Loading…' : 'Load older'}
+            </Button>
+          </div>
           {MEAL_TYPES.map((mealType) => (
             <MealTimelineSection
               key={mealType}

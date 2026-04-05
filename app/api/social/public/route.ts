@@ -8,28 +8,31 @@ type PublicSocialResponse = {
   follows: SocialFollowRelationship[]
 }
 
+const MAX_LIGHTWEIGHT_FEED_ROWS = 120
+const MAX_PUBLIC_POSTS = 90
+
 function asArray<T>(value: unknown): T[] {
   return Array.isArray(value) ? (value as T[]) : []
 }
 
 export async function GET(req: NextRequest) {
-  if (!(await getAuthUser(req))) {
+  const authUser = await getAuthUser(req)
+  if (!authUser) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
   const db = getServiceClient()
+  const includeProfiles = req.nextUrl.searchParams.get('includeProfiles') === '1'
 
-  const profilesResp = await db
-    .from('profiles')
-    .select('id, name, username, avatar_url, banner_url, bio, profile_visibility')
-
-  if (profilesResp.error) {
-    return NextResponse.json({ error: profilesResp.error.message }, { status: 500 })
-  }
-
-  let appStateResp = await db
+  let appStateQuery = db
     .from('user_app_state')
     .select('user_id, social_posts, social_follows')
+
+  if (!includeProfiles) {
+    appStateQuery = appStateQuery.limit(MAX_LIGHTWEIGHT_FEED_ROWS)
+  }
+
+  let appStateResp = await appStateQuery
 
   const missingSocialColumns =
     !!appStateResp.error &&
@@ -40,13 +43,42 @@ export async function GET(req: NextRequest) {
     )
 
   if (missingSocialColumns) {
-    appStateResp = await db
+    let fallbackQuery = db
       .from('user_app_state')
       .select('user_id')
+
+    if (!includeProfiles) {
+      fallbackQuery = fallbackQuery.limit(MAX_LIGHTWEIGHT_FEED_ROWS)
+    }
+
+    appStateResp = await fallbackQuery
   }
 
   if (appStateResp.error) {
     return NextResponse.json({ error: appStateResp.error.message }, { status: 500 })
+  }
+
+  const feedOwnerIds = Array.from(
+    new Set(
+      (appStateResp.data ?? [])
+        .map((row) => (row as { user_id?: string | null }).user_id)
+        .filter((value): value is string => typeof value === 'string' && value.length > 0)
+    )
+  )
+
+  const profilesResp = includeProfiles
+    ? await db
+        .from('profiles')
+        .select('id, name, username, avatar_url, banner_url, bio, profile_visibility')
+    : feedOwnerIds.length > 0
+      ? await db
+          .from('profiles')
+          .select('id, name, username, avatar_url, banner_url, bio, profile_visibility')
+          .in('id', [...new Set([...feedOwnerIds, authUser.id])])
+      : { data: [], error: null }
+
+  if (profilesResp.error) {
+    return NextResponse.json({ error: profilesResp.error.message }, { status: 500 })
   }
 
   const profileMap = new Map<string, SocialPostUser>()
@@ -63,7 +95,6 @@ export async function GET(req: NextRequest) {
     })
   }
 
-  const profiles = Array.from(profileMap.values()).sort((a, b) => a.name.localeCompare(b.name))
   const followsByKey = new Map<string, SocialFollowRelationship>()
   const publicPostsById = new Map<string, SocialPost>()
 
@@ -103,10 +134,32 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  const posts = Array.from(publicPostsById.values())
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, MAX_PUBLIC_POSTS)
+
+  const relevantProfileIds = new Set<string>()
+  posts.forEach((post) => {
+    relevantProfileIds.add(post.user.id)
+    ;(post.taggedUsers ?? []).forEach((taggedUser) => relevantProfileIds.add(taggedUser.id))
+  })
+
+  const follows = Array.from(followsByKey.values())
+  follows.forEach((follow) => {
+    if (follow.followerId === authUser.id || follow.followingId === authUser.id) {
+      relevantProfileIds.add(follow.followerId)
+      relevantProfileIds.add(follow.followingId)
+    }
+  })
+
+  const profiles = Array.from(profileMap.values())
+    .filter((profile) => includeProfiles || relevantProfileIds.has(profile.id))
+    .sort((a, b) => a.name.localeCompare(b.name))
+
   const payload: PublicSocialResponse = {
-    posts: Array.from(publicPostsById.values()).sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+    posts,
     profiles,
-    follows: Array.from(followsByKey.values()),
+    follows,
   }
 
   return NextResponse.json(payload)
