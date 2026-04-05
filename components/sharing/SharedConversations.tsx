@@ -7,7 +7,6 @@ import { ArrowLeft, BookOpen, CheckCircle, Circle, Compass, Dumbbell, Inbox, Loa
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase'
 import { DEMO_INBOX_ITEMS } from '@/lib/demo-shares'
-import { useIsMobile } from '@/hooks/useIsMobile'
 import { buildSocialProfileHref } from '@/lib/social-connections'
 import { cn } from '@/lib/utils'
 import { useAppStore } from '@/store/useAppStore'
@@ -351,7 +350,6 @@ function formatGroceryAmount(item: GroceryItem): string | null {
 export function SharedConversations() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const isMobile = useIsMobile()
   const isDemoMode = useAppStore((state) => state.isDemoMode)
   const addSavedMeal = useAppStore((state) => state.addSavedMeal)
   const addCustomWorkout = useAppStore((state) => state.addCustomWorkout)
@@ -470,11 +468,14 @@ export function SharedConversations() {
         if (payload.initialConversationId) {
           hydratedDetailIdRef.current = payload.initialDetail ? payload.initialConversationId : null
           setSelectedId(payload.initialConversationId)
+        } else {
+          hydratedDetailIdRef.current = null
+          setSelectedId(null)
         }
 
         if (payload.initialDetail) {
           setDetail(payload.initialDetail)
-        } else if (!payload.initialConversationId) {
+        } else {
           setDetail(null)
         }
       } catch (error) {
@@ -499,10 +500,7 @@ export function SharedConversations() {
       return
     }
 
-    if (!isMobile && conversations.length > 0 && !selectedId) {
-      setSelectedId(conversations[0].id)
-    }
-  }, [conversations, isMobile, searchParams, selectedId])
+  }, [searchParams])
 
   useEffect(() => {
     if (!selectedId) return
@@ -789,7 +787,7 @@ export function SharedConversations() {
   return (
     <>
       <div className="grid h-[calc(100dvh-11rem)] min-h-[calc(100vh-11rem)] min-h-0 gap-4 lg:grid-cols-[340px_minmax(0,1fr)]">
-      <div className={cn('min-h-0 rounded-3xl border border-border/60 bg-card/70 backdrop-blur-sm', mobileShowingDetail ? 'hidden lg:flex lg:flex-col' : 'flex flex-col')}>
+      <div className={cn('min-h-0', mobileShowingDetail ? 'hidden lg:flex lg:flex-col' : 'flex flex-col')}>
         <div className="border-b border-border/60 px-4 py-4 sm:px-5">
           <div className="flex items-center justify-between gap-3">
             <div>
@@ -895,7 +893,7 @@ export function SharedConversations() {
         </div>
       </div>
 
-      <div className={cn('min-h-0 overflow-hidden rounded-3xl border border-border/60 bg-card/70 backdrop-blur-sm', !mobileShowingDetail ? 'hidden lg:flex lg:flex-col' : 'flex flex-col')}>
+      <div className={cn('min-h-0 overflow-hidden', !mobileShowingDetail ? 'hidden lg:flex lg:flex-col' : 'flex flex-col')}>
         {selectedId ? (
           <>
             <div className="border-b border-border/60 px-4 py-4 sm:px-5">
@@ -1015,7 +1013,6 @@ export function SharedConversations() {
                     <Textarea
                       value={draftMessage}
                       onChange={(event) => setDraftMessage(event.target.value)}
-                      placeholder="Write a comment about this shared item"
                       className="min-h-[62px] resize-none rounded-2xl border-border/70 bg-background"
                       maxLength={280}
                     />
@@ -1028,9 +1025,6 @@ export function SharedConversations() {
                       {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                     </Button>
                   </div>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Comments stay attached to the latest shared item so the context stays clear.
-                  </p>
                 </div>
               </>
             ) : null}

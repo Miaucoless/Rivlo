@@ -861,13 +861,129 @@ function buildSocialMetadataState(state: Pick<AppStore, 'socialPosts' | 'socialF
   }
 }
 
+type SocialMetadataState = ReturnType<typeof buildSocialMetadataState>
+
+const EMPTY_SOCIAL_METADATA_STATE: SocialMetadataState = {
+  socialPosts: [],
+  socialFollows: [],
+  socialSavedPostIds: [],
+  socialLikedPostIds: [],
+  socialPostComments: {},
+}
+
+function socialBackupStorageKey(userId: string) {
+  return `rivora-social-backup:${userId}`
+}
+
+function readSocialMetadataBackup(userId: string): SocialMetadataState {
+  if (typeof window === 'undefined') return EMPTY_SOCIAL_METADATA_STATE
+
+  try {
+    const raw = window.localStorage.getItem(socialBackupStorageKey(userId))
+    if (!raw) return EMPTY_SOCIAL_METADATA_STATE
+    const parsed = JSON.parse(raw) as Partial<SocialMetadataState> | null
+    if (!parsed || typeof parsed !== 'object') return EMPTY_SOCIAL_METADATA_STATE
+    return {
+      socialPosts: Array.isArray(parsed.socialPosts) ? parsed.socialPosts : [],
+      socialFollows: Array.isArray(parsed.socialFollows) ? parsed.socialFollows : [],
+      socialSavedPostIds: Array.isArray(parsed.socialSavedPostIds) ? parsed.socialSavedPostIds : [],
+      socialLikedPostIds: Array.isArray(parsed.socialLikedPostIds) ? parsed.socialLikedPostIds : [],
+      socialPostComments:
+        parsed.socialPostComments && typeof parsed.socialPostComments === 'object'
+          ? (parsed.socialPostComments as Record<string, SocialPostComment[]>)
+          : {},
+    }
+  } catch {
+    return EMPTY_SOCIAL_METADATA_STATE
+  }
+}
+
+function writeSocialMetadataBackup(userId: string, state: SocialMetadataState) {
+  if (typeof window === 'undefined') return
+
+  try {
+    window.localStorage.setItem(socialBackupStorageKey(userId), JSON.stringify(state))
+  } catch {
+    // Best-effort fallback only; normal persisted Zustand state still exists.
+  }
+}
+
+function mergeSocialPosts(primary: SocialPost[], fallback: SocialPost[]) {
+  const seen = new Set<string>()
+  const merged: SocialPost[] = []
+
+  for (const post of [...primary, ...fallback]) {
+    if (!post?.id || seen.has(post.id)) continue
+    seen.add(post.id)
+    merged.push(post)
+  }
+
+  return merged.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+}
+
+function mergeSocialFollows(primary: SocialFollowRelationship[], fallback: SocialFollowRelationship[]) {
+  const seen = new Set<string>()
+  const merged: SocialFollowRelationship[] = []
+
+  for (const relationship of [...primary, ...fallback]) {
+    const key = `${relationship.followerId}:${relationship.followingId}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    merged.push(relationship)
+  }
+
+  return merged.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+}
+
+function mergeSocialIds(primary: string[], fallback: string[]) {
+  return Array.from(new Set([...primary, ...fallback]))
+}
+
+function mergeSocialComments(
+  primary: Record<string, SocialPostComment[]>,
+  fallback: Record<string, SocialPostComment[]>
+) {
+  const merged: Record<string, SocialPostComment[]> = {}
+
+  for (const postId of new Set([...Object.keys(fallback), ...Object.keys(primary)])) {
+    const seen = new Set<string>()
+    const comments: SocialPostComment[] = []
+
+    for (const comment of [...(primary[postId] ?? []), ...(fallback[postId] ?? [])]) {
+      if (!comment?.id || seen.has(comment.id)) continue
+      seen.add(comment.id)
+      comments.push(comment)
+    }
+
+    if (comments.length > 0) {
+      merged[postId] = comments.sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+    }
+  }
+
+  return merged
+}
+
+function mergeSocialMetadataState(primary: SocialMetadataState, fallback: SocialMetadataState): SocialMetadataState {
+  return {
+    socialPosts: mergeSocialPosts(primary.socialPosts, fallback.socialPosts),
+    socialFollows: mergeSocialFollows(primary.socialFollows, fallback.socialFollows),
+    socialSavedPostIds: mergeSocialIds(primary.socialSavedPostIds, fallback.socialSavedPostIds),
+    socialLikedPostIds: mergeSocialIds(primary.socialLikedPostIds, fallback.socialLikedPostIds),
+    socialPostComments: mergeSocialComments(primary.socialPostComments, fallback.socialPostComments),
+  }
+}
+
 function queueSocialMetadataSync(set: any, get: () => AppStore) {
   const { user, isDemoMode } = get()
   if (!user || isDemoMode) return
 
+  writeSocialMetadataBackup(user.id, buildSocialMetadataState(get()))
+
   enqueueCloudWrite(set, async () => {
     const state = get()
-    await saveMetadataCloudState(user.id, buildSocialMetadataState(state))
+    const nextSocialState = buildSocialMetadataState(state)
+    writeSocialMetadataBackup(user.id, nextSocialState)
+    await saveMetadataCloudState(user.id, nextSocialState)
   })
 }
 
@@ -1036,6 +1152,17 @@ export const useAppStore = create<AppStore>()(
         }
 
         const localState = get()
+        const localSocialState = mergeSocialMetadataState(
+          buildSocialMetadataState(localState),
+          readSocialMetadataBackup(userId)
+        )
+        const mergedSocialCloudState = mergeSocialMetadataState(localSocialState, {
+          socialPosts: cloud.socialPosts,
+          socialFollows: cloud.socialFollows,
+          socialSavedPostIds: cloud.socialSavedPostIds,
+          socialLikedPostIds: cloud.socialLikedPostIds,
+          socialPostComments: cloud.socialPostComments,
+        })
         console.log('📱 Local state before hydration:', {
           meals: Object.keys(localState.mealEntries).length,
           workouts: localState.workoutLogs.length,
@@ -1097,11 +1224,11 @@ export const useAppStore = create<AppStore>()(
           customRecipes: localOnlyRecipes,
           customWorkouts: localOnlyWorkoutTemplates,
           waterLogs: Object.keys(localOnlyWaterLogs).length > 0 ? localOnlyWaterLogs : {},
-          socialPosts: cloud.socialPosts.length === 0 ? localState.socialPosts : cloud.socialPosts,
-          socialFollows: cloud.socialFollows.length === 0 ? localState.socialFollows : cloud.socialFollows,
-          socialSavedPostIds: cloud.socialSavedPostIds.length === 0 ? localState.socialSavedPostIds : cloud.socialSavedPostIds,
-          socialLikedPostIds: cloud.socialLikedPostIds.length === 0 ? localState.socialLikedPostIds : cloud.socialLikedPostIds,
-          socialPostComments: Object.keys(cloud.socialPostComments).length === 0 ? localState.socialPostComments : cloud.socialPostComments,
+          socialPosts: mergedSocialCloudState.socialPosts,
+          socialFollows: mergedSocialCloudState.socialFollows,
+          socialSavedPostIds: mergedSocialCloudState.socialSavedPostIds,
+          socialLikedPostIds: mergedSocialCloudState.socialLikedPostIds,
+          socialPostComments: mergedSocialCloudState.socialPostComments,
         }
 
         console.log('🌱 Seed payload prepared:', {
@@ -1140,6 +1267,19 @@ export const useAppStore = create<AppStore>()(
           if (refreshedCloud) finalCloud = refreshedCloud
         }
 
+        const finalSocialState = mergeSocialMetadataState(
+          {
+            socialPosts: finalCloud.socialPosts,
+            socialFollows: finalCloud.socialFollows,
+            socialSavedPostIds: finalCloud.socialSavedPostIds,
+            socialLikedPostIds: finalCloud.socialLikedPostIds,
+            socialPostComments: finalCloud.socialPostComments,
+          },
+          localSocialState
+        )
+
+        writeSocialMetadataBackup(userId, finalSocialState)
+
         set((state) => {
           const savedMeals = finalCloud.savedMeals.filter((meal) => !state.deletedSavedMealIds.includes(meal.id))
           const customWorkouts = finalCloud.customWorkouts.filter((workout) => !state.deletedCustomWorkoutIds.includes(workout.id))
@@ -1156,11 +1296,11 @@ export const useAppStore = create<AppStore>()(
             customRecipes: finalCloud.customRecipes,
             customWorkouts,
             waterLogs: finalCloud.waterLogs,
-            socialPosts: finalCloud.socialPosts,
-            socialFollows: finalCloud.socialFollows,
-            socialSavedPostIds: finalCloud.socialSavedPostIds,
-            socialLikedPostIds: finalCloud.socialLikedPostIds,
-            socialPostComments: finalCloud.socialPostComments,
+            socialPosts: finalSocialState.socialPosts,
+            socialFollows: finalSocialState.socialFollows,
+            socialSavedPostIds: finalSocialState.socialSavedPostIds,
+            socialLikedPostIds: finalSocialState.socialLikedPostIds,
+            socialPostComments: finalSocialState.socialPostComments,
             cloudHydratedUserId: userId,
           }
           const refreshed = withRefreshedNotifications(state, updates)

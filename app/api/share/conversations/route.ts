@@ -103,6 +103,27 @@ export async function GET(_req: NextRequest) {
     if (row.recipientId) counterpartIds.add(row.recipientId)
   })
 
+  const shareToCounterpartId = new Map<string, string>()
+  received.forEach((row) => {
+    const shareId = row.sharedItem?.id
+    const counterpartId = row.sharedItem?.owner_id
+    if (shareId && counterpartId) shareToCounterpartId.set(shareId, counterpartId)
+  })
+  sent.forEach((row) => {
+    const shareId = row.sharedItem?.id
+    if (shareId && row.recipientId) shareToCounterpartId.set(shareId, row.recipientId)
+  })
+
+  const shareIds = [...shareToCounterpartId.keys()]
+
+  const { data: comments, error: commentsError } = shareIds.length > 0
+    ? await db
+        .from('share_comments')
+        .select('id, share_id, user_id, body, created_at')
+        .in('share_id', shareIds)
+        .order('created_at', { ascending: false })
+    : { data: [], error: null }
+
   const { data: profiles, error: profileError } = counterpartIds.size > 0
     ? await db
         .from('profiles')
@@ -110,6 +131,7 @@ export async function GET(_req: NextRequest) {
         .in('id', [...counterpartIds])
     : { data: [], error: null }
 
+  if (commentsError) return NextResponse.json({ error: commentsError.message }, { status: 500 })
   if (profileError) return NextResponse.json({ error: profileError.message }, { status: 500 })
 
   const profileMap = Object.fromEntries(((profiles ?? []) as ProfileRow[]).map((profile) => [profile.id, profile]))
@@ -167,8 +189,21 @@ export async function GET(_req: NextRequest) {
     applyEntry(row.recipientId, preview, row.createdAt, 0)
   })
 
+  ;(comments ?? []).forEach((comment) => {
+    const counterpartId = shareToCounterpartId.get(comment.share_id)
+    if (!counterpartId) return
+
+    const preview = typeof comment.body === 'string' && comment.body.trim()
+      ? comment.user_id === user.id
+        ? `You: ${comment.body.trim()}`
+        : comment.body.trim()
+      : 'New message'
+
+    applyEntry(counterpartId, preview, comment.created_at, 0)
+  })
+
   const conversations = [...conversationMap.values()].sort((left, right) => new Date(right.latest_at).getTime() - new Date(left.latest_at).getTime())
-  const selectedConversationId = _req.nextUrl.searchParams.get('selected') || conversations[0]?.id || null
+  const selectedConversationId = _req.nextUrl.searchParams.get('selected')
 
   let initialDetail = null
   let initialConversationId: string | null = null

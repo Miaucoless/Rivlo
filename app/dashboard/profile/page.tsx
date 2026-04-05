@@ -3,6 +3,7 @@
 import type { ChangeEvent } from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
 import { Globe2, Loader2, Lock, PencilLine, Plus, Share2, Trash2, UserCheck, Users, Dumbbell } from 'lucide-react'
 import { toast } from 'sonner'
@@ -58,6 +59,7 @@ async function getToken() {
 }
 
 export default function ProfilePage() {
+  const router = useRouter()
   const user = useAppStore((state) => state.user)
   const isDemoMode = useAppStore((state) => state.isDemoMode)
   const socialPosts = useAppStore((state) => state.socialPosts)
@@ -307,8 +309,8 @@ export default function ProfilePage() {
 
   return (
     <div className="space-y-6">
-      <Card className="overflow-hidden border-border/60">
-        <div className="relative">
+      <section className="space-y-5">
+        <div className="relative overflow-hidden rounded-[2rem] border border-border/50">
           <div
             className={`h-24 ${draft.banner_url ? 'bg-cover bg-center bg-no-repeat' : 'bg-[linear-gradient(135deg,rgba(16,185,129,0.18),rgba(20,184,166,0.08),rgba(15,23,42,0.04))]'}`}
             style={draft.banner_url ? { backgroundImage: `linear-gradient(180deg,rgba(15,23,42,0.08),rgba(15,23,42,0.2)), url(${draft.banner_url})` } : undefined}
@@ -323,13 +325,13 @@ export default function ProfilePage() {
           />
           <label
             htmlFor="profile-banner-upload"
-            className="absolute bottom-3 right-3 inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-border/70 bg-background/90 text-muted-foreground shadow-sm backdrop-blur transition-colors hover:bg-background"
+            className="absolute bottom-0 right-3 z-10 inline-flex h-7 w-7 translate-y-[32%] cursor-pointer items-center justify-center rounded-full border border-border/70 bg-background/92 text-muted-foreground shadow-sm backdrop-blur transition-colors hover:bg-background"
             aria-label="Change banner image"
           >
-            <PencilLine className="h-3.5 w-3.5" />
+            <PencilLine className="h-3 w-3" />
           </label>
         </div>
-        <CardContent className="relative -mt-10 space-y-6 px-5 pb-5 pt-0 sm:px-6">
+        <div className="relative -mt-10 space-y-6 px-1 pb-1 pt-0 sm:px-2">
           <div className="flex flex-col gap-5">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
               <div className="relative h-20 w-20 shrink-0">
@@ -354,10 +356,10 @@ export default function ProfilePage() {
                 </label>
                 <label
                   htmlFor="profile-avatar-upload"
-                  className="absolute bottom-0 right-0 z-10 inline-flex h-7 w-7 translate-x-[8%] translate-y-[8%] cursor-pointer items-center justify-center rounded-full border border-border/70 bg-background/95 text-muted-foreground shadow-sm backdrop-blur transition-colors hover:bg-background"
+                  className="absolute bottom-0 right-0 z-10 inline-flex h-6 w-6 translate-x-[10%] translate-y-[22%] cursor-pointer items-center justify-center rounded-full border border-border/70 bg-background/95 text-muted-foreground shadow-sm backdrop-blur transition-colors hover:bg-background"
                   aria-label="Upload profile photo"
                 >
-                  <PencilLine className="h-3.5 w-3.5" />
+                  <PencilLine className="h-3 w-3" />
                 </label>
               </div>
 
@@ -398,9 +400,9 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_220px]">
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             {isEditingProfile ? (
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid flex-1 gap-4 sm:grid-cols-2">
                 <label className="space-y-2">
                   <span className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Display name</span>
                   <Input
@@ -472,7 +474,7 @@ export default function ProfilePage() {
               </div>
             ) : null}
 
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-2 md:min-w-[140px]">
               {isEditingProfile ? (
                 <>
                   <Button
@@ -516,17 +518,17 @@ export default function ProfilePage() {
               )}
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </section>
 
       <Tabs defaultValue="posts" className="space-y-4">
-        <TabsList ref={tabsListRef} className="flex w-full justify-start flex-nowrap gap-1 overflow-x-auto rounded-2xl bg-muted/40 p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          <TabsTrigger value="posts" className="shrink-0 rounded-xl">Posts</TabsTrigger>
-          <TabsTrigger value="comments" className="shrink-0 rounded-xl">Comments</TabsTrigger>
-          <TabsTrigger value="saves" className="shrink-0 rounded-xl">Saves</TabsTrigger>
-          <TabsTrigger value="reposts" className="shrink-0 rounded-xl">Reposts</TabsTrigger>
-          <TabsTrigger value="saved-meals" className="shrink-0 rounded-xl">Saved Meals</TabsTrigger>
-          <TabsTrigger value="saved-workouts" className="shrink-0 rounded-xl">Saved Workouts</TabsTrigger>
+        <TabsList ref={tabsListRef} className="flex h-auto w-full justify-start flex-nowrap gap-5 overflow-x-auto rounded-none border-b border-border/50 bg-transparent p-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <TabsTrigger value="posts" className="shrink-0 rounded-none border-b-2 border-transparent px-0 pb-3 pt-0 data-[state=active]:border-primary data-[state=active]:bg-transparent">Posts</TabsTrigger>
+          <TabsTrigger value="comments" className="shrink-0 rounded-none border-b-2 border-transparent px-0 pb-3 pt-0 data-[state=active]:border-primary data-[state=active]:bg-transparent">Comments</TabsTrigger>
+          <TabsTrigger value="saves" className="shrink-0 rounded-none border-b-2 border-transparent px-0 pb-3 pt-0 data-[state=active]:border-primary data-[state=active]:bg-transparent">Saves</TabsTrigger>
+          <TabsTrigger value="reposts" className="shrink-0 rounded-none border-b-2 border-transparent px-0 pb-3 pt-0 data-[state=active]:border-primary data-[state=active]:bg-transparent">Reposts</TabsTrigger>
+          <TabsTrigger value="saved-meals" className="shrink-0 rounded-none border-b-2 border-transparent px-0 pb-3 pt-0 data-[state=active]:border-primary data-[state=active]:bg-transparent">Saved Meals</TabsTrigger>
+          <TabsTrigger value="saved-workouts" className="shrink-0 rounded-none border-b-2 border-transparent px-0 pb-3 pt-0 data-[state=active]:border-primary data-[state=active]:bg-transparent">Saved Workouts</TabsTrigger>
         </TabsList>
 
         <TabsContent value="posts" className="mt-0">
@@ -548,35 +550,45 @@ export default function ProfilePage() {
                 detail="Your published meals and workouts will show up here once you post them to the feed."
               />
             ) : (
-              <div className="grid gap-4 lg:grid-cols-2">
+              <div className="space-y-10">
                 {ownPosts.map((post) => (
-                  <Card
+                  <article
                     key={post.id}
-                    className="cursor-pointer border-border/60 transition-colors hover:border-primary/30"
+                    className="cursor-pointer space-y-4"
                     onClick={() => {
                       setSelectedPost(post)
                       setDetailOpen(true)
                     }}
                   >
-                    <CardContent className="space-y-4 p-5">
-                      <PostMediaPreview post={post} />
+                      <PostMediaPreview post={post} onOpenPost={() => {
+                        setSelectedPost(post)
+                        setDetailOpen(true)
+                      }} />
 
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                            {post.type === 'meal' ? 'Meal post' : post.type === 'workout' ? 'Workout post' : post.type === 'day' ? 'Day post' : 'Post'}
-                          </p>
-                          <h3 className="mt-1 text-lg font-semibold">{post.title}</h3>
-                        </div>
-                        <div className="rounded-full border border-border/60 bg-muted/30 px-3 py-1 text-xs text-muted-foreground">
-                          {format(new Date(post.createdAt), 'MMM d')}
-                        </div>
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                          {post.type === 'meal' ? 'Meal post' : post.type === 'workout' ? 'Workout post' : post.type === 'day' ? 'Day post' : 'Post'}
+                        </p>
+                        <h3 className="mt-1 text-lg font-semibold">{post.title}</h3>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {format(new Date(post.createdAt), 'MMM d')}
+                      </p>
                     </div>
-                    {post.caption ? <p className="line-clamp-3 text-sm text-muted-foreground">{post.caption}</p> : null}
+
+                    {post.caption ? <p className="line-clamp-3 text-sm leading-6 text-muted-foreground">{post.caption}</p> : null}
+                    {post.tags.length > 0 ? (
+                      <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+                        {post.tags.slice(0, 4).map((tag) => (
+                          <span key={tag}>#{tag}</span>
+                        ))}
+                      </div>
+                    ) : null}
                     <div className="flex justify-end">
                       <Button
                           type="button"
-                          variant="outline"
+                          variant="ghost"
                           className="rounded-full text-destructive hover:text-destructive"
                           onClick={(event) => {
                             event.stopPropagation()
@@ -591,9 +603,8 @@ export default function ProfilePage() {
                           <Trash2 className="mr-2 h-4 w-4" />
                           Delete
                         </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
+                    </div>
+                  </article>
                 ))}
               </div>
             )}
@@ -608,7 +619,7 @@ export default function ProfilePage() {
           ) : comments.length === 0 ? (
             <EmptyState
               title="No comments yet"
-              detail="Replies you leave on shared workouts, meals, and other share threads will appear here."
+              detail="Comments you leave on posts will appear here."
             />
           ) : (
             <div className="space-y-3">
@@ -797,14 +808,10 @@ export default function ProfilePage() {
         workouts={customWorkouts}
         onOpenChange={setComposerOpen}
         onSubmit={(draft) => {
-          const postId = createSocialPost(draft)
-          const createdPost = useAppStore.getState().socialPosts.find((post) => post.id === postId) ?? null
+          createSocialPost(draft)
           setComposerOpen(false)
-          if (createdPost) {
-            setSelectedPost(createdPost)
-            setDetailOpen(true)
-          }
           toast.success('Post published to your feed.')
+          router.push('/dashboard/feed')
         }}
       />
 
@@ -851,26 +858,63 @@ function EmptyState({ title, detail }: { title: string; detail: string }) {
   )
 }
 
-function PostMediaPreview({ post }: { post: SocialPost }) {
-  const mediaItem = post.media?.[0] ?? (post.image ? { kind: 'image' as const, url: post.image } : null)
-  if (!mediaItem) return null
+function PostMediaPreview({ post, onOpenPost }: { post: SocialPost; onOpenPost: () => void }) {
+  const mediaItems = post.media?.length
+    ? post.media
+    : post.image
+      ? [{ kind: 'image' as const, url: post.image }]
+      : []
+  if (mediaItems.length === 0) return null
+
+  let touchStartX = 0
+  let touchStartY = 0
+  let dragged = false
 
   return (
-    <div className="overflow-hidden rounded-3xl border border-border/60 bg-muted/20">
-      {mediaItem.kind === 'video' ? (
-        <video
-          src={mediaItem.url}
-          className="h-52 w-full object-cover"
-          muted
-          playsInline
-          preload="metadata"
-        />
-      ) : (
-        <div
-          className="h-52 w-full bg-cover bg-center"
-          style={{ backgroundImage: `linear-gradient(180deg, rgba(15,23,42,0.04), rgba(15,23,42,0.18)), url("${mediaItem.url}")` }}
-        />
-      )}
+    <div className="space-y-2">
+      <div
+        className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        onClick={(event) => {
+          event.stopPropagation()
+          if (!dragged) onOpenPost()
+        }}
+        onTouchStart={(event) => {
+          const touch = event.touches[0]
+          touchStartX = touch?.clientX ?? 0
+          touchStartY = touch?.clientY ?? 0
+          dragged = false
+        }}
+        onTouchMove={(event) => {
+          const touch = event.touches[0]
+          if (!touch) return
+          if (Math.abs(touch.clientX - touchStartX) > 10 || Math.abs(touch.clientY - touchStartY) > 10) {
+            dragged = true
+          }
+        }}
+      >
+        {mediaItems.map((mediaItem, index) => (
+          <div key={`${post.id}-media-${index}`} className="w-[84%] shrink-0 snap-center overflow-hidden rounded-[1.75rem] border border-border/50 bg-muted/20 sm:w-[68%]">
+            {mediaItem.kind === 'video' ? (
+              <video
+                src={mediaItem.url}
+                className="h-56 w-full object-cover"
+                muted
+                playsInline
+                preload="metadata"
+                controls
+              />
+            ) : (
+              <div
+                className="h-56 w-full bg-cover bg-center"
+                style={{ backgroundImage: `linear-gradient(180deg, rgba(15,23,42,0.04), rgba(15,23,42,0.18)), url("${mediaItem.url}")` }}
+              />
+            )}
+          </div>
+        ))}
+      </div>
+      {mediaItems.length > 1 ? (
+        <p className="text-xs text-muted-foreground">Swipe to browse {mediaItems.length} photos</p>
+      ) : null}
     </div>
   )
 }

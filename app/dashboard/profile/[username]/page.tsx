@@ -331,16 +331,16 @@ export default function PublicProfilePage() {
         </Link>
       </Button>
 
-      <Card className="overflow-hidden border-border/60">
+      <section className="space-y-5">
         <div
-          className={`h-28 ${profileUser?.banner_url ? 'bg-cover bg-center bg-no-repeat' : 'bg-[linear-gradient(135deg,rgba(16,185,129,0.2),rgba(20,184,166,0.08),rgba(15,23,42,0.04))]'}`}
+          className={`h-28 overflow-hidden rounded-[2rem] border border-border/50 ${profileUser?.banner_url ? 'bg-cover bg-center bg-no-repeat' : 'bg-[linear-gradient(135deg,rgba(16,185,129,0.2),rgba(20,184,166,0.08),rgba(15,23,42,0.04))]'}`}
           style={profileUser?.banner_url ? { backgroundImage: `linear-gradient(180deg,rgba(15,23,42,0.08),rgba(15,23,42,0.2)), url(${profileUser.banner_url})` } : undefined}
         />
-        <CardContent className="relative -mt-10 space-y-6 px-5 pb-6 pt-0 sm:px-6">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+        <div className="relative -mt-10 space-y-6 px-1 pb-1 pt-0 sm:px-2">
+          <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
               <div
-                className={`flex h-20 w-20 items-center justify-center overflow-hidden rounded-3xl border-4 border-background bg-gradient-to-br from-emerald-400 to-teal-500 text-2xl font-bold text-white shadow-lg ${profileUser.avatar_url ? 'bg-cover bg-center bg-no-repeat' : ''}`}
+                className={`flex h-20 w-20 items-center justify-center overflow-hidden rounded-full border-4 border-background bg-gradient-to-br from-emerald-400 to-teal-500 text-2xl font-bold text-white shadow-lg ${profileUser.avatar_url ? 'bg-cover bg-center bg-no-repeat' : ''}`}
                 style={profileUser.avatar_url ? { backgroundImage: `url(${profileUser.avatar_url})` } : undefined}
               >
                 {!profileUser.avatar_url ? profileUser.name.charAt(0).toUpperCase() : null}
@@ -363,31 +363,31 @@ export default function PublicProfilePage() {
                 {profileUser.bio ? <p className="max-w-2xl text-sm leading-6 text-muted-foreground">{profileUser.bio}</p> : null}
                 <div className="flex flex-wrap items-end gap-x-8 gap-y-3 pt-1">
                   <div className="min-w-[72px]">
-                    <p className="text-2xl font-semibold tracking-tight text-foreground">{profilePosts.length}</p>
-                    <p className="text-sm text-muted-foreground">Posts</p>
+                    <p className="text-lg font-semibold tracking-tight text-foreground">{profilePosts.length}</p>
+                    <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Posts</p>
                   </div>
                   <button
                     type="button"
                     onClick={() => setFollowersOpen(true)}
                     className="min-w-[88px] text-left transition-opacity hover:opacity-80"
                   >
-                    <p className="text-2xl font-semibold tracking-tight text-foreground">{followerCount}</p>
-                    <p className="text-sm text-muted-foreground">Followers</p>
+                    <p className="text-lg font-semibold tracking-tight text-foreground">{followerCount}</p>
+                    <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Followers</p>
                   </button>
                   <button
                     type="button"
                     onClick={() => setFollowingOpen(true)}
                     className="min-w-[88px] text-left transition-opacity hover:opacity-80"
                   >
-                    <p className="text-2xl font-semibold tracking-tight text-foreground">{followingCount}</p>
-                    <p className="text-sm text-muted-foreground">Following</p>
+                    <p className="text-lg font-semibold tracking-tight text-foreground">{followingCount}</p>
+                    <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Following</p>
                   </button>
                 </div>
               </div>
             </div>
 
             {currentUserMatches ? null : (
-              <Button onClick={handleFollow} className="rounded-full">
+              <Button onClick={handleFollow} className="rounded-full md:mt-2">
                 {relationship?.status === 'accepted'
                   ? 'Following'
                   : relationship?.status === 'pending'
@@ -398,8 +398,8 @@ export default function PublicProfilePage() {
               </Button>
             )}
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </section>
 
       {!canSeePosts ? (
         <Card className="border-dashed border-border/60">
@@ -422,9 +422,9 @@ export default function PublicProfilePage() {
         </Card>
       ) : (
         <Tabs defaultValue="posts" className="space-y-4">
-          <TabsList className="flex w-full max-w-md flex-nowrap gap-1 rounded-2xl bg-muted/40 p-1">
-            <TabsTrigger value="posts" className="flex-1 rounded-xl">Posts</TabsTrigger>
-            <TabsTrigger value="tagged" className="flex-1 rounded-xl">Tagged in Posts</TabsTrigger>
+          <TabsList className="flex h-auto w-full max-w-md flex-nowrap gap-5 overflow-x-auto rounded-none border-b border-border/50 bg-transparent p-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <TabsTrigger value="posts" className="flex-1 rounded-none border-b-2 border-transparent px-0 pb-3 pt-0 data-[state=active]:border-primary data-[state=active]:bg-transparent">Posts</TabsTrigger>
+            <TabsTrigger value="tagged" className="flex-1 rounded-none border-b-2 border-transparent px-0 pb-3 pt-0 data-[state=active]:border-primary data-[state=active]:bg-transparent">Tagged in Posts</TabsTrigger>
           </TabsList>
 
           <TabsContent value="posts" className="mt-0">
@@ -546,96 +546,99 @@ function PostGrid({
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
+    <div className="space-y-10">
       {posts.map((post) => (
-        <Card
+        <article
           key={post.id}
-          className="cursor-pointer border-border/60 transition-colors hover:border-primary/30"
+          className="cursor-pointer space-y-4"
           onClick={() => onOpenPost(post)}
         >
-          <CardContent className="space-y-4 p-5">
-            <PostMediaPreview post={post} />
+          <PostMediaPreview post={post} onOpenPost={() => onOpenPost(post)} />
 
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                  {post.type === 'meal' ? 'Meal post' : post.type === 'workout' ? 'Workout post' : post.type === 'day' ? 'Day post' : 'Post'}
-                </p>
-                <h3 className="mt-1 text-lg font-semibold">{post.title}</h3>
-              </div>
-              <div className="rounded-full border border-border/60 bg-muted/30 px-3 py-1 text-xs text-muted-foreground">
-                {format(new Date(post.createdAt), 'MMM d')}
-              </div>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                {post.type === 'meal' ? 'Meal post' : post.type === 'workout' ? 'Workout post' : post.type === 'day' ? 'Day post' : 'Post'}
+              </p>
+              <h3 className="mt-1 text-lg font-semibold">{post.title}</h3>
             </div>
+            <p className="text-xs text-muted-foreground">
+              {format(new Date(post.createdAt), 'MMM d')}
+            </p>
+          </div>
 
-            {post.caption ? <p className="line-clamp-3 text-sm leading-6 text-muted-foreground">{post.caption}</p> : null}
+          {post.caption ? <p className="line-clamp-3 text-sm leading-6 text-muted-foreground">{post.caption}</p> : null}
 
-            <div className="flex flex-wrap gap-2">
+          {post.tags.length > 0 ? (
+            <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
               {post.tags.slice(0, 4).map((tag) => (
-                <div key={tag} className="rounded-full border border-border/60 bg-muted/30 px-3 py-1 text-xs text-muted-foreground">
-                  {tag}
-                </div>
+                <span key={tag}>#{tag}</span>
               ))}
             </div>
-
-            <div className="grid grid-cols-5 gap-2 text-center">
-              <MiniStat label="Likes" value={post.stats.likes ?? 0} />
-              <MiniStat label="Comments" value={post.stats.comments ?? 0} />
-              <MiniStat label="Used" value={post.stats.used} />
-              <MiniStat label="Done" value={post.stats.completed} />
-              <MiniStat label="Saved" value={post.stats.saved} />
-            </div>
-
-            <div className="flex justify-end">
-              <Button
-                type="button"
-                variant="outline"
-                className="rounded-full"
-                onClick={(event) => {
-                  event.stopPropagation()
-                  onOpenPost(post)
-                }}
-              >
-                  <UserPlus className="mr-2 h-4 w-4" />
-                  Open Post
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+          ) : null}
+        </article>
       ))}
     </div>
   )
 }
 
-function PostMediaPreview({ post }: { post: SocialPost }) {
-  const mediaItem = post.media?.[0] ?? (post.image ? { kind: 'image' as const, url: post.image } : null)
-  if (!mediaItem) return null
+function PostMediaPreview({ post, onOpenPost }: { post: SocialPost; onOpenPost: () => void }) {
+  const mediaItems = post.media?.length
+    ? post.media
+    : post.image
+      ? [{ kind: 'image' as const, url: post.image }]
+      : []
+  if (mediaItems.length === 0) return null
+
+  let touchStartX = 0
+  let touchStartY = 0
+  let dragged = false
 
   return (
-    <div className="overflow-hidden rounded-3xl border border-border/60 bg-muted/20">
-      {mediaItem.kind === 'video' ? (
-        <video
-          src={mediaItem.url}
-          className="h-52 w-full object-cover"
-          muted
-          playsInline
-          preload="metadata"
-        />
-      ) : (
-        <div
-          className="h-52 w-full bg-cover bg-center"
-          style={{ backgroundImage: `linear-gradient(180deg, rgba(15,23,42,0.04), rgba(15,23,42,0.18)), url("${mediaItem.url}")` }}
-        />
-      )}
-    </div>
-  )
-}
-
-function MiniStat({ label, value }: { label: string; value: number | string }) {
-  return (
-    <div className="rounded-2xl border border-border/60 bg-muted/25 px-3 py-2">
-      <p className="font-data text-sm font-semibold">{value}</p>
-      <p className="mt-1 text-[11px] uppercase tracking-[0.12em] text-muted-foreground">{label}</p>
+    <div className="space-y-2">
+      <div
+        className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        onClick={(event) => {
+          event.stopPropagation()
+          if (!dragged) onOpenPost()
+        }}
+        onTouchStart={(event) => {
+          const touch = event.touches[0]
+          touchStartX = touch?.clientX ?? 0
+          touchStartY = touch?.clientY ?? 0
+          dragged = false
+        }}
+        onTouchMove={(event) => {
+          const touch = event.touches[0]
+          if (!touch) return
+          if (Math.abs(touch.clientX - touchStartX) > 10 || Math.abs(touch.clientY - touchStartY) > 10) {
+            dragged = true
+          }
+        }}
+      >
+        {mediaItems.map((mediaItem, index) => (
+          <div key={`${post.id}-media-${index}`} className="w-[84%] shrink-0 snap-center overflow-hidden rounded-[1.75rem] border border-border/50 bg-muted/20 sm:w-[68%]">
+            {mediaItem.kind === 'video' ? (
+              <video
+                src={mediaItem.url}
+                className="h-56 w-full object-cover"
+                muted
+                playsInline
+                preload="metadata"
+                controls
+              />
+            ) : (
+              <div
+                className="h-56 w-full bg-cover bg-center"
+                style={{ backgroundImage: `linear-gradient(180deg, rgba(15,23,42,0.04), rgba(15,23,42,0.18)), url("${mediaItem.url}")` }}
+              />
+            )}
+          </div>
+        ))}
+      </div>
+      {mediaItems.length > 1 ? (
+        <p className="text-xs text-muted-foreground">Swipe to browse {mediaItems.length} photos</p>
+      ) : null}
     </div>
   )
 }

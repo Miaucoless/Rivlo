@@ -400,14 +400,18 @@ export default function FeedPage() {
   }
 
   const publishPost = (draft: SocialPostDraft) => {
-    const postId = createSocialPost(draft)
-    const createdPost = useAppStore.getState().socialPosts.find((post) => post.id === postId) ?? null
+    createSocialPost(draft)
     setComposerDraft(null)
     setComposerOpen(false)
-    if (createdPost) {
-      setSelectedPost(createdPost)
-      setDetailOpen(true)
-    }
+    setActiveTab('explore')
+    setFilter('all')
+    setSubFilter(null)
+    setSort('new')
+    setQuery('')
+    setVisibleCount(FEED_BATCH_SIZE)
+    requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    })
     toast.success('Post published to your feed.')
   }
 

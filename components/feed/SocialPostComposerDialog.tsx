@@ -227,7 +227,7 @@ export function SocialPostComposerDialog({
     image: media.find((m) => m.kind === 'image')?.url,
     media: media.length > 0 ? media : undefined,
     title: title.trim() || (type === 'meal' ? 'Untitled meal post' : type === 'workout' ? 'Untitled workout post' : 'Untitled post'),
-    caption: caption.trim() || 'Add a caption to preview how this post will read in the feed.',
+    caption: caption.trim(),
     stats: { completed: 0, used: 0, saved: 0, remixed: 0 },
     createdAt: new Date().toISOString(),
     tags: tags.split(',').map((value) => value.trim().toLowerCase()).filter(Boolean),
@@ -239,7 +239,7 @@ export function SocialPostComposerDialog({
   }), [audience, caption, creationMode, currentUser, media, mealData, taggedUsers, tags, title, type, workoutData])
 
   const submit = () => {
-    if (!title.trim() || !caption.trim()) return
+    if (!title.trim()) return
 
     onSubmit({
       type,
@@ -306,7 +306,7 @@ export function SocialPostComposerDialog({
             <DialogTitle>Create Post</DialogTitle>
             <DialogDescription>
               {isLinkedStructured
-                ? 'This post is already populated from the item you selected, so you can just add a photo, caption, and audience.'
+                ? 'This post is already populated from the item you selected, so you can just add media if you want and choose the audience.'
                 : 'Create a post, or link one of your meals, recipes, or workouts so the post is already fully usable.'}
             </DialogDescription>
           </DialogHeader>
@@ -782,7 +782,7 @@ export function SocialPostComposerDialog({
             <Button variant="outline" className="rounded-full" onClick={() => setPreviewOpen((current) => !current)} disabled={!title.trim()}>
               {previewOpen ? 'Hide Preview' : 'Preview Post'}
             </Button>
-            <Button className="rounded-full" onClick={submit} disabled={!title.trim() || !caption.trim()}>
+            <Button className="rounded-full" onClick={submit} disabled={!title.trim()}>
               Publish Post
             </Button>
           </DialogFooter>

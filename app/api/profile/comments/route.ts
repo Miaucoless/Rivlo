@@ -30,17 +30,18 @@ export async function GET(req: NextRequest) {
   }
 
   const sharedItemMap = Object.fromEntries((sharedItems ?? []).map((item) => [item.id, item]))
+  const postComments = (comments ?? []).filter((comment) => sharedItemMap[comment.share_id]?.item_type === 'social_post')
 
   return NextResponse.json(
-    (comments ?? []).map((comment) => {
+    postComments.map((comment) => {
       const sharedItem = sharedItemMap[comment.share_id]
       return {
         id: comment.id,
         body: comment.body,
         created_at: comment.created_at,
         share_id: comment.share_id,
-        item_name: sharedItem?.item_name ?? 'Shared item',
-        item_type: sharedItem?.item_type ?? 'shared_item',
+        item_name: sharedItem?.item_name ?? 'Shared post',
+        item_type: sharedItem?.item_type ?? 'social_post',
         share_token: sharedItem?.share_token ?? null,
       }
     })
