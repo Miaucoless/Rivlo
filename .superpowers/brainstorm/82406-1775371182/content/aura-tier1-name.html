@@ -1,0 +1,162 @@
+<h2>What should the first Aura tier be called?</h2>
+<p class="subtitle">Tier 1 · Levels 1–50. The starting point before your aura awakens. "Grey" is out — pick a replacement.</p>
+
+<style>
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px 3px 5px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+.badge svg { flex-shrink: 0; }
+.level-demo {
+  background: #0f172a;
+  border-radius: 8px;
+  padding: 10px 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: #9ca3af;
+  margin-top: 8px;
+}
+.avatar-mock {
+  width: 32px; height: 32px; border-radius: 50%;
+  background: linear-gradient(135deg, #374151, #1f2937);
+  display: flex; align-items: center; justify-content: center;
+  color: #9ca3af; font-weight: 700; font-size: 13px;
+}
+.tier-ladder {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+  padding: 10px 14px;
+  background: #0f172a;
+  border-radius: 8px;
+  margin-top: 10px;
+  font-size: 11px;
+  color: #6b7280;
+}
+.tier-ladder-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.tier-ladder-label { width: 80px; text-align: right; color: #4b5563; font-size: 10px; }
+</style>
+
+<div class="options">
+
+  <div class="option" data-choice="dormant" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Dormant</h3>
+      <p>Your potential is there — it just hasn't ignited yet. Quiet, raw, unrealised.</p>
+      <div class="level-demo">
+        <div class="avatar-mock">J</div>
+        <span style="color:#e5e7eb; font-weight:600;">jsmith</span>
+        <span class="badge" style="background:#111827; color:#9ca3af; border:1px solid #374151;">
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="4.5" fill="none" stroke="#4b5563" stroke-width="1.2" stroke-dasharray="2 1.5"/></svg>
+          Dormant · 14
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="spark" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Spark</h3>
+      <p>The first flicker. Something is beginning. Fits the "aura catching fire" narrative arc.</p>
+      <div class="level-demo">
+        <div class="avatar-mock">J</div>
+        <span style="color:#e5e7eb; font-weight:600;">jsmith</span>
+        <span class="badge" style="background:#111827; color:#9ca3af; border:1px solid #374151;">
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="4.5" fill="none" stroke="#4b5563" stroke-width="1.2" stroke-dasharray="2 1.5"/></svg>
+          Spark · 14
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="awakened" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Awakened</h3>
+      <p>The journey starts with awareness. You've woken up — now the real grind begins.</p>
+      <div class="level-demo">
+        <div class="avatar-mock">J</div>
+        <span style="color:#e5e7eb; font-weight:600;">jsmith</span>
+        <span class="badge" style="background:#111827; color:#9ca3af; border:1px solid #374151;">
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="4.5" fill="none" stroke="#4b5563" stroke-width="1.2" stroke-dasharray="2 1.5"/></svg>
+          Awakened · 14
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="ember" onclick="toggleSelect(this)">
+    <div class="letter">D</div>
+    <div class="content">
+      <h3>Ember</h3>
+      <p>A smouldering coal. Not yet a flame — but the heat is real. Pairs well with Transcendent as the endpoint.</p>
+      <div class="level-demo">
+        <div class="avatar-mock">J</div>
+        <span style="color:#e5e7eb; font-weight:600;">jsmith</span>
+        <span class="badge" style="background:#111827; color:#9ca3af; border:1px solid #374151;">
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="4.5" fill="none" stroke="#4b5563" stroke-width="1.2" stroke-dasharray="2 1.5"/></svg>
+          Ember · 14
+        </span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div style="margin-top: 24px; padding: 16px; background: #0f172a; border-radius: 10px; border: 1px solid #1e293b;">
+  <div style="font-size: 11px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px;">Full tier ladder (250 levels total)</div>
+  <div class="tier-ladder" style="background:transparent; padding:0; margin:0;">
+    <div class="tier-ladder-row">
+      <span class="tier-ladder-label">Lv 1–50</span>
+      <span class="badge" style="background:#111827; color:#9ca3af; border:1px solid #374151;">
+        <svg width="11" height="11" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="4.5" fill="none" stroke="#4b5563" stroke-width="1.2" stroke-dasharray="2 1.5"/></svg>
+        ??? · 1–50
+      </span>
+      <span style="color:#374151; font-size:10px;">← your pick</span>
+    </div>
+    <div class="tier-ladder-row">
+      <span class="tier-ladder-label">Lv 51–100</span>
+      <span class="badge" style="background:#052e16; color:#6ee7b7; border:1px solid #059669;">
+        <svg width="11" height="11" viewBox="0 0 13 13" fill="none"><path d="M6.5 11 C6.5 11 1 7.5 1 4.5 A3 3 0 0 1 6.5 3.5 A3 3 0 0 1 12 4.5 C12 7.5 6.5 11 6.5 11Z" fill="#065f46" stroke="#10b981" stroke-width="0.8"/></svg>
+        Vitality · 1–50
+      </span>
+    </div>
+    <div class="tier-ladder-row">
+      <span class="tier-ladder-label">Lv 101–150</span>
+      <span class="badge" style="background:#1e1b4b; color:#a5b4fc; border:1px solid #4338ca;">
+        <svg width="11" height="11" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="2.5" fill="#3730a3" stroke="#818cf8" stroke-width="0.8"/><line x1="6.5" y1="1" x2="6.5" y2="3" stroke="#6366f1" stroke-width="1.2"/><line x1="6.5" y1="10" x2="6.5" y2="12" stroke="#6366f1" stroke-width="1.2"/><line x1="1" y1="6.5" x2="3" y2="6.5" stroke="#6366f1" stroke-width="1.2"/><line x1="10" y1="6.5" x2="12" y2="6.5" stroke="#6366f1" stroke-width="1.2"/><line x1="2.5" y1="2.5" x2="3.9" y2="3.9" stroke="#6366f1" stroke-width="1"/><line x1="9.1" y1="9.1" x2="10.5" y2="10.5" stroke="#6366f1" stroke-width="1"/><line x1="10.5" y1="2.5" x2="9.1" y2="3.9" stroke="#6366f1" stroke-width="1"/><line x1="3.9" y1="9.1" x2="2.5" y2="10.5" stroke="#6366f1" stroke-width="1"/></svg>
+        Radiance · 1–50
+      </span>
+    </div>
+    <div class="tier-ladder-row">
+      <span class="tier-ladder-label">Lv 151–200</span>
+      <span class="badge" style="background:#0c1a3a; color:#7dd3fc; border:1px solid #0284c7;">
+        <svg width="11" height="11" viewBox="0 0 13 13" fill="none"><polygon points="6.5,1 10,9 6.5,7.5 3,9" fill="#075985" stroke="#38bdf8" stroke-width="0.8"/></svg>
+        Ascendant · 1–50
+      </span>
+    </div>
+    <div class="tier-ladder-row">
+      <span class="tier-ladder-label">Lv 201–250</span>
+      <span class="badge" style="background:#150505; color:#fda4af; border:1px solid #be123c; box-shadow:0 0 10px rgba(225,29,72,0.3);">
+        <svg width="11" height="11" viewBox="0 0 13 13" fill="none"><path d="M6.5 1 L7.5 5.5 L12 6.5 L7.5 7.5 L6.5 12 L5.5 7.5 L1 6.5 L5.5 5.5 Z" fill="#881337" stroke="#f43f5e" stroke-width="0.7"/><circle cx="6.5" cy="6.5" r="1.5" fill="#9f1239" stroke="#fb7185" stroke-width="0.5"/></svg>
+        Transcendent · 1–50
+      </span>
+    </div>
+  </div>
+</div>

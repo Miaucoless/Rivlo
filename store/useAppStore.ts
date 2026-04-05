@@ -39,6 +39,7 @@ import type {
   LevelUpResult,
 } from '@/types'
 import { computeXpGain, applyXp } from '@/lib/xp-system'
+import type { DashboardBootstrapState } from '@/lib/dashboard-bootstrap'
 import {
   DEMO_USER,
   RECIPES,
@@ -128,6 +129,7 @@ interface AppStore {
   // Actions
   setUser: (user: UserProfile | null) => void
   restoreUserDataBackup: (userId: string) => void
+  applyDashboardBootstrap: (userId: string, snapshot: DashboardBootstrapState) => void
   hydrateFromCloud: (userId: string, scopes?: CloudHydrationScope[], profile?: CloudHydrationProfile) => Promise<void>
   syncNow: (options?: { force?: boolean; scopes?: CloudHydrationScope[]; profile?: CloudHydrationProfile }) => Promise<void>
   flushPendingCloudWrites: () => Promise<void>
@@ -1345,6 +1347,35 @@ export const useAppStore = create<AppStore>()(
             cloudHydratedScopes: [],
           })
         })
+      },
+
+      applyDashboardBootstrap: (userId, snapshot) => {
+        if (!userId) return
+
+        set((state) => {
+          if (state.user?.id !== userId || hasHydratedUserData(state)) {
+            return state
+          }
+
+          return withRefreshedNotifications(state, {
+            savedMeals: snapshot.savedMeals,
+            supplements: snapshot.supplements,
+            calendarReminders: snapshot.calendarReminders,
+            weightHistory: snapshot.weightHistory,
+            journalEntries: snapshot.journalEntries,
+            workoutLogs: snapshot.workoutLogs,
+            mealEntries: snapshot.mealEntries,
+            waterLogs: snapshot.waterLogs,
+            lastSyncedAt: null,
+            cloudHydratedUserId: userId,
+            cloudHydratedScopes: [],
+          })
+        })
+
+        const latestState = get()
+        if (!latestState.isDemoMode && latestState.user?.id === userId) {
+          writeUserDataBackup(userId, latestState)
+        }
       },
 
       hydrateFromCloud: async (userId, scopes, profile = 'default') => {

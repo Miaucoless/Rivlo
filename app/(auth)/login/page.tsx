@@ -19,7 +19,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useAppStore } from '@/store/useAppStore'
-import { signInWithEmail } from '@/lib/auth'
+import { signInWithEmail, writeAuthBootstrapUser } from '@/lib/auth'
 import { toast } from 'sonner'
 
 const dailyFlowSteps = [
@@ -86,6 +86,15 @@ async function refreshClientNavigationState() {
   }
 }
 
+async function refreshClientNavigationStateWithTimeout(timeoutMs = 1200) {
+  await Promise.race([
+    refreshClientNavigationState(),
+    new Promise<void>((resolve) => {
+      setTimeout(resolve, timeoutMs)
+    }),
+  ])
+}
+
 export default function LoginPage() {
   const router = useRouter()
   const { loginDemo, setUser } = useAppStore()
@@ -117,7 +126,7 @@ export default function LoginPage() {
   }, [router])
 
   const navigateAfterLogin = async (destination: string) => {
-    await refreshClientNavigationState()
+    await refreshClientNavigationStateWithTimeout()
 
     if (typeof window !== 'undefined') {
       window.location.replace(destination)
@@ -145,9 +154,10 @@ export default function LoginPage() {
       const response = await signInWithEmail(email, password)
 
       if (response.success && response.user) {
+        writeAuthBootstrapUser(response.user, response.dashboardBootstrap)
         setUser(response.user)
         toast.success('Welcome back! 👋')
-        const initialDestination = response.user.onboarded ? '/dashboard' : '/onboarding'
+        const initialDestination = response.user.onboarded ? '/dashboard/dashboard' : '/onboarding'
         await navigateAfterLogin(initialDestination)
         return
       }

@@ -1,14 +1,18 @@
 import { createClient } from '@/lib/supabase'
 import type { UnitSystem, UserProfile } from '@/types'
+import type { DashboardBootstrapState } from '@/lib/dashboard-bootstrap'
 import { buildDefaultSchedule } from '@/lib/split-schedule'
 
 export type AuthResponse = {
   success: boolean
   error?: string
   user?: UserProfile
+  dashboardBootstrap?: DashboardBootstrapState
   pendingConfirmation?: boolean
   usedFallbackProfile?: boolean
 }
+
+const AUTH_BOOTSTRAP_STORAGE_KEY = 'rivora-auth-bootstrap'
 
 type AuthBootstrapPayload = {
   user?: {
@@ -23,6 +27,7 @@ type AuthBootstrapPayload = {
     access_token: string
     refresh_token: string
   } | null
+  dashboardBootstrap?: DashboardBootstrapState | null
   error?: string
   pendingConfirmation?: boolean
 }
@@ -72,6 +77,59 @@ function clearSupabaseBrowserSessionStorage() {
   }
 }
 
+export function writeAuthBootstrapUser(user: UserProfile, dashboardBootstrap?: DashboardBootstrapState | null) {
+  if (typeof window === 'undefined') return
+
+  try {
+    window.sessionStorage.setItem(
+      AUTH_BOOTSTRAP_STORAGE_KEY,
+      JSON.stringify({
+        user,
+        dashboardBootstrap: dashboardBootstrap ?? null,
+        expiresAt: Date.now() + 60_000,
+      })
+    )
+  } catch (error) {
+    console.warn('Unable to persist auth bootstrap user.', error)
+  }
+}
+
+export function readAuthBootstrapUser() {
+  if (typeof window === 'undefined') return null
+
+  try {
+    const raw = window.sessionStorage.getItem(AUTH_BOOTSTRAP_STORAGE_KEY)
+    if (!raw) return null
+
+    const parsed = JSON.parse(raw) as {
+      user?: UserProfile
+      dashboardBootstrap?: DashboardBootstrapState | null
+      expiresAt?: number
+    } | null
+    const expiresAt = typeof parsed?.expiresAt === 'number' ? parsed.expiresAt : 0
+
+    if (!parsed?.user || !expiresAt || expiresAt < Date.now()) {
+      window.sessionStorage.removeItem(AUTH_BOOTSTRAP_STORAGE_KEY)
+      return null
+    }
+
+    return {
+      user: parsed.user,
+      dashboardBootstrap: parsed.dashboardBootstrap ?? null,
+    }
+  } catch (error) {
+    return null
+  }
+}
+
+export function clearAuthBootstrapUser() {
+  if (typeof window === 'undefined') return
+
+  try {
+    window.sessionStorage.removeItem(AUTH_BOOTSTRAP_STORAGE_KEY)
+  } catch {}
+}
+
 type SafeJsonResult<T> = {
   payload: T | null
   isHtml: boolean
@@ -110,6 +168,20 @@ async function readJsonResponseSafely<T>(response: Response): Promise<SafeJsonRe
 function isCorruptedSessionStorageError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error)
   return message.includes("Unexpected token '<'") || message.includes('not valid JSON')
+}
+
+async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit, timeoutMs: number) {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+
+  try {
+    return await fetch(input, {
+      ...init,
+      signal: controller.signal,
+    })
+  } finally {
+    clearTimeout(timeoutId)
+  }
 }
 
 function normalizeProfile(profile: Partial<UserProfile> | null | undefined): UserProfile | null {
@@ -317,7 +389,7 @@ export async function signInWithEmail(
   password: string
 ): Promise<AuthResponse> {
   try {
-    const response = await fetch('/api/auth/sign-in', {
+    const response = await fetchWithTimeout('/api/auth/sign-in', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -326,7 +398,7 @@ export async function signInWithEmail(
         email,
         password,
       }),
-    })
+    }, 10_000)
 
     const { payload, isHtml } = await readJsonResponseSafely<AuthBootstrapPayload>(response)
 
@@ -383,6 +455,7 @@ export async function signInWithEmail(
     return {
       success: true,
       user,
+      dashboardBootstrap: payload.dashboardBootstrap ?? undefined,
       usedFallbackProfile: !payload.profile,
     }
   } catch (error) {

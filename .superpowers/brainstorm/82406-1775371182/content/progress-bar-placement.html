@@ -1,0 +1,119 @@
+<h2>Where should the XP progress bar live?</h2>
+<p class="subtitle">Pick one or more — these aren't mutually exclusive.</p>
+
+<style>
+.badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 9px 3px 5px; border-radius: 20px;
+  font-size: 11px; font-weight: 700; white-space: nowrap;
+}
+.xp-bar-track { background: #1e293b; border-radius: 99px; height: 5px; overflow: hidden; }
+.xp-bar-fill { height: 100%; border-radius: 99px; }
+.phone { background: #030712; border-radius: 12px; overflow: hidden; }
+.phone-header { background: #0f172a; padding: 10px 14px; border-bottom: 1px solid #1e293b; font-size: 11px; color: #6b7280; text-align: center; letter-spacing: 0.05em; text-transform: uppercase; }
+.section-block { padding: 14px; border-bottom: 1px solid #0f172a; }
+.avatar-circle { width: 52px; height: 52px; border-radius: 50%; background: linear-gradient(135deg, #1e3a5f, #312e81); display: flex; align-items: center; justify-content: center; color: #a5b4fc; font-weight: 800; font-size: 18px; flex-shrink: 0; }
+.avatar-sm { width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, #374151, #1f2937); display: flex; align-items: center; justify-content: center; color: #9ca3af; font-weight: 700; font-size: 13px; flex-shrink: 0; }
+.bottom-nav { display: flex; background: #0f172a; border-top: 1px solid #1e293b; }
+.nav-item { flex: 1; padding: 10px 0 8px; text-align: center; }
+.nav-icon { font-size: 16px; line-height: 1; }
+.nav-label { font-size: 9px; color: #6b7280; margin-top: 2px; }
+.nav-item.active .nav-label { color: #a5b4fc; }
+</style>
+
+<div class="options" data-multiselect>
+
+  <!-- Option A: Profile page header -->
+  <div class="option" data-choice="profile" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Profile page — under the header</h3>
+      <p>Right below name + badge on the profile page. Natural home — users go here to see their stats anyway.</p>
+      <div class="phone" style="margin-top:10px; max-width:260px;">
+        <div style="height:60px; background: linear-gradient(135deg, #0f172a, #1e1b4b);"></div>
+        <div style="padding: 0 14px 14px; margin-top: -26px;">
+          <div style="display:flex; align-items:flex-end; gap:10px; margin-bottom:10px;">
+            <div style="width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#1e3a5f,#312e81);border:2px solid #030712;display:flex;align-items:center;justify-content:center;color:#a5b4fc;font-weight:800;font-size:18px;">R</div>
+            <div>
+              <div style="font-size:13px;font-weight:700;color:#f9fafb;">Ryan</div>
+              <div style="font-size:11px;color:#6b7280;">@lifterryan</div>
+            </div>
+          </div>
+          <div style="background:#0f172a;border-radius:8px;padding:10px 12px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+              <span class="badge" style="background:#1e1b4b;color:#a5b4fc;border:1px solid #4338ca;font-size:10px;">
+                <svg width="11" height="11" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="2.5" fill="#3730a3" stroke="#818cf8" stroke-width="0.8"/><line x1="6.5" y1="1" x2="6.5" y2="3" stroke="#6366f1" stroke-width="1.2"/><line x1="6.5" y1="10" x2="6.5" y2="12" stroke="#6366f1" stroke-width="1.2"/><line x1="1" y1="6.5" x2="3" y2="6.5" stroke="#6366f1" stroke-width="1.2"/><line x1="10" y1="6.5" x2="12" y2="6.5" stroke="#6366f1" stroke-width="1.2"/></svg>
+                Radiance · 18
+              </span>
+              <span style="font-size:10px;color:#4b5563;">2,250 / 2,500 XP</span>
+            </div>
+            <div class="xp-bar-track"><div class="xp-bar-fill" style="width:90%;background:linear-gradient(90deg,#3730a3,#6366f1);"></div></div>
+            <div style="font-size:10px;color:#4b5563;margin-top:4px;">250 XP to Radiance · 19</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Option B: Dashboard home card -->
+  <div class="option" data-choice="dashboard" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Dashboard — as a widget card</h3>
+      <p>A compact XP card on the main dashboard alongside water, calories, and workouts. Users see it every time they open the app.</p>
+      <div class="phone" style="margin-top:10px; max-width:260px;">
+        <div class="phone-header">Dashboard</div>
+        <div style="padding:12px;display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          <div style="background:#0f172a;border-radius:8px;padding:10px;border:1px solid #1e293b;">
+            <div style="font-size:9px;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;">Calories</div>
+            <div style="font-size:16px;font-weight:800;color:#f9fafb;">1,840</div>
+            <div class="xp-bar-track" style="margin-top:6px;"><div class="xp-bar-fill" style="width:72%;background:linear-gradient(90deg,#b45309,#f59e0b);"></div></div>
+          </div>
+          <div style="background:#0f172a;border-radius:8px;padding:10px;border:1px solid #1e293b;">
+            <div style="font-size:9px;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;">Protein</div>
+            <div style="font-size:16px;font-weight:800;color:#f9fafb;">142g</div>
+            <div class="xp-bar-track" style="margin-top:6px;"><div class="xp-bar-fill" style="width:55%;background:linear-gradient(90deg,#065f46,#10b981);"></div></div>
+          </div>
+          <!-- XP card highlighted -->
+          <div style="background:#0f172a;border-radius:8px;padding:10px;border:1px solid #4338ca;grid-column:1/-1;box-shadow:0 0 0 1px rgba(99,102,241,0.2);">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+              <div style="font-size:9px;color:#6366f1;text-transform:uppercase;letter-spacing:0.05em;font-weight:700;">Your Aura</div>
+              <span class="badge" style="background:#1e1b4b;color:#a5b4fc;border:1px solid #4338ca;font-size:9px;">
+                <svg width="10" height="10" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="2.5" fill="#3730a3" stroke="#818cf8" stroke-width="0.8"/><line x1="6.5" y1="1" x2="6.5" y2="3" stroke="#6366f1" stroke-width="1.2"/><line x1="6.5" y1="10" x2="6.5" y2="12" stroke="#6366f1" stroke-width="1.2"/><line x1="1" y1="6.5" x2="3" y2="6.5" stroke="#6366f1" stroke-width="1.2"/><line x1="10" y1="6.5" x2="12" y2="6.5" stroke="#6366f1" stroke-width="1.2"/></svg>
+                Radiance · 18
+              </span>
+            </div>
+            <div class="xp-bar-track"><div class="xp-bar-fill" style="width:90%;background:linear-gradient(90deg,#3730a3,#818cf8);"></div></div>
+            <div style="font-size:10px;color:#4b5563;margin-top:4px;">250 XP to level up</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Option C: Level-up sheet only (no persistent bar) -->
+  <div class="option" data-choice="sheet-only" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Level-up sheet only — no persistent bar</h3>
+      <p>The progress bar only appears in the slide-up sheet after earning XP. Keeps the UI clean — you see it when it matters, not all the time.</p>
+      <div style="background:#0f172a;border-radius:8px;padding:12px;margin-top:10px;max-width:260px;border:1px solid #1e293b;">
+        <div style="font-size:10px;color:#6b7280;margin-bottom:8px;">Appears only after earning XP:</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <span style="font-size:12px;font-weight:600;color:#f9fafb;">Level Up! ✦</span>
+          <span style="font-size:11px;color:#34d399;font-weight:600;">+100 XP</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:10px;color:#6b7280;margin-bottom:4px;">
+          <span>Radiance · 18</span>
+          <span>2,250 / 2,500 XP</span>
+        </div>
+        <div class="xp-bar-track"><div class="xp-bar-fill" style="width:90%;background:linear-gradient(90deg,#3730a3,#6366f1);"></div></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div style="margin-top:20px;padding:14px;background:#0f172a;border-radius:10px;border:1px solid #1e293b;font-size:12px;color:#6b7280;">
+  <strong style="color:#e5e7eb;">My recommendation:</strong> A + C — progress bar on the profile page (permanent home for your stats) plus the sheet after earning XP (contextual feedback). Dashboard widget (B) can be added later if needed.
+</div>

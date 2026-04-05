@@ -1,0 +1,195 @@
+<h2>Confirmed: Aura Tier System</h2>
+<p class="subtitle">4 tiers × 50 levels + 1 prestige tier with 250 levels = 450 total levels</p>
+
+<style>
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px 3px 5px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+.badge svg { flex-shrink: 0; }
+.ladder { display: flex; flex-direction: column; gap: 0; }
+.ladder-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid #1e293b;
+  position: relative;
+}
+.ladder-row:last-child { border-bottom: none; }
+.ladder-range {
+  width: 90px;
+  font-size: 10px;
+  color: #4b5563;
+  font-family: monospace;
+  flex-shrink: 0;
+}
+.ladder-info { flex: 1; }
+.ladder-name { font-size: 12px; font-weight: 600; color: #e5e7eb; margin-bottom: 2px; }
+.ladder-desc { font-size: 10px; color: #6b7280; }
+.example-badges { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.prestige-banner {
+  background: linear-gradient(90deg, #150505 0%, #1f0505 50%, #150505 100%);
+  border: 1px solid #be123c;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 2px;
+  box-shadow: 0 0 20px rgba(225,29,72,0.15);
+}
+.connector {
+  width: 2px; height: 16px;
+  background: linear-gradient(to bottom, #1e293b, #374151);
+  margin-left: 48px;
+}
+</style>
+
+<div style="background: #0a0f1a; border-radius: 12px; overflow: hidden; border: 1px solid #1e293b;">
+  <div class="ladder">
+
+    <!-- Spark -->
+    <div class="ladder-row">
+      <span class="ladder-range">Lv 1 – 50</span>
+      <span class="badge" style="background:#111827; color:#9ca3af; border:1px solid #374151; flex-shrink:0;">
+        <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="4.5" fill="none" stroke="#4b5563" stroke-width="1.2" stroke-dasharray="2 1.5"/></svg>
+        Spark
+      </span>
+      <div class="ladder-info">
+        <div class="ladder-name">Spark</div>
+        <div class="example-badges">
+          <span class="badge" style="background:#111827; color:#9ca3af; border:1px solid #374151; font-size:10px;">
+            <svg width="11" height="11" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="4.5" fill="none" stroke="#4b5563" stroke-width="1.2" stroke-dasharray="2 1.5"/></svg>
+            Spark · 1
+          </span>
+          <span class="badge" style="background:#111827; color:#9ca3af; border:1px solid #374151; font-size:10px;">
+            <svg width="11" height="11" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="4.5" fill="none" stroke="#4b5563" stroke-width="1.2" stroke-dasharray="2 1.5"/></svg>
+            Spark · 25
+          </span>
+          <span class="badge" style="background:#111827; color:#9ca3af; border:1px solid #374151; font-size:10px;">
+            <svg width="11" height="11" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="4.5" fill="none" stroke="#4b5563" stroke-width="1.2" stroke-dasharray="2 1.5"/></svg>
+            Spark · 50
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Vitality -->
+    <div class="ladder-row">
+      <span class="ladder-range">Lv 1 – 50</span>
+      <span class="badge" style="background:#052e16; color:#6ee7b7; border:1px solid #059669; flex-shrink:0;">
+        <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M6.5 11 C6.5 11 1 7.5 1 4.5 A3 3 0 0 1 6.5 3.5 A3 3 0 0 1 12 4.5 C12 7.5 6.5 11 6.5 11Z" fill="#065f46" stroke="#10b981" stroke-width="0.8"/></svg>
+        Vitality
+      </span>
+      <div class="ladder-info">
+        <div class="ladder-name">Vitality</div>
+        <div class="example-badges">
+          <span class="badge" style="background:#052e16; color:#6ee7b7; border:1px solid #059669; font-size:10px;">
+            <svg width="11" height="11" viewBox="0 0 13 13" fill="none"><path d="M6.5 11 C6.5 11 1 7.5 1 4.5 A3 3 0 0 1 6.5 3.5 A3 3 0 0 1 12 4.5 C12 7.5 6.5 11 6.5 11Z" fill="#065f46" stroke="#10b981" stroke-width="0.8"/></svg>
+            Vitality · 1
+          </span>
+          <span class="badge" style="background:#052e16; color:#6ee7b7; border:1px solid #059669; font-size:10px;">
+            <svg width="11" height="11" viewBox="0 0 13 13" fill="none"><path d="M6.5 11 C6.5 11 1 7.5 1 4.5 A3 3 0 0 1 6.5 3.5 A3 3 0 0 1 12 4.5 C12 7.5 6.5 11 6.5 11Z" fill="#065f46" stroke="#10b981" stroke-width="0.8"/></svg>
+            Vitality · 50
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Radiance -->
+    <div class="ladder-row">
+      <span class="ladder-range">Lv 1 – 50</span>
+      <span class="badge" style="background:#1e1b4b; color:#a5b4fc; border:1px solid #4338ca; flex-shrink:0;">
+        <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="2.5" fill="#3730a3" stroke="#818cf8" stroke-width="0.8"/><line x1="6.5" y1="1" x2="6.5" y2="3" stroke="#6366f1" stroke-width="1.2"/><line x1="6.5" y1="10" x2="6.5" y2="12" stroke="#6366f1" stroke-width="1.2"/><line x1="1" y1="6.5" x2="3" y2="6.5" stroke="#6366f1" stroke-width="1.2"/><line x1="10" y1="6.5" x2="12" y2="6.5" stroke="#6366f1" stroke-width="1.2"/><line x1="2.5" y1="2.5" x2="3.9" y2="3.9" stroke="#6366f1" stroke-width="1"/><line x1="9.1" y1="9.1" x2="10.5" y2="10.5" stroke="#6366f1" stroke-width="1"/><line x1="10.5" y1="2.5" x2="9.1" y2="3.9" stroke="#6366f1" stroke-width="1"/><line x1="3.9" y1="9.1" x2="2.5" y2="10.5" stroke="#6366f1" stroke-width="1"/></svg>
+        Radiance
+      </span>
+      <div class="ladder-info">
+        <div class="ladder-name">Radiance</div>
+        <div class="example-badges">
+          <span class="badge" style="background:#1e1b4b; color:#a5b4fc; border:1px solid #4338ca; font-size:10px;">
+            <svg width="11" height="11" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="2.5" fill="#3730a3" stroke="#818cf8" stroke-width="0.8"/><line x1="6.5" y1="1" x2="6.5" y2="3" stroke="#6366f1" stroke-width="1.2"/><line x1="6.5" y1="10" x2="6.5" y2="12" stroke="#6366f1" stroke-width="1.2"/><line x1="1" y1="6.5" x2="3" y2="6.5" stroke="#6366f1" stroke-width="1.2"/><line x1="10" y1="6.5" x2="12" y2="6.5" stroke="#6366f1" stroke-width="1.2"/></svg>
+            Radiance · 1
+          </span>
+          <span class="badge" style="background:#1e1b4b; color:#a5b4fc; border:1px solid #4338ca; font-size:10px;">
+            <svg width="11" height="11" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="2.5" fill="#3730a3" stroke="#818cf8" stroke-width="0.8"/><line x1="6.5" y1="1" x2="6.5" y2="3" stroke="#6366f1" stroke-width="1.2"/><line x1="6.5" y1="10" x2="6.5" y2="12" stroke="#6366f1" stroke-width="1.2"/><line x1="1" y1="6.5" x2="3" y2="6.5" stroke="#6366f1" stroke-width="1.2"/><line x1="10" y1="6.5" x2="12" y2="6.5" stroke="#6366f1" stroke-width="1.2"/></svg>
+            Radiance · 50
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Ascendant -->
+    <div class="ladder-row">
+      <span class="ladder-range">Lv 1 – 50</span>
+      <span class="badge" style="background:#0c1a3a; color:#7dd3fc; border:1px solid #0284c7; flex-shrink:0;">
+        <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><polygon points="6.5,1 10,9 6.5,7.5 3,9" fill="#075985" stroke="#38bdf8" stroke-width="0.8"/></svg>
+        Ascendant
+      </span>
+      <div class="ladder-info">
+        <div class="ladder-name">Ascendant</div>
+        <div class="example-badges">
+          <span class="badge" style="background:#0c1a3a; color:#7dd3fc; border:1px solid #0284c7; font-size:10px;">
+            <svg width="11" height="11" viewBox="0 0 13 13" fill="none"><polygon points="6.5,1 10,9 6.5,7.5 3,9" fill="#075985" stroke="#38bdf8" stroke-width="0.8"/></svg>
+            Ascendant · 1
+          </span>
+          <span class="badge" style="background:#0c1a3a; color:#7dd3fc; border:1px solid #0284c7; font-size:10px;">
+            <svg width="11" height="11" viewBox="0 0 13 13" fill="none"><polygon points="6.5,1 10,9 6.5,7.5 3,9" fill="#075985" stroke="#38bdf8" stroke-width="0.8"/></svg>
+            Ascendant · 50
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Transcendent — prestige -->
+    <div class="ladder-row prestige-banner" style="flex-direction:column; align-items:flex-start; gap:10px;">
+      <div style="display:flex; align-items:center; gap:10px; width:100%;">
+        <span class="ladder-range" style="color:#fb7185;">PRESTIGE</span>
+        <span class="badge" style="background:#150505; color:#fda4af; border:1px solid #be123c; box-shadow:0 0 10px rgba(225,29,72,0.3); flex-shrink:0;">
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M6.5 1 L7.5 5.5 L12 6.5 L7.5 7.5 L6.5 12 L5.5 7.5 L1 6.5 L5.5 5.5 Z" fill="#881337" stroke="#f43f5e" stroke-width="0.7"/><circle cx="6.5" cy="6.5" r="1.5" fill="#9f1239" stroke="#fb7185" stroke-width="0.5"/></svg>
+          Transcendent
+        </span>
+        <span style="font-size:10px; color:#f43f5e; font-weight:600; letter-spacing:0.05em;">LEVELS 1 → 250</span>
+      </div>
+      <div class="example-badges">
+        <span class="badge" style="background:#150505; color:#fda4af; border:1px solid #be123c; font-size:10px; box-shadow:0 0 6px rgba(225,29,72,0.2);">
+          <svg width="11" height="11" viewBox="0 0 13 13" fill="none"><path d="M6.5 1 L7.5 5.5 L12 6.5 L7.5 7.5 L6.5 12 L5.5 7.5 L1 6.5 L5.5 5.5 Z" fill="#881337" stroke="#f43f5e" stroke-width="0.7"/></svg>
+          Transcendent · 1
+        </span>
+        <span class="badge" style="background:#150505; color:#fda4af; border:1px solid #be123c; font-size:10px; box-shadow:0 0 6px rgba(225,29,72,0.2);">
+          <svg width="11" height="11" viewBox="0 0 13 13" fill="none"><path d="M6.5 1 L7.5 5.5 L12 6.5 L7.5 7.5 L6.5 12 L5.5 7.5 L1 6.5 L5.5 5.5 Z" fill="#881337" stroke="#f43f5e" stroke-width="0.7"/></svg>
+          Transcendent · 75
+        </span>
+        <span class="badge" style="background:#150505; color:#fda4af; border:1px solid #be123c; font-size:10px; box-shadow:0 0 6px rgba(225,29,72,0.2);">
+          <svg width="11" height="11" viewBox="0 0 13 13" fill="none"><path d="M6.5 1 L7.5 5.5 L12 6.5 L7.5 7.5 L6.5 12 L5.5 7.5 L1 6.5 L5.5 5.5 Z" fill="#881337" stroke="#f43f5e" stroke-width="0.7"/></svg>
+          Transcendent · 149
+        </span>
+        <span class="badge" style="background:#150505; color:#fda4af; border:1px solid #f43f5e; font-size:10px; box-shadow:0 0 14px rgba(244,63,94,0.5);">
+          <svg width="11" height="11" viewBox="0 0 13 13" fill="none"><path d="M6.5 1 L7.5 5.5 L12 6.5 L7.5 7.5 L6.5 12 L5.5 7.5 L1 6.5 L5.5 5.5 Z" fill="#881337" stroke="#f43f5e" stroke-width="0.7"/><circle cx="6.5" cy="6.5" r="1.5" fill="#9f1239" stroke="#fb7185" stroke-width="0.5"/></svg>
+          Transcendent · 250 ✦
+        </span>
+      </div>
+      <div style="font-size:10px; color:#9f1239; font-style:italic;">The only players who truly max out will have logged hundreds of workouts, hit their goals every single day.</div>
+    </div>
+
+  </div>
+</div>
+
+<div style="margin-top: 16px; display:flex; gap:8px; flex-wrap:wrap; justify-content:center;">
+  <div style="background:#0f172a; border:1px solid #1e293b; border-radius:8px; padding:10px 16px; text-align:center;">
+    <div style="font-size:22px; font-weight:800; color:#e5e7eb;">450</div>
+    <div style="font-size:10px; color:#6b7280; text-transform:uppercase; letter-spacing:0.05em;">Max level</div>
+  </div>
+  <div style="background:#0f172a; border:1px solid #1e293b; border-radius:8px; padding:10px 16px; text-align:center;">
+    <div style="font-size:22px; font-weight:800; color:#6ee7b7;">4 × 50</div>
+    <div style="font-size:10px; color:#6b7280; text-transform:uppercase; letter-spacing:0.05em;">Tiers 1–4</div>
+  </div>
+  <div style="background:#150505; border:1px solid #be123c; border-radius:8px; padding:10px 16px; text-align:center;">
+    <div style="font-size:22px; font-weight:800; color:#fda4af;">1 × 250</div>
+    <div style="font-size:10px; color:#9f1239; text-transform:uppercase; letter-spacing:0.05em;">Transcendent</div>
+  </div>
+</div>

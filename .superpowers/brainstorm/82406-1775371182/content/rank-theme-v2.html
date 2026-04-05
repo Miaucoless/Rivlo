@@ -1,0 +1,189 @@
+<h2>Pick a rank theme</h2>
+<p class="subtitle">5 tiers × 50 levels each = 250 levels total. The badge shows tier name + current level (e.g. "Iron · 23").</p>
+
+<style>
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px 3px 5px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.badge-icon { font-size: 13px; line-height: 1; }
+.tier-row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-bottom: 4px; }
+.theme-preview {
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 12px;
+  text-align: center;
+}
+.level-demo {
+  background: #111827;
+  border-radius: 8px;
+  padding: 10px 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: #9ca3af;
+}
+.avatar-mock {
+  width: 32px; height: 32px; border-radius: 50%;
+  background: linear-gradient(135deg, #374151, #1f2937);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px;
+}
+</style>
+
+<div class="cards">
+
+  <!-- FORGE -->
+  <div class="card" data-choice="forge" onclick="toggleSelect(this)">
+    <div class="card-image" style="background: linear-gradient(135deg, #0c0a09 0%, #1c1917 100%); padding: 20px;">
+      <div class="theme-preview" style="background: rgba(255,255,255,0.03);">
+        <div class="tier-row">
+          <span class="badge" style="background:#1c1917; color:#78716c; border:1px solid #292524;">
+            <span class="badge-icon">🪨</span> Stone · 12
+          </span>
+          <span class="badge" style="background:#292524; color:#d97706; border:1px solid #44403c;">
+            <span class="badge-icon">⛏️</span> Iron · 37
+          </span>
+          <span class="badge" style="background:#1e3a5f; color:#60a5fa; border:1px solid #1d4ed8;">
+            <span class="badge-icon">🔩</span> Steel · 8
+          </span>
+          <span class="badge" style="background:#3b0764; color:#c4b5fd; border:1px solid #6d28d9;">
+            <span class="badge-icon">💎</span> Crystal · 44
+          </span>
+          <span class="badge" style="background:#0c0a09; color:#f0abfc; border:1px solid #a855f7; box-shadow: 0 0 8px rgba(168,85,247,0.4);">
+            <span class="badge-icon">✨</span> Obsidian · 50
+          </span>
+        </div>
+        <div class="level-demo">
+          <div class="avatar-mock">😤</div>
+          <span style="color:#e5e7eb; font-weight:600;">lifterryan</span>
+          <span class="badge" style="background:#292524; color:#d97706; border:1px solid #44403c;">
+            <span class="badge-icon">⛏️</span> Iron · 22
+          </span>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>The Forge</h3>
+      <p>Stone → Iron → Steel → Crystal → Obsidian. Raw materials that get stronger the harder you work.</p>
+    </div>
+  </div>
+
+  <!-- CELESTIAL -->
+  <div class="card" data-choice="celestial" onclick="toggleSelect(this)">
+    <div class="card-image" style="background: linear-gradient(135deg, #020617 0%, #0f172a 50%, #1e1b4b 100%); padding: 20px;">
+      <div class="theme-preview" style="background: rgba(255,255,255,0.03);">
+        <div class="tier-row">
+          <span class="badge" style="background:#1c1917; color:#94a3b8; border:1px solid #334155;">
+            <span class="badge-icon">⭐</span> Star · 5
+          </span>
+          <span class="badge" style="background:#0c4a6e; color:#7dd3fc; border:1px solid #0369a1;">
+            <span class="badge-icon">🌙</span> Lunar · 29
+          </span>
+          <span class="badge" style="background:#14532d; color:#86efac; border:1px solid #15803d;">
+            <span class="badge-icon">🪐</span> Orbit · 41
+          </span>
+          <span class="badge" style="background:#4c1d95; color:#ddd6fe; border:1px solid #7c3aed;">
+            <span class="badge-icon">🌌</span> Nebula · 18
+          </span>
+          <span class="badge" style="background:#030712; color:#f9fafb; border:1px solid #6366f1; box-shadow: 0 0 10px rgba(99,102,241,0.5);">
+            <span class="badge-icon">🌠</span> Cosmos · 50
+          </span>
+        </div>
+        <div class="level-demo">
+          <div class="avatar-mock">🌙</div>
+          <span style="color:#e5e7eb; font-weight:600;">moonrunner</span>
+          <span class="badge" style="background:#4c1d95; color:#ddd6fe; border:1px solid #7c3aed;">
+            <span class="badge-icon">🌌</span> Nebula · 33
+          </span>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Celestial</h3>
+      <p>Star → Lunar → Orbit → Nebula → Cosmos. Your fitness journey reaches for the stars.</p>
+    </div>
+  </div>
+
+  <!-- PREDATOR -->
+  <div class="card" data-choice="predator" onclick="toggleSelect(this)">
+    <div class="card-image" style="background: linear-gradient(135deg, #0a0a0a 0%, #111827 100%); padding: 20px;">
+      <div class="theme-preview" style="background: rgba(255,255,255,0.03);">
+        <div class="tier-row">
+          <span class="badge" style="background:#1c1917; color:#a8a29e; border:1px solid #292524;">
+            <span class="badge-icon">🐾</span> Cub · 9
+          </span>
+          <span class="badge" style="background:#78350f; color:#fde68a; border:1px solid #b45309;">
+            <span class="badge-icon">🦊</span> Hunter · 31
+          </span>
+          <span class="badge" style="background:#1e3a5f; color:#93c5fd; border:1px solid #2563eb;">
+            <span class="badge-icon">🐺</span> Wolf · 47
+          </span>
+          <span class="badge" style="background:#1a0a2e; color:#f0abfc; border:1px solid #9333ea;">
+            <span class="badge-icon">🐆</span> Apex · 22
+          </span>
+          <span class="badge" style="background:#0a0a0a; color:#f87171; border:1px solid #991b1b; box-shadow: 0 0 10px rgba(239,68,68,0.3);">
+            <span class="badge-icon">👁️</span> Phantom · 50
+          </span>
+        </div>
+        <div class="level-demo">
+          <div class="avatar-mock">🐺</div>
+          <span style="color:#e5e7eb; font-weight:600;">alexfit</span>
+          <span class="badge" style="background:#1e3a5f; color:#93c5fd; border:1px solid #2563eb;">
+            <span class="badge-icon">🐺</span> Wolf · 14
+          </span>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Predator</h3>
+      <p>Cub → Hunter → Wolf → Apex → Phantom. Every rep makes you a more dangerous animal.</p>
+    </div>
+  </div>
+
+  <!-- AURA -->
+  <div class="card" data-choice="aura" onclick="toggleSelect(this)">
+    <div class="card-image" style="background: linear-gradient(135deg, #0f0f0f 0%, #0d1117 100%); padding: 20px;">
+      <div class="theme-preview" style="background: rgba(255,255,255,0.03);">
+        <div class="tier-row">
+          <span class="badge" style="background:#1c1917; color:#6b7280; border:1px solid #374151;">
+            <span class="badge-icon">🩶</span> Grey · 7
+          </span>
+          <span class="badge" style="background:#0c2a1e; color:#34d399; border:1px solid #059669;">
+            <span class="badge-icon">💚</span> Vitality · 28
+          </span>
+          <span class="badge" style="background:#1e1b4b; color:#818cf8; border:1px solid #4338ca;">
+            <span class="badge-icon">💜</span> Radiance · 39
+          </span>
+          <span class="badge" style="background:#0c1a3a; color:#38bdf8; border:1px solid #0284c7;">
+            <span class="badge-icon">💙</span> Ascendant · 16
+          </span>
+          <span class="badge" style="background:#1a0505; color:#fca5a5; border:1px solid #dc2626; box-shadow: 0 0 12px rgba(220,38,38,0.4);">
+            <span class="badge-icon">❤️‍🔥</span> Transcendent · 50
+          </span>
+        </div>
+        <div class="level-demo">
+          <div class="avatar-mock">✨</div>
+          <span style="color:#e5e7eb; font-weight:600;">zenrunner</span>
+          <span class="badge" style="background:#1e1b4b; color:#818cf8; border:1px solid #4338ca;">
+            <span class="badge-icon">💜</span> Radiance · 6
+          </span>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Aura</h3>
+      <p>Grey → Vitality → Radiance → Ascendant → Transcendent. Your aura grows with every goal you crush.</p>
+    </div>
+  </div>
+
+</div>
