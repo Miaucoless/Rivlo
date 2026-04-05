@@ -5,6 +5,8 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { useRouter } from 'next/navigation'
 import { Bookmark, ChevronLeft, ChevronRight, Heart, MessageCircle, Send } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { XpBadge } from '@/components/ui/XpBadge'
+import { AvatarWithBadge } from '@/components/ui/AvatarWithBadge'
 import type { PostMediaItem, SocialPost } from '@/types'
 import { formatCompactNumber, getSocialPostBadge, getSocialPostPreview } from '@/lib/social-feed'
 import { buildSocialProfileHref } from '@/lib/social-connections'
@@ -256,17 +258,17 @@ export function SocialPostCard({
             }}
             className="flex min-w-0 items-center gap-2.5 rounded-2xl text-left transition-opacity hover:opacity-85"
           >
-            <div
-              className={cn(
-                'flex h-8 w-8 items-center justify-center rounded-full bg-muted text-xs font-semibold text-foreground',
-                post.user.avatar_url ? 'bg-cover bg-center bg-no-repeat' : ''
-              )}
-              style={post.user.avatar_url ? { backgroundImage: `url(${post.user.avatar_url})` } : undefined}
-            >
-              {!post.user.avatar_url ? post.user.name.charAt(0).toUpperCase() : null}
-            </div>
+            <AvatarWithBadge
+              src={post.user.avatar_url ?? undefined}
+              name={post.user.name}
+              size={32}
+              hasCrown={post.user.has_crown}
+            />
             <div className="min-w-0">
-              <p className="truncate text-sm font-medium text-foreground">@{post.user.username}</p>
+              <div className="flex items-center gap-1.5">
+                <p className="truncate text-sm font-medium text-foreground">@{post.user.username}</p>
+                {post.user.xp_total != null ? <XpBadge totalXp={post.user.xp_total} size="sm" /> : null}
+              </div>
               <p className="text-xs text-muted-foreground">{post.user.name}</p>
             </div>
           </button>

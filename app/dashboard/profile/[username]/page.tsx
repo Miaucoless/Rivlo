@@ -4,9 +4,11 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useParams, useSearchParams } from 'next/navigation'
 import { addDays, format } from 'date-fns'
-import { ArrowLeft, Lock, UserPlus } from 'lucide-react'
+import { ArrowLeft, Lock } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { XpBadge } from '@/components/ui/XpBadge'
+import { AvatarWithBadge } from '@/components/ui/AvatarWithBadge'
 import { Card, CardContent } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PeopleDialog } from '@/components/feed/PeopleDialog'
@@ -402,12 +404,13 @@ export default function PublicProfilePage() {
         <div className="relative -mt-10 space-y-6 px-1 pb-1 pt-0 sm:px-2">
           <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-              <div
-                className={`flex h-20 w-20 items-center justify-center overflow-hidden rounded-full border-4 border-background bg-gradient-to-br from-emerald-400 to-teal-500 text-2xl font-bold text-white shadow-lg ${profileUser.avatar_url ? 'bg-cover bg-center bg-no-repeat' : ''}`}
-                style={profileUser.avatar_url ? { backgroundImage: `url(${profileUser.avatar_url})` } : undefined}
-              >
-                {!profileUser.avatar_url ? profileUser.name.charAt(0).toUpperCase() : null}
-              </div>
+              <AvatarWithBadge
+                src={profileUser.avatar_url ?? undefined}
+                name={profileUser.name}
+                size={80}
+                hasCrown={profileUser.has_crown}
+                className="border-4 border-background shadow-lg"
+              />
 
               <div className="space-y-3">
                 <div>
@@ -415,6 +418,7 @@ export default function PublicProfilePage() {
                   <h1 className="mt-1 text-2xl font-semibold tracking-tight">{profileUser.name}</h1>
                   <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                     <span>@{profileUser.username}</span>
+                    {profileUser.xp_total != null ? <XpBadge totalXp={profileUser.xp_total} size="sm" /> : null}
                     {profileUser.profile_visibility === 'private' ? (
                       <span className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-muted/30 px-2.5 py-1 text-xs">
                         <Lock className="h-3 w-3" />

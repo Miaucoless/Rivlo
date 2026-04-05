@@ -34,7 +34,11 @@ import type {
   SocialPost,
   SocialPostDraft,
   SocialPostStats,
+  XpState,
+  XpAction,
+  LevelUpResult,
 } from '@/types'
+import { computeXpGain, applyXp } from '@/lib/xp-system'
 import {
   DEMO_USER,
   RECIPES,
@@ -61,6 +65,8 @@ import {
   fetchCloudState,
   getCloudHydrationScopesForPath,
   saveMetadataCloudState,
+  saveXpCloudState,
+  fetchXpCloudState,
   seedCloudFromLocal,
   upsertCustomRecipe,
   upsertCustomWorkout,
@@ -205,6 +211,13 @@ interface AppStore {
   toggleLikeSocialPost: (postId: string, sourcePost?: SocialPost) => void
   addCommentToSocialPost: (postId: string, body: string) => void
   incrementSocialPostStats: (postId: string, updates: Partial<SocialPostStats>) => void
+
+  // XP & Rank
+  xpState: XpState
+  pendingLevelUpResult: LevelUpResult | null
+  addXp: (action: XpAction) => void
+  clearLevelUpResult: () => void
+  claimCrown: () => void
 
   // Getters
   getDailyMeals: (date: string) => MealLogEntry[]
@@ -1225,6 +1238,8 @@ export const useAppStore = create<AppStore>()(
       socialLikedPostIds: [],
       socialPostComments: {},
       socialComposerPrefill: null,
+      xpState: { total: 0, has_crown: false, last_action_dates: {}, streak_days: 0 },
+      pendingLevelUpResult: null,
       user: null,
       isAuthenticated: false,
       isDemoMode: false,
@@ -1309,9 +1324,6 @@ export const useAppStore = create<AppStore>()(
           })
         })
 
-        if (mergedUser) {
-          void get().hydrateFromCloud(mergedUser.id, ['metadata'])
-        }
       },
 
       restoreUserDataBackup: (userId) => {
@@ -1370,6 +1382,7 @@ export const useAppStore = create<AppStore>()(
         }
 
         const localState = get()
+        const includeSocialMetadata = hasScope('metadata') && profile === 'default'
         const localSocialState = mergeSocialMetadataState(
           buildSocialMetadataState(localState),
           readSocialMetadataBackup(userId)
@@ -1449,11 +1462,11 @@ export const useAppStore = create<AppStore>()(
           customRecipes: localOnlyRecipes,
           customWorkouts: localOnlyWorkoutTemplates,
           waterLogs: Object.keys(localOnlyWaterLogs).length > 0 ? localOnlyWaterLogs : {},
-          socialPosts: hasScope('metadata') ? mergedSocialCloudState.socialPosts : [],
-          socialFollows: hasScope('metadata') ? mergedSocialCloudState.socialFollows : [],
-          socialSavedPostIds: hasScope('metadata') ? mergedSocialCloudState.socialSavedPostIds : [],
-          socialLikedPostIds: hasScope('metadata') ? mergedSocialCloudState.socialLikedPostIds : [],
-          socialPostComments: hasScope('metadata') ? mergedSocialCloudState.socialPostComments : {},
+          socialPosts: includeSocialMetadata ? mergedSocialCloudState.socialPosts : [],
+          socialFollows: includeSocialMetadata ? mergedSocialCloudState.socialFollows : [],
+          socialSavedPostIds: includeSocialMetadata ? mergedSocialCloudState.socialSavedPostIds : [],
+          socialLikedPostIds: includeSocialMetadata ? mergedSocialCloudState.socialLikedPostIds : [],
+          socialPostComments: includeSocialMetadata ? mergedSocialCloudState.socialPostComments : {},
         }
 
         console.log('🌱 Seed payload prepared:', {
@@ -1470,7 +1483,7 @@ export const useAppStore = create<AppStore>()(
           seedPayload.workoutLogs.length > 0 ||
           seedPayload.weightHistory.length > 0 ||
           seedPayload.journalEntries.length > 0 ||
-          (hasScope('metadata') && (
+          (includeSocialMetadata && (
             seedPayload.savedMeals.length > 0 ||
             seedPayload.supplements.length > 0 ||
             seedPayload.calendarReminders.length > 0 ||
@@ -1489,11 +1502,11 @@ export const useAppStore = create<AppStore>()(
 
         if (shouldSeedAnyBucket) {
           await seedCloudFromLocal(userId, seedPayload)
-          const refreshedCloud = await fetchCloudState(userId)
+          const refreshedCloud = await fetchCloudState(userId, requestedScopes, profile)
           if (refreshedCloud) finalCloud = refreshedCloud
         }
 
-        const finalSocialState = hasScope('metadata')
+        const finalSocialState = includeSocialMetadata
           ? mergeSocialMetadataState(
               {
                 socialPosts: finalCloud.socialPosts,
@@ -1506,7 +1519,7 @@ export const useAppStore = create<AppStore>()(
             )
           : localSocialState
 
-        if (hasScope('metadata')) {
+        if (includeSocialMetadata) {
           // Merge with current in-store state so the backup also captures any posts
           // created by the user during the async sections of hydration.
           const currentForBackup = buildSocialMetadataState(get())
@@ -1528,13 +1541,15 @@ export const useAppStore = create<AppStore>()(
             updates.savedMeals = savedMeals
             updates.supplements = finalCloud.supplements
             updates.calendarReminders = finalCloud.calendarReminders
-            // Merge with current in-store social data to preserve any posts/likes/comments
-            // created by the user during the async hydration window.
-            updates.socialPosts = mergeSocialPosts(finalSocialState.socialPosts, state.socialPosts)
-            updates.socialFollows = mergeSocialFollows(finalSocialState.socialFollows, state.socialFollows)
-            updates.socialSavedPostIds = mergeSocialIds(finalSocialState.socialSavedPostIds, state.socialSavedPostIds)
-            updates.socialLikedPostIds = mergeSocialIds(finalSocialState.socialLikedPostIds, state.socialLikedPostIds)
-            updates.socialPostComments = mergeSocialComments(finalSocialState.socialPostComments, state.socialPostComments)
+            if (includeSocialMetadata) {
+              // Merge with current in-store social data to preserve any posts/likes/comments
+              // created by the user during the async hydration window.
+              updates.socialPosts = mergeSocialPosts(finalSocialState.socialPosts, state.socialPosts)
+              updates.socialFollows = mergeSocialFollows(finalSocialState.socialFollows, state.socialFollows)
+              updates.socialSavedPostIds = mergeSocialIds(finalSocialState.socialSavedPostIds, state.socialSavedPostIds)
+              updates.socialLikedPostIds = mergeSocialIds(finalSocialState.socialLikedPostIds, state.socialLikedPostIds)
+              updates.socialPostComments = mergeSocialComments(finalSocialState.socialPostComments, state.socialPostComments)
+            }
           }
           if (hasScope('planner')) {
             updates.weeklyMealPlan = finalCloud.weeklyMealPlan
@@ -1557,6 +1572,16 @@ export const useAppStore = create<AppStore>()(
             lastSyncedAt: new Date().toISOString(),
           }
         })
+
+        // Hydrate XP state from its own column (targeted read, no full-row fetch)
+        try {
+          const cloudXp = await fetchXpCloudState(userId)
+          if (cloudXp) {
+            set({ xpState: cloudXp })
+          }
+        } catch {
+          // XP column may not exist yet (migration pending) — fail silently
+        }
 
         const latestState = get()
         if (!latestState.isDemoMode && latestState.user?.id === userId) {
@@ -1793,6 +1818,8 @@ export const useAppStore = create<AppStore>()(
           weightHistory: [...state.weightHistory.filter((weight) => weight.date !== normalizedEntry.date), normalizedEntry].sort((a, b) => a.date.localeCompare(b.date)),
         }))
 
+        get().addXp('weight')
+
         const state = get()
         if (state.user && !state.isDemoMode) {
           enqueueCloudWrite(set, async () => {
@@ -1819,6 +1846,8 @@ export const useAppStore = create<AppStore>()(
         set((state) => withRefreshedNotifications(state, {
           journalEntries: [normalizedEntry, ...state.journalEntries],
         }))
+
+        get().addXp('journal')
 
         const state = get()
         if (state.user && !state.isDemoMode) {
@@ -1867,6 +1896,18 @@ export const useAppStore = create<AppStore>()(
             [date]: [...(state.mealEntries[date] || []), normalizedMeal],
           },
         }))
+
+        // Meal XP (up to 3x per day)
+        get().addXp('meal')
+
+        // Protein goal XP: check if today's protein now meets the target
+        const afterMeal = get()
+        const todayMeals = afterMeal.mealEntries[date] ?? []
+        const totalProtein = todayMeals.reduce((sum, m) => sum + (m.macros?.protein ?? 0), 0)
+        const proteinGoal = afterMeal.user?.protein_target_g ?? 0
+        if (proteinGoal > 0 && totalProtein >= proteinGoal) {
+          get().addXp('protein')
+        }
 
         const state = get()
         if (state.user && !state.isDemoMode) {
@@ -1921,6 +1962,15 @@ export const useAppStore = create<AppStore>()(
             [entry.date]: [...(state.waterLogs[entry.date] || []), normalized],
           },
         }))
+
+        // Water goal XP: check if today's total now meets the goal
+        const afterWater = get()
+        const waterTotal = (afterWater.waterLogs[entry.date] ?? []).reduce((sum, e) => sum + e.amount_ml, 0)
+        const waterGoal = afterWater.user?.water_goal_ml ?? 0
+        if (waterGoal > 0 && waterTotal >= waterGoal) {
+          get().addXp('water')
+        }
+
         const state = get()
         if (state.user && !state.isDemoMode) {
           enqueueCloudWrite(set, async () => {
@@ -2492,6 +2542,8 @@ export const useAppStore = create<AppStore>()(
           streak: state.streak + (state.workoutLogs.some((workout) => workout.date === getTodayISO()) ? 0 : 1),
         }))
 
+        get().addXp('workout')
+
         const state = get()
         if (state.user && !state.isDemoMode) {
           enqueueCloudWrite(set, async () => {
@@ -2601,6 +2653,8 @@ export const useAppStore = create<AppStore>()(
               banner_url: state.user.banner_url,
               bio: state.user.bio,
               profile_visibility: state.user.profile_visibility,
+              xp_total: state.xpState.total,
+              has_crown: state.xpState.has_crown,
             }
           : {
               id: DEMO_USER.id,
@@ -2613,6 +2667,7 @@ export const useAppStore = create<AppStore>()(
           socialPosts: [nextPost, ...current.socialPosts],
         }))
 
+        get().addXp('post')
         queueSocialMetadataSync(set, get)
 
         return nextPost.id
@@ -2849,6 +2904,76 @@ export const useAppStore = create<AppStore>()(
           ),
         }))
         queueSocialMetadataSync(set, get)
+      },
+
+      // ─── XP Actions ───────────────────────────────────────────────────────────
+
+      addXp: (action) => {
+        const state = get()
+        if (state.isDemoMode) return
+
+        const currentXpState = state.xpState
+        const gain = computeXpGain(action, currentXpState)
+        if (gain === 0) return
+
+        const { newState, result } = applyXp(gain, action, currentXpState)
+
+        // Check perfect day bonus: workout + water + protein all hit today
+        const today = new Date().toISOString().slice(0, 10)
+        let finalState = newState
+        let finalResult = result
+
+        const d = finalState.last_action_dates
+        if (
+          d.workout === today &&
+          d.water === today &&
+          d.protein === today &&
+          d.perfect_day !== today
+        ) {
+          const bonusGain = computeXpGain('perfect_day', finalState)
+          if (bonusGain > 0) {
+            const bonus = applyXp(bonusGain, 'perfect_day', finalState)
+            finalState = bonus.newState
+            if (bonus.result.kind !== 'none') finalResult = bonus.result
+          }
+        }
+
+        // Check 7-day streak bonus
+        if (state.streak > 0 && state.streak % 7 === 0 && d.streak_bonus !== today) {
+          const streakGain = computeXpGain('streak_bonus', finalState)
+          if (streakGain > 0) {
+            const streakBonus = applyXp(streakGain, 'streak_bonus', finalState)
+            finalState = streakBonus.newState
+            if (streakBonus.result.kind !== 'none') finalResult = streakBonus.result
+          }
+        }
+
+        set((s) => ({
+          xpState: finalState,
+          pendingLevelUpResult: finalResult.kind !== 'none' ? finalResult : s.pendingLevelUpResult,
+        }))
+
+        // Targeted single-column write — does not touch any other data
+        const user = get().user
+        if (user) {
+          enqueueCloudWrite(set, async () => {
+            await saveXpCloudState(user.id, finalState)
+          })
+        }
+      },
+
+      clearLevelUpResult: () => set({ pendingLevelUpResult: null }),
+
+      claimCrown: () => {
+        const state = get()
+        const newXpState = { ...state.xpState, has_crown: true }
+        set({ xpState: newXpState, pendingLevelUpResult: null })
+        const user = state.user
+        if (user && !state.isDemoMode) {
+          enqueueCloudWrite(set, async () => {
+            await saveXpCloudState(user.id, newXpState)
+          })
+        }
       },
 
       getDailyMeals: (date) => {

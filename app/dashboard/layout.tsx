@@ -10,6 +10,7 @@ import { Sidebar } from '@/components/dashboard/Sidebar'
 import { BottomNav } from '@/components/dashboard/BottomNav'
 import { TopBar } from '@/components/dashboard/TopBar'
 import { ExposeStore } from '@/components/ExposeStore'
+import { LevelUpController } from '@/components/xp/LevelUpController'
 
 import { useIsMobile } from '@/hooks/useIsMobile'
 import { useAppStore } from '@/store/useAppStore'
@@ -274,6 +275,7 @@ export default function DashboardLayout({
       </motion.div>
 
       <BottomNav scrollContainerRef={mainRef} />
+      <LevelUpController />
     </div>
   )
 }

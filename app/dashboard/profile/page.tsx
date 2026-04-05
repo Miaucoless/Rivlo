@@ -22,6 +22,8 @@ import { SocialPostDetailDialog } from '@/components/feed/SocialPostDetailDialog
 import { DEFAULT_SOCIAL_POSTS, buildSocialDraftFromPost, getSocialCreators } from '@/lib/social-feed'
 import { getFollowerCount, getFollowingCount, mergeSocialProfiles } from '@/lib/social-connections'
 import type { SocialPost, SocialPostUser } from '@/types'
+import { XpBadge } from '@/components/ui/XpBadge'
+import { XpProgressBar } from '@/components/xp/XpProgressBar'
 
 type ProfileComment = {
   id: string
@@ -62,6 +64,7 @@ async function getToken() {
 export default function ProfilePage() {
   const router = useRouter()
   const user = useAppStore((state) => state.user)
+  const xpState = useAppStore((state) => state.xpState)
   const isDemoMode = useAppStore((state) => state.isDemoMode)
   const socialPosts = useAppStore((state) => state.socialPosts)
   const socialFollows = useAppStore((state) => state.socialFollows)
@@ -370,6 +373,20 @@ export default function ProfilePage() {
                 >
                   <PencilLine className="h-3 w-3" />
                 </label>
+                {xpState.has_crown && (
+                  <span
+                    className="pointer-events-none absolute"
+                    style={{ top: -14, right: -8, filter: 'drop-shadow(0 0 4px rgba(251,191,36,0.7))' }}
+                  >
+                    <svg width="28" height="22" viewBox="0 0 28 22" fill="none">
+                      <path d="M2 18L4 8L9 13L14 2L19 13L24 8L26 18Z" fill="#fbbf24" stroke="#f59e0b" strokeWidth="1" strokeLinejoin="round" />
+                      <rect x="2" y="18" width="24" height="4" rx="1" fill="#d97706" />
+                      <circle cx="14" cy="3" r="2" fill="#fef08a" />
+                      <circle cx="4.5" cy="8.5" r="1.5" fill="#fef08a" />
+                      <circle cx="23.5" cy="8.5" r="1.5" fill="#fef08a" />
+                    </svg>
+                  </span>
+                )}
               </div>
 
               <div className="space-y-3">
@@ -379,6 +396,10 @@ export default function ProfilePage() {
                   <p className="mt-1 text-sm text-muted-foreground">
                     @{user.username || fallbackUsername(user.name)} · Joined {format(new Date(user.created_at), 'MMMM yyyy')}
                   </p>
+                  <div className="mt-2 flex flex-col gap-2">
+                    <XpBadge totalXp={xpState.total} size="sm" />
+                    <XpProgressBar totalXp={xpState.total} />
+                  </div>
                 </div>
 
                 {draft.bio ? <p className="max-w-2xl text-sm leading-6 text-muted-foreground">{draft.bio}</p> : null}

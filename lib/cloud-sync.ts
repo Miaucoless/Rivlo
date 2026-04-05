@@ -16,6 +16,7 @@ import type {
   WorkoutLog,
 } from '@/types'
 import type { MealLogEntry } from '@/lib/content-library'
+import { getTodayISO } from '@/lib/utils'
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
@@ -186,6 +187,10 @@ const EMPTY_METADATA_APP_STATE: MetadataAppState = {
 
 const metadataStateCache = new Map<string, MetadataAppState>()
 
+type FetchMetadataAppStateOptions = {
+  includeSocial?: boolean
+}
+
 function cloneMetadataAppState(state: MetadataAppState): MetadataAppState {
   return {
     savedMeals: [...state.savedMeals],
@@ -274,9 +279,32 @@ function parseJsonNotes<T>(raw: unknown): T | null {
   }
 }
 
-async function fetchMetadataAppState(userId: string): Promise<MetadataAppState> {
+async function fetchMetadataAppState(
+  userId: string,
+  options?: FetchMetadataAppStateOptions
+): Promise<MetadataAppState> {
   const supabase = createClient()
-  const selectColumns = 'saved_meals, supplements, calendar_reminders, social_posts, social_follows, social_saved_post_ids, social_liked_post_ids, social_post_comments'
+  const includeSocial = options?.includeSocial ?? true
+  const cachedState = metadataStateCache.get(userId)
+
+  if (cachedState) {
+    return includeSocial
+      ? cloneMetadataAppState(cachedState)
+      : {
+          savedMeals: [...cachedState.savedMeals],
+          supplements: [...cachedState.supplements],
+          calendarReminders: [...cachedState.calendarReminders],
+          socialPosts: [],
+          socialFollows: [],
+          socialSavedPostIds: [],
+          socialLikedPostIds: [],
+          socialPostComments: {},
+        }
+  }
+
+  const selectColumns = includeSocial
+    ? 'saved_meals, supplements, calendar_reminders, social_posts, social_follows, social_saved_post_ids, social_liked_post_ids, social_post_comments'
+    : 'saved_meals, supplements, calendar_reminders'
 
   // Try the proper table first (new path)
   let { data, error } = await supabase
@@ -286,6 +314,7 @@ async function fetchMetadataAppState(userId: string): Promise<MetadataAppState> 
     .maybeSingle()
 
   const missingSocialColumns =
+    includeSocial &&
     !!error &&
     (
       error.message.includes('social_posts') ||
@@ -332,12 +361,18 @@ async function fetchMetadataAppState(userId: string): Promise<MetadataAppState> 
         : authFallback.socialPostComments,
     }
 
-    metadataStateCache.set(userId, cloneMetadataAppState(normalizedState))
+    if (includeSocial) {
+      metadataStateCache.set(userId, cloneMetadataAppState(normalizedState))
+    }
     return normalizedState
   }
 
-  const fallbackState = await fetchAuthMetadataAppState(supabase)
-  metadataStateCache.set(userId, cloneMetadataAppState(fallbackState))
+  const fallbackState = includeSocial
+    ? await fetchAuthMetadataAppState(supabase)
+    : EMPTY_METADATA_APP_STATE
+  if (includeSocial) {
+    metadataStateCache.set(userId, cloneMetadataAppState(fallbackState))
+  }
   return fallbackState
 }
 
@@ -411,6 +446,36 @@ export async function saveMetadataCloudState(
   if (error && error.code !== '42501') throw new Error(error.message)
 
   metadataStateCache.set(userId, cloneMetadataAppState(nextState))
+}
+
+// ─── XP Cloud Sync ───────────────────────────────────────────────────────────
+// Writes only the `xp` column — a tiny targeted update, no full-row rewrite.
+
+export async function saveXpCloudState(
+  userId: string,
+  xpState: import('@/types').XpState,
+): Promise<void> {
+  const supabase = createClient()
+  const { error } = await supabase
+    .from('user_app_state')
+    .upsert({ user_id: userId, xp: xpState, updated_at: new Date().toISOString() }, { onConflict: 'user_id' })
+  // RLS violations (42501) mean the session expired — data is safe locally.
+  if (error && error.code !== '42501') throw new Error(error.message)
+}
+
+export async function fetchXpCloudState(
+  userId: string,
+): Promise<import('@/types').XpState | null> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('user_app_state')
+    .select('xp')
+    .eq('user_id', userId)
+    .single()
+  if (error || !data) return null
+  const xp = (data as { xp?: unknown }).xp
+  if (!xp || typeof xp !== 'object') return null
+  return xp as import('@/types').XpState
 }
 
 function mealToRow(userId: string, date: string, meal: MealLogEntry) {
@@ -573,39 +638,96 @@ export async function fetchCloudState(
     scopes && scopes.length > 0 ? scopes : ALL_CLOUD_HYDRATION_SCOPES
   )
   const shouldFetch = (scope: CloudHydrationScope) => requestedScopes.has(scope)
+  const includeSocialMetadata = profile === 'default'
+  const todayIso = getTodayISO()
   const recentDaysIso = (days: number) => {
     const date = new Date()
     date.setDate(date.getDate() - days)
     return date.toISOString().slice(0, 10)
   }
-  const queryMealEntries = () => {
+  const queryMealEntries = async () => {
+    if (profile === 'dashboard') {
+      const [todayResp, recentResp] = await Promise.all([
+        supabase
+          .from('meal_entries')
+          .select('*')
+          .eq('user_id', userId)
+          .eq('date', todayIso)
+          .order('logged_at', { ascending: false })
+          .limit(24),
+        supabase
+          .from('meal_entries')
+          .select('id,user_id,date,meal_type,name,calories,protein_g,carbs_g,fat_g,logged_at')
+          .eq('user_id', userId)
+          .gte('date', recentDaysIso(10))
+          .lt('date', todayIso)
+          .order('logged_at', { ascending: false })
+          .limit(48),
+      ])
+
+      return {
+        data: [...(todayResp.data ?? []), ...(recentResp.data ?? [])],
+        error: todayResp.error ?? recentResp.error,
+      }
+    }
+
     let query = supabase.from('meal_entries').select('*').eq('user_id', userId).order('logged_at', { ascending: false })
-    if (profile === 'dashboard') query = query.gte('date', recentDaysIso(21)).limit(120)
-    else if (profile === 'calendar') query = query.gte('date', recentDaysIso(45)).limit(220)
+    if (profile === 'calendar') query = query.gte('date', recentDaysIso(35)).limit(160)
     else if (profile === 'meals') query = query.gte('date', recentDaysIso(60)).limit(320)
     return query
   }
-  const queryWorkoutLogs = () => {
+  const queryWorkoutLogs = async () => {
+    if (profile === 'dashboard') {
+      const [todayResp, recentResp] = await Promise.all([
+        supabase
+          .from('workout_logs')
+          .select('*')
+          .eq('user_id', userId)
+          .eq('date', todayIso)
+          .order('started_at', { ascending: false })
+          .limit(6),
+        supabase
+          .from('workout_logs')
+          .select('id,user_id,workout_id,workout_name,date,started_at,completed_at,duration_min,rating')
+          .eq('user_id', userId)
+          .gte('date', recentDaysIso(14))
+          .lt('date', todayIso)
+          .order('date', { ascending: false })
+          .limit(18),
+      ])
+
+      return {
+        data: [...(todayResp.data ?? []), ...(recentResp.data ?? [])],
+        error: todayResp.error ?? recentResp.error,
+      }
+    }
+
     let query = supabase.from('workout_logs').select('*').eq('user_id', userId).order('date', { ascending: false })
-    if (profile === 'dashboard') query = query.limit(48)
-    else if (profile === 'calendar') query = query.limit(90)
-    else if (profile === 'workouts') query = query.limit(120)
+    if (profile === 'calendar') query = query.gte('date', recentDaysIso(35)).limit(60)
+    else if (profile === 'workouts') query = query.gte('date', recentDaysIso(45)).limit(80)
     return query
   }
   const queryWeightEntries = () => {
     let query = supabase.from('weight_entries').select('*').eq('user_id', userId).order('date', { ascending: false })
-    if (profile === 'dashboard') query = query.limit(45)
+    if (profile === 'dashboard') query = query.limit(21)
     return query
   }
   const queryJournalEntries = () => {
     let query = supabase.from('journal_entries').select('*').eq('user_id', userId).order('date', { ascending: false })
-    if (profile === 'dashboard') query = query.limit(24)
-    else if (profile === 'workouts') query = query.limit(40)
+    if (profile === 'dashboard') {
+      query = supabase
+        .from('journal_entries')
+        .select('id,user_id,date,title,mood,energy,tags,workout_log_id,created_at,updated_at')
+        .eq('user_id', userId)
+        .gte('date', recentDaysIso(14))
+        .order('date', { ascending: false })
+        .limit(14)
+    } else if (profile === 'workouts') query = query.limit(30)
     return query
   }
   const queryWaterLogs = () => {
     let query = supabase.from('water_logs').select('*').eq('user_id', userId).order('logged_at', { ascending: false })
-    if (profile === 'dashboard') query = query.gte('date', recentDaysIso(14)).limit(120)
+    if (profile === 'dashboard') query = query.gte('date', recentDaysIso(10)).limit(84)
     return query
   }
   const queryNotifications = () => {
@@ -673,7 +795,7 @@ export async function fetchCloudState(
         )
       : Promise.resolve({ data: [] as any[], error: null }),
     shouldFetch('metadata')
-      ? fetchMetadataAppState(userId)
+      ? fetchMetadataAppState(userId, { includeSocial: includeSocialMetadata })
       : Promise.resolve(EMPTY_METADATA_APP_STATE),
     shouldFetch('notifications')
       ? selectOrEmpty(
@@ -719,7 +841,7 @@ export async function fetchCloudState(
     user_id: row.user_id,
     date: row.date,
     title: row.title ?? undefined,
-    content: row.content,
+    content: row.content ?? '',
     mood: row.mood,
     energy: row.energy,
     tags: row.tags ?? [],

@@ -316,6 +316,8 @@ export interface SocialPostUser {
   banner_url?: string
   bio?: string
   profile_visibility?: 'public' | 'private'
+  xp_total?: number
+  has_crown?: boolean
 }
 
 export interface SocialFollowRelationship {
@@ -707,6 +709,59 @@ export interface WeeklyReview {
   recommendation: WeeklyRecommendation
   recovery_actions: WeeklyRecoveryAction[]
 }
+
+// ─── XP & Rank System ──────────────────────────────────────────────────────────
+
+export type XpAction =
+  | 'workout'
+  | 'water'
+  | 'protein'
+  | 'meal'
+  | 'journal'
+  | 'weight'
+  | 'post'
+  | 'streak_bonus'
+  | 'perfect_day'
+
+export type LevelUpResult =
+  | { kind: 'none' }
+  | { kind: 'level-up'; tierName: string; level: number; xpGained: number }
+  | { kind: 'tier-up'; newTierName: string; xpGained: number }
+  | { kind: 'crown'; xpGained: number }
+
+export interface XpLastActionDates {
+  workout?: string
+  water?: string
+  protein?: string
+  meal?: string
+  meal_count?: number
+  journal?: string
+  weight?: string
+  post?: string
+  streak_bonus?: string
+  perfect_day?: string
+}
+
+export interface XpState {
+  total: number
+  has_crown: boolean
+  last_action_dates: XpLastActionDates
+  streak_days: number
+  last_active_date?: string
+}
+
+export interface XpInfo {
+  tierIndex: number
+  tierName: string
+  level: number
+  maxLevelInTier: number
+  xpIntoLevel: number
+  xpForLevel: number
+  progressPct: number
+  isMaxed: boolean
+}
+
+// ─── Weekly Recap ───────────────────────────────────────────────────────────────
 
 export interface WeeklyRecapShareData {
   week_label: string
