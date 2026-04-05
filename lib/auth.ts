@@ -72,6 +72,46 @@ function clearSupabaseBrowserSessionStorage() {
   }
 }
 
+type SafeJsonResult<T> = {
+  payload: T | null
+  isHtml: boolean
+  rawText: string | null
+}
+
+async function readJsonResponseSafely<T>(response: Response): Promise<SafeJsonResult<T>> {
+  const rawText = await response.text().catch(() => '')
+  const trimmed = rawText.trim()
+  const contentType = response.headers.get('content-type')?.toLowerCase() ?? ''
+  const isHtml = contentType.includes('text/html') || trimmed.startsWith('<!DOCTYPE') || trimmed.startsWith('<html')
+
+  if (!trimmed || isHtml) {
+    return {
+      payload: null,
+      isHtml,
+      rawText,
+    }
+  }
+
+  try {
+    return {
+      payload: JSON.parse(trimmed) as T,
+      isHtml: false,
+      rawText,
+    }
+  } catch {
+    return {
+      payload: null,
+      isHtml: false,
+      rawText,
+    }
+  }
+}
+
+function isCorruptedSessionStorageError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error)
+  return message.includes("Unexpected token '<'") || message.includes('not valid JSON')
+}
+
 function normalizeProfile(profile: Partial<UserProfile> | null | undefined): UserProfile | null {
   if (!profile) return null
 
@@ -288,7 +328,11 @@ export async function signInWithEmail(
       }),
     })
 
-    const payload = await response.json().catch(() => null) as AuthBootstrapPayload | null
+    const { payload, isHtml } = await readJsonResponseSafely<AuthBootstrapPayload>(response)
+
+    if (isHtml) {
+      throw new Error('The sign-in endpoint returned HTML instead of JSON.')
+    }
 
     if (!response.ok) {
       return {
@@ -302,11 +346,30 @@ export async function signInWithEmail(
       return { success: false, error: 'Failed to sign in' }
     }
 
-    const supabase = createClient()
-    const { error: sessionError } = await supabase.auth.setSession({
-      access_token: payload.session.access_token,
-      refresh_token: payload.session.refresh_token,
-    })
+    let sessionError: { message: string } | null = null
+
+    try {
+      const supabase = createClient()
+      const result = await supabase.auth.setSession({
+        access_token: payload.session.access_token,
+        refresh_token: payload.session.refresh_token,
+      })
+      sessionError = result.error
+    } catch (error) {
+      if (!isCorruptedSessionStorageError(error)) {
+        throw error
+      }
+
+      console.warn('Cached browser auth state was corrupted during sign-in. Clearing it and retrying once.', error)
+      clearSupabaseBrowserSessionStorage()
+
+      const supabase = createClient()
+      const result = await supabase.auth.setSession({
+        access_token: payload.session.access_token,
+        refresh_token: payload.session.refresh_token,
+      })
+      sessionError = result.error
+    }
 
     if (sessionError) {
       return { success: false, error: sessionError.message }
@@ -325,8 +388,18 @@ export async function signInWithEmail(
   } catch (error) {
     console.warn('Server-side sign-in path failed, retrying with the direct browser auth flow.', error)
     try {
+      if (isCorruptedSessionStorageError(error)) {
+        clearSupabaseBrowserSessionStorage()
+      }
       return await signInWithEmailDirect(email, password)
     } catch (directError) {
+      if (isCorruptedSessionStorageError(directError)) {
+        clearSupabaseBrowserSessionStorage()
+        return {
+          success: false,
+          error: 'Your saved sign-in session was corrupted. Please try signing in again.',
+        }
+      }
       return { success: false, error: String(directError) }
     }
   }
@@ -344,7 +417,7 @@ export async function requestPasswordReset(email: string): Promise<AuthResponse>
       }),
     })
 
-    const payload = await response.json().catch(() => null)
+    const { payload } = await readJsonResponseSafely<{ error?: string }>(response)
 
     if (!response.ok) {
       return { success: false, error: payload?.error || 'Failed to send password reset email.' }
@@ -456,7 +529,7 @@ export async function confirmPasswordReset(
       }),
     })
 
-    const payload = await response.json().catch(() => null)
+    const { payload } = await readJsonResponseSafely<{ error?: string }>(response)
 
     if (!response.ok) {
       return { success: false, error: payload?.error || 'Failed to update password.' }
@@ -503,7 +576,7 @@ export async function deleteAccount(): Promise<AuthResponse> {
       },
     })
 
-    const payload = await response.json().catch(() => null)
+    const { payload } = await readJsonResponseSafely<{ error?: string }>(response)
     if (!response.ok) {
       return { success: false, error: payload?.error || 'Failed to delete your account.' }
     }
@@ -517,9 +590,23 @@ export async function deleteAccount(): Promise<AuthResponse> {
 
 export async function getCurrentUser(): Promise<UserProfile | null> {
   try {
-    const supabase = createClient()
+    let supabase = createClient()
 
-    const { data, error } = await supabase.auth.getUser()
+    let authLookup
+    try {
+      authLookup = await supabase.auth.getUser()
+    } catch (error) {
+      if (!isCorruptedSessionStorageError(error)) {
+        throw error
+      }
+
+      console.warn('Cached browser auth state was corrupted during auth bootstrap. Clearing it before retry.', error)
+      clearSupabaseBrowserSessionStorage()
+      supabase = createClient()
+      authLookup = await supabase.auth.getUser()
+    }
+
+    const { data, error } = authLookup
     if (!error && data.user) {
       const fallbackUser = buildFallbackProfileFromAuthUser(data.user)
 
@@ -563,7 +650,7 @@ export async function getCurrentUser(): Promise<UserProfile | null> {
       return null
     }
 
-    const payload = await response.json().catch(() => null) as AuthBootstrapPayload | null
+    const { payload } = await readJsonResponseSafely<AuthBootstrapPayload>(response)
     return buildProfileFromBootstrapPayload(payload ?? {})
   } catch (error) {
     return null
