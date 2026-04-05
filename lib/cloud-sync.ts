@@ -84,6 +84,29 @@ const EMPTY_METADATA_APP_STATE: MetadataAppState = {
   socialPostComments: {},
 }
 
+async function fetchAuthMetadataAppState(
+  supabase: ReturnType<typeof createClient>
+): Promise<MetadataAppState> {
+  const { data: authData, error: authError } = await supabase.auth.getUser()
+  if (authError || !authData.user) return EMPTY_METADATA_APP_STATE
+
+  const appState = (authData.user.user_metadata as { app_state?: MetadataAppState } | undefined)?.app_state
+  if (!appState) return EMPTY_METADATA_APP_STATE
+
+  return {
+    savedMeals: Array.isArray(appState.savedMeals) ? appState.savedMeals : [],
+    supplements: Array.isArray(appState.supplements) ? appState.supplements : [],
+    calendarReminders: Array.isArray(appState.calendarReminders) ? appState.calendarReminders : [],
+    socialPosts: Array.isArray(appState.socialPosts) ? appState.socialPosts : [],
+    socialFollows: Array.isArray(appState.socialFollows) ? appState.socialFollows : [],
+    socialSavedPostIds: Array.isArray(appState.socialSavedPostIds) ? appState.socialSavedPostIds : [],
+    socialLikedPostIds: Array.isArray(appState.socialLikedPostIds) ? appState.socialLikedPostIds : [],
+    socialPostComments: appState.socialPostComments && typeof appState.socialPostComments === 'object'
+      ? appState.socialPostComments
+      : {},
+  }
+}
+
 function isUuid(value: string) {
   return UUID_REGEX.test(value)
 }
@@ -167,39 +190,33 @@ async function fetchMetadataAppState(userId: string): Promise<MetadataAppState> 
   }
 
   if (!error && data) {
+    const authFallback = missingSocialColumns
+      ? await fetchAuthMetadataAppState(supabase)
+      : EMPTY_METADATA_APP_STATE
+
     return {
       savedMeals: Array.isArray(data.saved_meals) ? data.saved_meals : [],
       supplements: Array.isArray(data.supplements) ? data.supplements : [],
       calendarReminders: Array.isArray(data.calendar_reminders) ? data.calendar_reminders : [],
-      socialPosts: Array.isArray((data as any).social_posts) ? (data as any).social_posts : [],
-      socialFollows: Array.isArray((data as any).social_follows) ? (data as any).social_follows : [],
-      socialSavedPostIds: Array.isArray((data as any).social_saved_post_ids) ? (data as any).social_saved_post_ids : [],
-      socialLikedPostIds: Array.isArray((data as any).social_liked_post_ids) ? (data as any).social_liked_post_ids : [],
+      socialPosts: Array.isArray((data as any).social_posts)
+        ? (data as any).social_posts
+        : authFallback.socialPosts,
+      socialFollows: Array.isArray((data as any).social_follows)
+        ? (data as any).social_follows
+        : authFallback.socialFollows,
+      socialSavedPostIds: Array.isArray((data as any).social_saved_post_ids)
+        ? (data as any).social_saved_post_ids
+        : authFallback.socialSavedPostIds,
+      socialLikedPostIds: Array.isArray((data as any).social_liked_post_ids)
+        ? (data as any).social_liked_post_ids
+        : authFallback.socialLikedPostIds,
       socialPostComments: typeof (data as any).social_post_comments === 'object' && (data as any).social_post_comments
         ? (data as any).social_post_comments
-        : {},
+        : authFallback.socialPostComments,
     }
   }
 
-  // Fall back to user metadata for users who haven't migrated yet
-  const { data: authData, error: authError } = await supabase.auth.getUser()
-  if (authError || !authData.user) return EMPTY_METADATA_APP_STATE
-
-  const appState = (authData.user.user_metadata as { app_state?: MetadataAppState } | undefined)?.app_state
-  if (!appState) return EMPTY_METADATA_APP_STATE
-
-  return {
-    savedMeals: Array.isArray(appState.savedMeals) ? appState.savedMeals : [],
-    supplements: Array.isArray(appState.supplements) ? appState.supplements : [],
-    calendarReminders: Array.isArray(appState.calendarReminders) ? appState.calendarReminders : [],
-    socialPosts: Array.isArray(appState.socialPosts) ? appState.socialPosts : [],
-    socialFollows: Array.isArray(appState.socialFollows) ? appState.socialFollows : [],
-    socialSavedPostIds: Array.isArray(appState.socialSavedPostIds) ? appState.socialSavedPostIds : [],
-    socialLikedPostIds: Array.isArray(appState.socialLikedPostIds) ? appState.socialLikedPostIds : [],
-    socialPostComments: appState.socialPostComments && typeof appState.socialPostComments === 'object'
-      ? appState.socialPostComments
-      : {},
-  }
+  return fetchAuthMetadataAppState(supabase)
 }
 
 export async function saveMetadataCloudState(userId: string, state: Partial<MetadataAppState>) {
@@ -249,6 +266,16 @@ export async function saveMetadataCloudState(userId: string, state: Partial<Meta
       updated_at: new Date().toISOString(),
     }, { onConflict: 'user_id' })
     error = retry.error
+
+    const authFallback = await supabase.auth.updateUser({
+      data: {
+        app_state: nextState,
+      },
+    })
+
+    if (authFallback.error && error && error.code !== '42501') {
+      throw new Error(authFallback.error.message)
+    }
   }
 
   // RLS violations (code 42501) mean the session has expired — local data is

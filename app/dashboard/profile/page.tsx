@@ -1,10 +1,10 @@
 'use client'
 
-import type { ChangeEvent, ReactNode } from 'react'
+import type { ChangeEvent } from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { format } from 'date-fns'
-import { Globe2, Loader2, Lock, MessageSquareText, PencilLine, Plus, Repeat2, Share2, Trash2, UserCheck, Users, UtensilsCrossed, Dumbbell } from 'lucide-react'
+import { Globe2, Loader2, Lock, PencilLine, Plus, Share2, Trash2, UserCheck, Users, Dumbbell } from 'lucide-react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
@@ -180,8 +180,6 @@ export default function ProfilePage() {
     .filter((item) => item.followerId === user?.id && item.status === 'accepted')
     .map((item) => peopleById.get(item.followingId))
     .filter(Boolean), [peopleById, socialFollows, user?.id])
-  const totalSaves = ownPosts.reduce((sum, post) => sum + post.stats.saved, 0)
-  const totalReposts = ownPosts.reduce((sum, post) => sum + post.stats.remixed, 0)
   const savedPosts = useMemo(
     () => socialSavedPostIds
       .map((postId) => browseablePosts.find((post) => post.id === postId))
@@ -315,54 +313,52 @@ export default function ProfilePage() {
             className={`h-24 ${draft.banner_url ? 'bg-cover bg-center bg-no-repeat' : 'bg-[linear-gradient(135deg,rgba(16,185,129,0.18),rgba(20,184,166,0.08),rgba(15,23,42,0.04))]'}`}
             style={draft.banner_url ? { backgroundImage: `linear-gradient(180deg,rgba(15,23,42,0.08),rgba(15,23,42,0.2)), url(${draft.banner_url})` } : undefined}
           />
-          <button
-            type="button"
-            onClick={() => bannerInputRef.current?.click()}
-            className="absolute bottom-3 right-3 inline-flex h-8 w-8 items-center justify-center rounded-full border border-border/70 bg-background/90 text-muted-foreground shadow-sm backdrop-blur transition-colors hover:bg-background"
-            aria-label="Change banner image"
-          >
-            <PencilLine className="h-3.5 w-3.5" />
-          </button>
           <input
+            id="profile-banner-upload"
             ref={bannerInputRef}
             type="file"
             accept="image/*"
             className="hidden"
             onChange={handleBannerSelect}
           />
+          <label
+            htmlFor="profile-banner-upload"
+            className="absolute bottom-3 right-3 inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-border/70 bg-background/90 text-muted-foreground shadow-sm backdrop-blur transition-colors hover:bg-background"
+            aria-label="Change banner image"
+          >
+            <PencilLine className="h-3.5 w-3.5" />
+          </label>
         </div>
         <CardContent className="relative -mt-10 space-y-6 px-5 pb-5 pt-0 sm:px-6">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex flex-col gap-5">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => avatarInputRef.current?.click()}
-                  className={cn(
-                    'flex h-20 w-20 items-center justify-center overflow-hidden rounded-3xl border-4 border-background bg-gradient-to-br from-emerald-400 to-teal-500 text-2xl font-bold text-white shadow-lg',
-                    draft.avatar_url ? 'bg-cover bg-center bg-no-repeat' : '',
-                    'cursor-pointer'
-                  )}
-                  style={draft.avatar_url ? { backgroundImage: `url(${draft.avatar_url})` } : undefined}
-                  aria-label="Change profile photo"
-                >
-                  {!draft.avatar_url ? nameOrFallback(draft.name || user.name) : null}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => avatarInputRef.current?.click()}
-                  className="absolute bottom-1 right-1 inline-flex h-7 w-7 items-center justify-center rounded-full border border-border/70 bg-background/90 text-muted-foreground shadow-sm backdrop-blur transition-colors hover:bg-background"
-                  aria-label="Upload profile photo"
-                >
-                  <PencilLine className="h-3.5 w-3.5" />
-                </button>
+              <div className="relative h-20 w-20 shrink-0">
                 <input
+                  id="profile-avatar-upload"
                   ref={avatarInputRef}
                   type="file"
                   accept="image/*"
                   className="hidden"
                   onChange={handleAvatarSelect}
                 />
+                <label
+                  htmlFor="profile-avatar-upload"
+                  className={cn(
+                    'flex h-20 w-20 cursor-pointer items-center justify-center overflow-hidden rounded-full border-4 border-background bg-gradient-to-br from-emerald-400 to-teal-500 text-2xl font-bold text-white shadow-lg',
+                    draft.avatar_url ? 'bg-cover bg-center bg-no-repeat' : '',
+                  )}
+                  style={draft.avatar_url ? { backgroundImage: `url(${draft.avatar_url})` } : undefined}
+                  aria-label="Change profile photo"
+                >
+                  {!draft.avatar_url ? nameOrFallback(draft.name || user.name) : null}
+                </label>
+                <label
+                  htmlFor="profile-avatar-upload"
+                  className="absolute bottom-0 right-0 z-10 inline-flex h-7 w-7 translate-x-[8%] translate-y-[8%] cursor-pointer items-center justify-center rounded-full border border-border/70 bg-background/95 text-muted-foreground shadow-sm backdrop-blur transition-colors hover:bg-background"
+                  aria-label="Upload profile photo"
+                >
+                  <PencilLine className="h-3.5 w-3.5" />
+                </label>
               </div>
 
               <div className="space-y-3">
@@ -376,35 +372,29 @@ export default function ProfilePage() {
 
                 {draft.bio ? <p className="max-w-2xl text-sm leading-6 text-muted-foreground">{draft.bio}</p> : null}
 
-                <div className="flex flex-wrap items-end gap-6 pt-1">
+                <div className="flex flex-wrap items-end gap-x-6 gap-y-3 pt-1">
                   <div className="min-w-[72px]">
-                    <p className="text-2xl font-semibold tracking-tight text-foreground">{ownPosts.length}</p>
-                    <p className="text-sm text-muted-foreground">Posts</p>
+                    <p className="text-lg font-semibold tracking-tight text-foreground">{ownPosts.length}</p>
+                    <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Posts</p>
                   </div>
                   <button
                     type="button"
                     onClick={() => setFollowersOpen(true)}
                     className="min-w-[88px] text-left transition-opacity hover:opacity-80"
                   >
-                    <p className="text-2xl font-semibold tracking-tight text-foreground">{followerCount}</p>
-                    <p className="text-sm text-muted-foreground">Followers</p>
+                    <p className="text-lg font-semibold tracking-tight text-foreground">{followerCount}</p>
+                    <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Followers</p>
                   </button>
                   <button
                     type="button"
                     onClick={() => setFollowingOpen(true)}
                     className="min-w-[88px] text-left transition-opacity hover:opacity-80"
                   >
-                    <p className="text-2xl font-semibold tracking-tight text-foreground">{followingCount}</p>
-                    <p className="text-sm text-muted-foreground">Following</p>
+                    <p className="text-lg font-semibold tracking-tight text-foreground">{followingCount}</p>
+                    <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Following</p>
                   </button>
                 </div>
               </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-3 sm:min-w-[220px] lg:grid-cols-1">
-              <StatCard label="Comments" value={comments.length} icon={<MessageSquareText className="h-4 w-4" />} />
-              <StatCard label="Saves" value={totalSaves} icon={<UtensilsCrossed className="h-4 w-4" />} />
-              <StatCard label="Reposts" value={totalReposts} icon={<Repeat2 className="h-4 w-4" />} />
             </div>
           </div>
 
@@ -517,12 +507,11 @@ export default function ProfilePage() {
                 <Button
                   type="button"
                   variant="ghost"
-                  size="icon"
-                  className="h-9 w-9 self-end rounded-full text-muted-foreground"
+                  className="h-8 self-end rounded-full px-3 text-xs text-muted-foreground"
                   onClick={() => setIsEditingProfile(true)}
-                  aria-label="Edit profile"
+                  aria-label="Edit profile details"
                 >
-                  <PencilLine className="h-4 w-4" />
+                  Edit details
                 </Button>
               )}
             </div>
@@ -839,32 +828,6 @@ export default function ProfilePage() {
         emptyDetail="Profiles you follow will show up here."
       />
     </div>
-  )
-}
-
-function StatCard({ label, value, icon, onClick }: { label: string; value: number; icon: ReactNode; onClick?: () => void }) {
-  const content = (
-    <>
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-muted-foreground">{icon}</span>
-        <span className="font-data text-xl font-semibold">{value}</span>
-      </div>
-      <p className="mt-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">{label}</p>
-    </>
-  )
-
-  if (!onClick) {
-    return (
-      <div className="rounded-2xl border border-border/60 bg-background/80 px-4 py-3">
-        {content}
-      </div>
-    )
-  }
-
-  return (
-    <button type="button" onClick={onClick} className="rounded-2xl border border-border/60 bg-background/80 px-4 py-3 text-left transition-colors hover:bg-muted/20">
-      {content}
-    </button>
   )
 }
 
