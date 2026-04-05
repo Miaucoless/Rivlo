@@ -363,20 +363,26 @@ async function flushCloudWriteQueue(set: any) {
 
   try {
     while (pendingCloudWriteQueue.length > 0) {
-      const task = pendingCloudWriteQueue[0]
-      await task()
-      pendingCloudWriteQueue.shift()
+      const task = pendingCloudWriteQueue.shift()
+      if (!task) break
+
+      try {
+        await task()
+      } catch (error) {
+        console.error('Cloud write failed; dropping queued task so later syncs can continue.', error)
+        set({
+          syncStatus: isOfflineClient() ? 'offline' : 'error',
+          pendingCloudWrites: pendingCloudWriteQueue.length,
+        })
+        continue
+      }
+
       set({
         syncStatus: pendingCloudWriteQueue.length > 0 ? 'syncing' : 'idle',
         pendingCloudWrites: pendingCloudWriteQueue.length,
         lastSyncedAt: new Date().toISOString(),
       })
     }
-  } catch {
-    set({
-      syncStatus: isOfflineClient() ? 'offline' : 'error',
-      pendingCloudWrites: pendingCloudWriteQueue.length,
-    })
   } finally {
     flushingPendingCloudWrites = false
   }
@@ -389,6 +395,14 @@ function enqueueCloudWrite(set: any, task: () => Promise<void>) {
     pendingCloudWrites: pendingCloudWriteQueue.length,
   })
   void flushCloudWriteQueue(set)
+}
+
+function clearPendingCloudWriteQueue(set: any) {
+  pendingCloudWriteQueue.length = 0
+  set({
+    syncStatus: 'idle',
+    pendingCloudWrites: 0,
+  })
 }
 
 // Realistic exercise sets for each PPL day in demo mode
@@ -984,13 +998,13 @@ function queueSocialMetadataSync(set: any, get: () => AppStore) {
   const { user, isDemoMode } = get()
   if (!user || isDemoMode) return
 
-  writeSocialMetadataBackup(user.id, buildSocialMetadataState(get()))
+  const userId = user.id
+  const socialStateSnapshot = buildSocialMetadataState(get())
+  writeSocialMetadataBackup(userId, socialStateSnapshot)
 
   enqueueCloudWrite(set, async () => {
-    const state = get()
-    const nextSocialState = buildSocialMetadataState(state)
-    writeSocialMetadataBackup(user.id, nextSocialState)
-    await saveMetadataCloudState(user.id, nextSocialState)
+    writeSocialMetadataBackup(userId, socialStateSnapshot)
+    await saveMetadataCloudState(userId, socialStateSnapshot)
   })
 }
 
@@ -1071,6 +1085,10 @@ type UserDataBackup = Pick<
   | 'cloudHydratedScopes'
 >
 
+function normalizeHydratedScopes(value: unknown): CloudHydrationScope[] {
+  return Array.isArray(value) ? value as CloudHydrationScope[] : []
+}
+
 function userDataBackupKey(userId: string) {
   return `rivora-user-backup:${userId}`
 }
@@ -1103,7 +1121,7 @@ function buildUserDataBackup(state: AppStore): UserDataBackup {
     streak: state.streak,
     lastSyncedAt: state.lastSyncedAt,
     cloudHydratedUserId: state.cloudHydratedUserId,
-    cloudHydratedScopes: state.cloudHydratedScopes,
+    cloudHydratedScopes: normalizeHydratedScopes(state.cloudHydratedScopes),
   }
 }
 
@@ -1114,17 +1132,25 @@ function readUserDataBackup(userId: string): Partial<UserDataBackup> | null {
     const raw = window.localStorage.getItem(userDataBackupKey(userId))
     if (!raw) return null
     const parsed = JSON.parse(raw)
-    return parsed && typeof parsed === 'object' ? parsed as Partial<UserDataBackup> : null
+    if (!parsed || typeof parsed !== 'object') return null
+
+    return {
+      ...(parsed as Partial<UserDataBackup>),
+      cloudHydratedScopes: normalizeHydratedScopes((parsed as Partial<UserDataBackup>).cloudHydratedScopes),
+    }
   } catch {
     return null
   }
 }
 
 function mergeHydratedScopes(
-  current: CloudHydrationScope[],
-  incoming: CloudHydrationScope[]
+  current: CloudHydrationScope[] | undefined,
+  incoming: CloudHydrationScope[] | undefined
 ) {
-  return Array.from(new Set([...current, ...incoming]))
+  return Array.from(new Set([
+    ...normalizeHydratedScopes(current),
+    ...normalizeHydratedScopes(incoming),
+  ]))
 }
 
 function writeUserDataBackup(userId: string, state: AppStore) {
@@ -1216,10 +1242,15 @@ export const useAppStore = create<AppStore>()(
 
       setUser: (user) => {
         const mergedUser = mergeUserWithStoredSplitPreferences(user)
+        const previousUserId = get().user?.id ?? null
+        const nextUserId = mergedUser?.id ?? null
+        const isUserSwitch = !!nextUserId && previousUserId !== nextUserId
+
+        if (isUserSwitch) {
+          clearPendingCloudWriteQueue(set)
+        }
 
         set((state) => {
-          const isUserSwitch = !!mergedUser && state.user?.id !== mergedUser.id
-
           if (isUserSwitch) {
             if (state.user?.id && !state.isDemoMode) {
               writeUserDataBackup(state.user.id, state)
@@ -1258,7 +1289,7 @@ export const useAppStore = create<AppStore>()(
               cloudHydratedScopes: [],
               ...restoredBackup,
               cloudHydratedUserId: restoredBackup?.cloudHydratedUserId ?? mergedUser?.id ?? null,
-              cloudHydratedScopes: restoredBackup?.cloudHydratedScopes ?? [],
+              cloudHydratedScopes: normalizeHydratedScopes(restoredBackup?.cloudHydratedScopes),
               user: mergedUser,
               isAuthenticated: !!mergedUser,
               isDemoMode: false,
@@ -1294,7 +1325,7 @@ export const useAppStore = create<AppStore>()(
             ...restoredBackup,
             notificationPreferences: restoredBackup.notificationPreferences ?? state.notificationPreferences,
             cloudHydratedUserId: restoredBackup.cloudHydratedUserId ?? state.cloudHydratedUserId,
-            cloudHydratedScopes: restoredBackup.cloudHydratedScopes ?? state.cloudHydratedScopes,
+            cloudHydratedScopes: normalizeHydratedScopes(restoredBackup.cloudHydratedScopes ?? state.cloudHydratedScopes),
           })
         })
       },
@@ -1548,7 +1579,7 @@ export const useAppStore = create<AppStore>()(
           !force &&
           afterFlush.pendingCloudWrites === 0 &&
           afterFlush.cloudHydratedUserId === afterFlush.user?.id &&
-          requestedScopes.every((scope) => afterFlush.cloudHydratedScopes.includes(scope)) &&
+          requestedScopes.every((scope) => normalizeHydratedScopes(afterFlush.cloudHydratedScopes).includes(scope)) &&
           afterFlush.lastSyncedAt
         ) {
           const lastSyncedAt = Date.parse(afterFlush.lastSyncedAt)
@@ -1677,7 +1708,7 @@ export const useAppStore = create<AppStore>()(
         if (currentState.user?.id && !currentState.isDemoMode) {
           writeUserDataBackup(currentState.user.id, currentState)
         }
-        pendingCloudWriteQueue.length = 0
+        clearPendingCloudWriteQueue(set)
         set({
           savedMeals: [],
           customRecipes: [],
@@ -2855,7 +2886,7 @@ export const useAppStore = create<AppStore>()(
     {
       name: 'rivora-store',
       storage: createJSONStorage(() => safePersistStorage),
-      version: 6,
+      version: 7,
       migrate: (persistedState) => {
         const state = (persistedState ?? {}) as Partial<AppStore>
         return {
@@ -2867,7 +2898,7 @@ export const useAppStore = create<AppStore>()(
           notificationPreferences: state.notificationPreferences ?? DEFAULT_NOTIFICATION_PREFERENCES,
           waterUnit: state.waterUnit === 'ml' || state.waterUnit === 'l' ? state.waterUnit : 'oz',
           lastSyncedAt: typeof state.lastSyncedAt === 'string' ? state.lastSyncedAt : null,
-          cloudHydratedScopes: Array.isArray(state.cloudHydratedScopes) ? state.cloudHydratedScopes : [],
+          cloudHydratedScopes: normalizeHydratedScopes(state.cloudHydratedScopes),
           socialPosts: Array.isArray(state.socialPosts) ? state.socialPosts : [],
         }
       },
@@ -2880,7 +2911,7 @@ export const useAppStore = create<AppStore>()(
         notificationPreferences: state.notificationPreferences,
         waterUnit: state.waterUnit,
         lastSyncedAt: state.lastSyncedAt,
-        cloudHydratedScopes: state.cloudHydratedScopes,
+        cloudHydratedScopes: normalizeHydratedScopes(state.cloudHydratedScopes),
         // Persist user's own social posts so they survive page refresh immediately
         // (cloud hydration will merge and sync any newer data from other devices)
         socialPosts: state.socialPosts,
