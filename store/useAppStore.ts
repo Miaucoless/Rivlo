@@ -54,8 +54,12 @@ import {
   deleteMealEntryCloud,
   deleteWorkoutLogCloud,
   deleteWeightEntryCloud,
+  ALL_CLOUD_HYDRATION_SCOPES,
+  type CloudHydrationProfile,
+  type CloudHydrationScope,
   ensureUuid,
   fetchCloudState,
+  getCloudHydrationScopesForPath,
   saveMetadataCloudState,
   seedCloudFromLocal,
   upsertCustomRecipe,
@@ -96,6 +100,7 @@ interface AppStore {
   isAuthenticated: boolean
   isDemoMode: boolean
   cloudHydratedUserId: string | null
+  cloudHydratedScopes: CloudHydrationScope[]
 
   // UI State
   sidebarCollapsed: boolean
@@ -117,8 +122,8 @@ interface AppStore {
   // Actions
   setUser: (user: UserProfile | null) => void
   restoreUserDataBackup: (userId: string) => void
-  hydrateFromCloud: (userId: string) => Promise<void>
-  syncNow: () => Promise<void>
+  hydrateFromCloud: (userId: string, scopes?: CloudHydrationScope[], profile?: CloudHydrationProfile) => Promise<void>
+  syncNow: (options?: { force?: boolean; scopes?: CloudHydrationScope[]; profile?: CloudHydrationProfile }) => Promise<void>
   flushPendingCloudWrites: () => Promise<void>
   updateProfile: (updates: Partial<UserProfile>) => void
   loginDemo: () => void
@@ -334,6 +339,7 @@ function mergeUserWithStoredSplitPreferences(user: UserProfile | null): UserProf
 
 let flushingPendingCloudWrites = false
 let isHydratingFromCloud = false
+const AUTO_SYNC_INTERVAL_MS = 2 * 60 * 1000
 
 function isOfflineClient() {
   return typeof navigator !== 'undefined' && navigator.onLine === false
@@ -1062,6 +1068,7 @@ type UserDataBackup = Pick<
   | 'streak'
   | 'lastSyncedAt'
   | 'cloudHydratedUserId'
+  | 'cloudHydratedScopes'
 >
 
 function userDataBackupKey(userId: string) {
@@ -1096,6 +1103,7 @@ function buildUserDataBackup(state: AppStore): UserDataBackup {
     streak: state.streak,
     lastSyncedAt: state.lastSyncedAt,
     cloudHydratedUserId: state.cloudHydratedUserId,
+    cloudHydratedScopes: state.cloudHydratedScopes,
   }
 }
 
@@ -1110,6 +1118,13 @@ function readUserDataBackup(userId: string): Partial<UserDataBackup> | null {
   } catch {
     return null
   }
+}
+
+function mergeHydratedScopes(
+  current: CloudHydrationScope[],
+  incoming: CloudHydrationScope[]
+) {
+  return Array.from(new Set([...current, ...incoming]))
 }
 
 function writeUserDataBackup(userId: string, state: AppStore) {
@@ -1235,12 +1250,15 @@ export const useAppStore = create<AppStore>()(
       weeklyMealPlan: null,
       groceryList: null,
       streak: 0,
-              syncStatus: 'idle',
+      syncStatus: 'idle',
       lastSyncedAt: null,
       pendingCloudWrites: 0,
+      cloudHydratedScopes: [],
               cloudHydratedUserId: null,
+              cloudHydratedScopes: [],
               ...restoredBackup,
               cloudHydratedUserId: restoredBackup?.cloudHydratedUserId ?? mergedUser?.id ?? null,
+              cloudHydratedScopes: restoredBackup?.cloudHydratedScopes ?? [],
               user: mergedUser,
               isAuthenticated: !!mergedUser,
               isDemoMode: false,
@@ -1257,7 +1275,7 @@ export const useAppStore = create<AppStore>()(
         })
 
         if (mergedUser) {
-          void get().hydrateFromCloud(mergedUser.id)
+          void get().hydrateFromCloud(mergedUser.id, ['metadata'])
         }
       },
 
@@ -1276,11 +1294,12 @@ export const useAppStore = create<AppStore>()(
             ...restoredBackup,
             notificationPreferences: restoredBackup.notificationPreferences ?? state.notificationPreferences,
             cloudHydratedUserId: restoredBackup.cloudHydratedUserId ?? state.cloudHydratedUserId,
+            cloudHydratedScopes: restoredBackup.cloudHydratedScopes ?? state.cloudHydratedScopes,
           })
         })
       },
 
-      hydrateFromCloud: async (userId) => {
+      hydrateFromCloud: async (userId, scopes, profile = 'default') => {
         console.log('🌥 Starting cloud hydration for user:', userId)
         if (!userId || get().isDemoMode) {
           console.log('❌ Skipping hydration - no userId or demo mode')
@@ -1300,7 +1319,11 @@ export const useAppStore = create<AppStore>()(
           pendingCloudWrites: state.pendingCloudWrites,
         }))
 
-        const cloud = await fetchCloudState(userId)
+        const requestedScopes = scopes && scopes.length > 0 ? scopes : getCloudHydrationScopesForPath('/dashboard')
+        const requestedScopeSet = new Set(requestedScopes)
+        const hasScope = (scope: CloudHydrationScope) => requestedScopeSet.has(scope)
+
+        const cloud = await fetchCloudState(userId, requestedScopes, profile)
         console.log('☁️ Cloud data received:', cloud ? 'SUCCESS' : 'NULL')
         if (!cloud) {
           set((state) => ({
@@ -1331,40 +1354,47 @@ export const useAppStore = create<AppStore>()(
 
         // Collect IDs already in cloud for each data type so we can find
         // local-only items (e.g. writes that failed silently last session).
-        const cloudMealIds = new Set(
-          Object.values(cloud.mealEntries).flatMap((meals) => meals.map((m) => m.id))
-        )
         const localOnlyMealEntries: Record<string, MealLogEntry[]> = {}
-        Object.entries(localState.mealEntries).forEach(([date, meals]) => {
-          const missing = meals.filter((m) => !cloudMealIds.has(m.id))
-          if (missing.length > 0) localOnlyMealEntries[date] = missing
-        })
+        if (hasScope('meals')) {
+          const cloudMealIds = new Set(
+            Object.values(cloud.mealEntries).flatMap((meals) => meals.map((m) => m.id))
+          )
+          Object.entries(localState.mealEntries).forEach(([date, meals]) => {
+            const missing = meals.filter((m) => !cloudMealIds.has(m.id))
+            if (missing.length > 0) localOnlyMealEntries[date] = missing
+          })
+        }
 
-        const cloudWorkoutIds = new Set(cloud.workoutLogs.map((l) => l.id))
-        const localOnlyWorkouts = localState.workoutLogs.filter((l) => !cloudWorkoutIds.has(l.id))
+        const localOnlyWorkouts = hasScope('workouts')
+          ? localState.workoutLogs.filter((l) => !new Set(cloud.workoutLogs.map((item) => item.id)).has(l.id))
+          : []
 
-        const cloudWeightIds = new Set(cloud.weightHistory.map((e) => e.id))
-        const localOnlyWeights = localState.weightHistory.filter((e) => !cloudWeightIds.has(e.id))
+        const localOnlyWeights = hasScope('tracking')
+          ? localState.weightHistory.filter((e) => !new Set(cloud.weightHistory.map((item) => item.id)).has(e.id))
+          : []
 
-        const cloudJournalIds = new Set(cloud.journalEntries.map((e) => e.id))
-        const localOnlyJournals = localState.journalEntries.filter((e) => !cloudJournalIds.has(e.id))
+        const localOnlyJournals = hasScope('journal')
+          ? localState.journalEntries.filter((e) => !new Set(cloud.journalEntries.map((item) => item.id)).has(e.id))
+          : []
 
-        const cloudWaterIds = new Set(
-          Object.values(cloud.waterLogs).flatMap((entries) => entries.map((e) => e.id))
-        )
         const localOnlyWaterLogs: Record<string, WaterEntry[]> = {}
-        Object.entries(localState.waterLogs).forEach(([date, entries]) => {
-          const missing = entries.filter((e) => !cloudWaterIds.has(e.id))
-          if (missing.length > 0) localOnlyWaterLogs[date] = missing
-        })
+        if (hasScope('water')) {
+          const cloudWaterIds = new Set(
+            Object.values(cloud.waterLogs).flatMap((entries) => entries.map((e) => e.id))
+          )
+          Object.entries(localState.waterLogs).forEach(([date, entries]) => {
+            const missing = entries.filter((e) => !cloudWaterIds.has(e.id))
+            if (missing.length > 0) localOnlyWaterLogs[date] = missing
+          })
+        }
 
-        const cloudRecipeIds = new Set(cloud.customRecipes.map((r) => r.id))
-        const localOnlyRecipes = localState.customRecipes.filter((r) => !cloudRecipeIds.has(r.id))
+        const localOnlyRecipes = hasScope('recipes')
+          ? localState.customRecipes.filter((r) => !new Set(cloud.customRecipes.map((item) => item.id)).has(r.id))
+          : []
 
-        const cloudWorkoutTemplateIds = new Set(cloud.customWorkouts.map((w) => w.id))
         const localOnlyWorkoutTemplates =
-          localState.cloudHydratedUserId === userId
-            ? localState.customWorkouts.filter((w) => !cloudWorkoutTemplateIds.has(w.id) && !localState.deletedCustomWorkoutIds.includes(w.id))
+          hasScope('templates') && localState.cloudHydratedUserId === userId
+            ? localState.customWorkouts.filter((w) => !new Set(cloud.customWorkouts.map((item) => item.id)).has(w.id) && !localState.deletedCustomWorkoutIds.includes(w.id))
             : []
 
         // Seed payload: always upload local data that doesn't exist in cloud yet
@@ -1375,19 +1405,19 @@ export const useAppStore = create<AppStore>()(
           journalEntries: localOnlyJournals,
           // Defensive fallback: if cloud metadata is empty, preserve local data
           // This handles cases where user_app_state table doesn't exist yet
-          savedMeals: cloud.savedMeals.length === 0 ? localState.savedMeals : cloud.savedMeals,
-          supplements: cloud.supplements.length === 0 ? localState.supplements : cloud.supplements,
-          calendarReminders: cloud.calendarReminders.length === 0 ? localState.calendarReminders : cloud.calendarReminders,
-          weeklyMealPlan: cloud.weeklyMealPlan ? null : localState.weeklyMealPlan,
-          groceryList: cloud.groceryList ? null : localState.groceryList,
+          savedMeals: hasScope('metadata') && cloud.savedMeals.length === 0 ? localState.savedMeals : cloud.savedMeals,
+          supplements: hasScope('metadata') && cloud.supplements.length === 0 ? localState.supplements : cloud.supplements,
+          calendarReminders: hasScope('metadata') && cloud.calendarReminders.length === 0 ? localState.calendarReminders : cloud.calendarReminders,
+          weeklyMealPlan: hasScope('planner') && !cloud.weeklyMealPlan ? localState.weeklyMealPlan : null,
+          groceryList: hasScope('planner') && !cloud.groceryList ? localState.groceryList : null,
           customRecipes: localOnlyRecipes,
           customWorkouts: localOnlyWorkoutTemplates,
           waterLogs: Object.keys(localOnlyWaterLogs).length > 0 ? localOnlyWaterLogs : {},
-          socialPosts: mergedSocialCloudState.socialPosts,
-          socialFollows: mergedSocialCloudState.socialFollows,
-          socialSavedPostIds: mergedSocialCloudState.socialSavedPostIds,
-          socialLikedPostIds: mergedSocialCloudState.socialLikedPostIds,
-          socialPostComments: mergedSocialCloudState.socialPostComments,
+          socialPosts: hasScope('metadata') ? mergedSocialCloudState.socialPosts : [],
+          socialFollows: hasScope('metadata') ? mergedSocialCloudState.socialFollows : [],
+          socialSavedPostIds: hasScope('metadata') ? mergedSocialCloudState.socialSavedPostIds : [],
+          socialLikedPostIds: hasScope('metadata') ? mergedSocialCloudState.socialLikedPostIds : [],
+          socialPostComments: hasScope('metadata') ? mergedSocialCloudState.socialPostComments : {},
         }
 
         console.log('🌱 Seed payload prepared:', {
@@ -1404,19 +1434,20 @@ export const useAppStore = create<AppStore>()(
           seedPayload.workoutLogs.length > 0 ||
           seedPayload.weightHistory.length > 0 ||
           seedPayload.journalEntries.length > 0 ||
-          seedPayload.savedMeals.length > 0 ||
-          seedPayload.supplements.length > 0 ||
-          seedPayload.calendarReminders.length > 0 ||
-          !!seedPayload.weeklyMealPlan ||
-          !!seedPayload.groceryList ||
-          seedPayload.customRecipes.length > 0 ||
-          seedPayload.customWorkouts.length > 0 ||
-          Object.keys(seedPayload.waterLogs).length > 0 ||
-          seedPayload.socialPosts.length > 0 ||
-          seedPayload.socialFollows.length > 0 ||
-          seedPayload.socialSavedPostIds.length > 0 ||
-          seedPayload.socialLikedPostIds.length > 0 ||
-          Object.keys(seedPayload.socialPostComments).length > 0
+          (hasScope('metadata') && (
+            seedPayload.savedMeals.length > 0 ||
+            seedPayload.supplements.length > 0 ||
+            seedPayload.calendarReminders.length > 0 ||
+            seedPayload.socialPosts.length > 0 ||
+            seedPayload.socialFollows.length > 0 ||
+            seedPayload.socialSavedPostIds.length > 0 ||
+            seedPayload.socialLikedPostIds.length > 0 ||
+            Object.keys(seedPayload.socialPostComments).length > 0
+          )) ||
+          (hasScope('planner') && (!!seedPayload.weeklyMealPlan || !!seedPayload.groceryList)) ||
+          (hasScope('recipes') && seedPayload.customRecipes.length > 0) ||
+          (hasScope('templates') && seedPayload.customWorkouts.length > 0) ||
+          (hasScope('water') && Object.keys(seedPayload.waterLogs).length > 0)
 
         let finalCloud = cloud
 
@@ -1426,45 +1457,61 @@ export const useAppStore = create<AppStore>()(
           if (refreshedCloud) finalCloud = refreshedCloud
         }
 
-        const finalSocialState = mergeSocialMetadataState(
-          {
-            socialPosts: finalCloud.socialPosts,
-            socialFollows: finalCloud.socialFollows,
-            socialSavedPostIds: finalCloud.socialSavedPostIds,
-            socialLikedPostIds: finalCloud.socialLikedPostIds,
-            socialPostComments: finalCloud.socialPostComments,
-          },
-          localSocialState
-        )
+        const finalSocialState = hasScope('metadata')
+          ? mergeSocialMetadataState(
+              {
+                socialPosts: finalCloud.socialPosts,
+                socialFollows: finalCloud.socialFollows,
+                socialSavedPostIds: finalCloud.socialSavedPostIds,
+                socialLikedPostIds: finalCloud.socialLikedPostIds,
+                socialPostComments: finalCloud.socialPostComments,
+              },
+              localSocialState
+            )
+          : localSocialState
 
-        writeSocialMetadataBackup(userId, finalSocialState)
+        if (hasScope('metadata')) {
+          // Merge with current in-store state so the backup also captures any posts
+          // created by the user during the async sections of hydration.
+          const currentForBackup = buildSocialMetadataState(get())
+          writeSocialMetadataBackup(userId, mergeSocialMetadataState(finalSocialState, currentForBackup))
+        }
 
         set((state) => {
           const savedMeals = finalCloud.savedMeals.filter((meal) => !state.deletedSavedMealIds.includes(meal.id))
           const customWorkouts = finalCloud.customWorkouts.filter((workout) => !state.deletedCustomWorkoutIds.includes(workout.id))
-          const updates = {
-            mealEntries: finalCloud.mealEntries,
-            workoutLogs: finalCloud.workoutLogs,
-            weightHistory: finalCloud.weightHistory,
-            journalEntries: finalCloud.journalEntries,
-            savedMeals,
-            supplements: finalCloud.supplements,
-            calendarReminders: finalCloud.calendarReminders,
-            weeklyMealPlan: finalCloud.weeklyMealPlan,
-            groceryList: finalCloud.groceryList,
-            customRecipes: finalCloud.customRecipes,
-            customWorkouts,
-            waterLogs: finalCloud.waterLogs,
-            socialPosts: finalSocialState.socialPosts,
-            socialFollows: finalSocialState.socialFollows,
-            socialSavedPostIds: finalSocialState.socialSavedPostIds,
-            socialLikedPostIds: finalSocialState.socialLikedPostIds,
-            socialPostComments: finalSocialState.socialPostComments,
+          const updates: Partial<AppStore> = {
             cloudHydratedUserId: userId,
+            cloudHydratedScopes: mergeHydratedScopes(state.cloudHydratedScopes, requestedScopes),
           }
+          if (hasScope('meals')) updates.mealEntries = finalCloud.mealEntries
+          if (hasScope('workouts')) updates.workoutLogs = finalCloud.workoutLogs
+          if (hasScope('tracking')) updates.weightHistory = finalCloud.weightHistory
+          if (hasScope('journal')) updates.journalEntries = finalCloud.journalEntries
+          if (hasScope('metadata')) {
+            updates.savedMeals = savedMeals
+            updates.supplements = finalCloud.supplements
+            updates.calendarReminders = finalCloud.calendarReminders
+            // Merge with current in-store social data to preserve any posts/likes/comments
+            // created by the user during the async hydration window.
+            updates.socialPosts = mergeSocialPosts(finalSocialState.socialPosts, state.socialPosts)
+            updates.socialFollows = mergeSocialFollows(finalSocialState.socialFollows, state.socialFollows)
+            updates.socialSavedPostIds = mergeSocialIds(finalSocialState.socialSavedPostIds, state.socialSavedPostIds)
+            updates.socialLikedPostIds = mergeSocialIds(finalSocialState.socialLikedPostIds, state.socialLikedPostIds)
+            updates.socialPostComments = mergeSocialComments(finalSocialState.socialPostComments, state.socialPostComments)
+          }
+          if (hasScope('planner')) {
+            updates.weeklyMealPlan = finalCloud.weeklyMealPlan
+            updates.groceryList = finalCloud.groceryList
+          }
+          if (hasScope('recipes')) updates.customRecipes = finalCloud.customRecipes
+          if (hasScope('templates')) updates.customWorkouts = customWorkouts
+          if (hasScope('water')) updates.waterLogs = finalCloud.waterLogs
           const refreshed = withRefreshedNotifications(state, updates)
           const computed = refreshed.notifications as import('@/types').Notification[]
-          const dbNotes = (finalCloud.dbNotifications ?? []) as import('@/types').Notification[]
+          const dbNotes = hasScope('notifications')
+            ? (finalCloud.dbNotifications ?? []) as import('@/types').Notification[]
+            : []
           const existingIds = new Set(computed.map((n) => n.id))
           const merged = [...dbNotes.filter((n) => !existingIds.has(n.id)), ...computed]
           return {
@@ -1488,11 +1535,29 @@ export const useAppStore = create<AppStore>()(
         }
       },
 
-      syncNow: async () => {
+      syncNow: async (options) => {
         const state = get()
         if (!state.user || state.isDemoMode) return
+        const force = options?.force ?? false
+        const requestedScopes = options?.scopes ?? ALL_CLOUD_HYDRATION_SCOPES
+        const profile = options?.profile ?? 'default'
+
         await flushCloudWriteQueue(set)
-        await state.hydrateFromCloud(state.user.id)
+        const afterFlush = get()
+        if (
+          !force &&
+          afterFlush.pendingCloudWrites === 0 &&
+          afterFlush.cloudHydratedUserId === afterFlush.user?.id &&
+          requestedScopes.every((scope) => afterFlush.cloudHydratedScopes.includes(scope)) &&
+          afterFlush.lastSyncedAt
+        ) {
+          const lastSyncedAt = Date.parse(afterFlush.lastSyncedAt)
+          if (!Number.isNaN(lastSyncedAt) && Date.now() - lastSyncedAt < AUTO_SYNC_INTERVAL_MS) {
+            return
+          }
+        }
+
+        await afterFlush.hydrateFromCloud(afterFlush.user.id, requestedScopes, profile)
       },
 
       flushPendingCloudWrites: async () => {
@@ -1581,6 +1646,7 @@ export const useAppStore = create<AppStore>()(
           isAuthenticated: true,
           isDemoMode: true,
           cloudHydratedUserId: null,
+          cloudHydratedScopes: [],
           savedMeals: demoSavedMeals,
           customRecipes: [],
           customWorkouts: demoSavedWorkouts,
@@ -1630,6 +1696,7 @@ export const useAppStore = create<AppStore>()(
           isAuthenticated: false,
           isDemoMode: false,
           cloudHydratedUserId: null,
+          cloudHydratedScopes: [],
           sidebarCollapsed: false,
           theme: 'dark',
           weightHistory: [],
@@ -2788,29 +2855,35 @@ export const useAppStore = create<AppStore>()(
     {
       name: 'rivora-store',
       storage: createJSONStorage(() => safePersistStorage),
-      version: 5,
+      version: 6,
       migrate: (persistedState) => {
         const state = (persistedState ?? {}) as Partial<AppStore>
         return {
           user: state.user ?? null,
-          isAuthenticated: Boolean(state.isAuthenticated && state.user),
+          isAuthenticated: Boolean(state.isDemoMode && state.isAuthenticated && state.user),
           isDemoMode: Boolean(state.isDemoMode),
           sidebarCollapsed: Boolean(state.sidebarCollapsed),
           theme: state.theme === 'light' || state.theme === 'system' ? state.theme : 'dark',
           notificationPreferences: state.notificationPreferences ?? DEFAULT_NOTIFICATION_PREFERENCES,
           waterUnit: state.waterUnit === 'ml' || state.waterUnit === 'l' ? state.waterUnit : 'oz',
           lastSyncedAt: typeof state.lastSyncedAt === 'string' ? state.lastSyncedAt : null,
+          cloudHydratedScopes: Array.isArray(state.cloudHydratedScopes) ? state.cloudHydratedScopes : [],
+          socialPosts: Array.isArray(state.socialPosts) ? state.socialPosts : [],
         }
       },
       partialize: (state) => ({
         user: state.user,
-        isAuthenticated: state.isAuthenticated,
+        isAuthenticated: state.isDemoMode ? state.isAuthenticated : false,
         isDemoMode: state.isDemoMode,
         sidebarCollapsed: state.sidebarCollapsed,
         theme: state.theme,
         notificationPreferences: state.notificationPreferences,
         waterUnit: state.waterUnit,
         lastSyncedAt: state.lastSyncedAt,
+        cloudHydratedScopes: state.cloudHydratedScopes,
+        // Persist user's own social posts so they survive page refresh immediately
+        // (cloud hydration will merge and sync any newer data from other devices)
+        socialPosts: state.socialPosts,
       }),
     }
   )
