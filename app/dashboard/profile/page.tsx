@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
-import { Globe2, Loader2, Lock, PencilLine, Plus, Share2, Trash2, UserCheck, Users, Dumbbell } from 'lucide-react'
+import { Globe2, Loader2, Lock, PencilLine, Plus, Share2, UserCheck, Users, Dumbbell } from 'lucide-react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
@@ -16,9 +16,10 @@ import { Input } from '@/components/ui/input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { PeopleDialog } from '@/components/feed/PeopleDialog'
+import { SocialPostCard } from '@/components/feed/SocialPostCard'
 import { SocialPostComposerDialog } from '@/components/feed/SocialPostComposerDialog'
 import { SocialPostDetailDialog } from '@/components/feed/SocialPostDetailDialog'
-import { DEFAULT_SOCIAL_POSTS, getSocialCreators } from '@/lib/social-feed'
+import { DEFAULT_SOCIAL_POSTS, buildSocialDraftFromPost, getSocialCreators } from '@/lib/social-feed'
 import { getFollowerCount, getFollowingCount, mergeSocialProfiles } from '@/lib/social-connections'
 import type { SocialPost, SocialPostUser } from '@/types'
 
@@ -65,12 +66,18 @@ export default function ProfilePage() {
   const socialPosts = useAppStore((state) => state.socialPosts)
   const socialFollows = useAppStore((state) => state.socialFollows)
   const socialSavedPostIds = useAppStore((state) => state.socialSavedPostIds)
+  const socialLikedPostIds = useAppStore((state) => state.socialLikedPostIds)
+  const socialPostComments = useAppStore((state) => state.socialPostComments)
   const savedMeals = useAppStore((state) => state.savedMeals)
   const customRecipes = useAppStore((state) => state.customRecipes)
   const customWorkouts = useAppStore((state) => state.customWorkouts)
   const createSocialPost = useAppStore((state) => state.createSocialPost)
+  const updateSocialPost = useAppStore((state) => state.updateSocialPost)
   const updateProfile = useAppStore((state) => state.updateProfile)
   const removeSocialPost = useAppStore((state) => state.removeSocialPost)
+  const toggleSaveSocialPost = useAppStore((state) => state.toggleSaveSocialPost)
+  const toggleLikeSocialPost = useAppStore((state) => state.toggleLikeSocialPost)
+  const addCommentToSocialPost = useAppStore((state) => state.addCommentToSocialPost)
   const avatarInputRef = useRef<HTMLInputElement>(null)
   const bannerInputRef = useRef<HTMLInputElement>(null)
   const tabsListRef = useRef<HTMLDivElement>(null)
@@ -90,6 +97,8 @@ export default function ProfilePage() {
   const [selectedPost, setSelectedPost] = useState<SocialPost | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
   const [composerOpen, setComposerOpen] = useState(false)
+  const [composerDraft, setComposerDraft] = useState<import('@/types').SocialPostDraft | null>(null)
+  const [composerEditingPostId, setComposerEditingPostId] = useState<string | null>(null)
   const [followersOpen, setFollowersOpen] = useState(false)
   const [followingOpen, setFollowingOpen] = useState(false)
 
@@ -312,7 +321,7 @@ export default function ProfilePage() {
       <section className="space-y-5">
         <div className="relative overflow-hidden rounded-[2rem] border border-border/50">
           <div
-            className={`h-24 ${draft.banner_url ? 'bg-cover bg-center bg-no-repeat' : 'bg-[linear-gradient(135deg,rgba(16,185,129,0.18),rgba(20,184,166,0.08),rgba(15,23,42,0.04))]'}`}
+            className={`h-48 ${draft.banner_url ? 'bg-cover bg-center bg-no-repeat' : 'bg-[linear-gradient(135deg,rgba(16,185,129,0.18),rgba(20,184,166,0.08),rgba(15,23,42,0.04))]'}`}
             style={draft.banner_url ? { backgroundImage: `linear-gradient(180deg,rgba(15,23,42,0.08),rgba(15,23,42,0.2)), url(${draft.banner_url})` } : undefined}
           />
           <input
@@ -538,7 +547,15 @@ export default function ProfilePage() {
                 <p className="text-sm font-medium text-foreground">Your posts</p>
                 <p className="text-sm text-muted-foreground">Create and manage everything you publish to the feed from here.</p>
               </div>
-              <Button type="button" className="rounded-full" onClick={() => setComposerOpen(true)}>
+              <Button
+                type="button"
+                className="rounded-full"
+                onClick={() => {
+                  setComposerDraft(null)
+                  setComposerEditingPostId(null)
+                  setComposerOpen(true)
+                }}
+              >
                 <Plus className="mr-2 h-4 w-4" />
                 Create Post
               </Button>
@@ -552,59 +569,19 @@ export default function ProfilePage() {
             ) : (
               <div className="space-y-10">
                 {ownPosts.map((post) => (
-                  <article
+                  <SocialPostCard
                     key={post.id}
-                    className="cursor-pointer space-y-4"
-                    onClick={() => {
-                      setSelectedPost(post)
+                    post={post}
+                    saved={socialSavedPostIds.includes(post.id)}
+                    liked={socialLikedPostIds.includes(post.id)}
+                    onOpen={(nextPost) => {
+                      setSelectedPost(nextPost)
                       setDetailOpen(true)
                     }}
-                  >
-                      <PostMediaPreview post={post} onOpenPost={() => {
-                        setSelectedPost(post)
-                        setDetailOpen(true)
-                      }} />
-
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                          {post.type === 'meal' ? 'Meal post' : post.type === 'workout' ? 'Workout post' : post.type === 'day' ? 'Day post' : 'Post'}
-                        </p>
-                        <h3 className="mt-1 text-lg font-semibold">{post.title}</h3>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        {format(new Date(post.createdAt), 'MMM d')}
-                      </p>
-                    </div>
-
-                    {post.caption ? <p className="line-clamp-3 text-sm leading-6 text-muted-foreground">{post.caption}</p> : null}
-                    {post.tags.length > 0 ? (
-                      <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-                        {post.tags.slice(0, 4).map((tag) => (
-                          <span key={tag}>#{tag}</span>
-                        ))}
-                      </div>
-                    ) : null}
-                    <div className="flex justify-end">
-                      <Button
-                          type="button"
-                          variant="ghost"
-                          className="rounded-full text-destructive hover:text-destructive"
-                          onClick={(event) => {
-                            event.stopPropagation()
-                            removeSocialPost(post.id)
-                            if (selectedPost?.id === post.id) {
-                              setSelectedPost(null)
-                              setDetailOpen(false)
-                            }
-                            toast.success('Post deleted.')
-                          }}
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Delete
-                        </Button>
-                    </div>
-                  </article>
+                    onToggleSave={(nextPost) => toggleSaveSocialPost(nextPost.id, nextPost)}
+                    onToggleLike={(nextPost) => toggleLikeSocialPost(nextPost.id, nextPost)}
+                    onAddComment={(nextPost, body) => addCommentToSocialPost(nextPost.id, body)}
+                  />
                 ))}
               </div>
             )}
@@ -777,17 +754,32 @@ export default function ProfilePage() {
       <SocialPostDetailDialog
         post={selectedPost}
         open={detailOpen}
-        saved={false}
-        liked={false}
-        comments={[]}
+        saved={Boolean(selectedPost && socialSavedPostIds.includes(selectedPost.id))}
+        liked={Boolean(selectedPost && socialLikedPostIds.includes(selectedPost.id))}
+        comments={selectedPost ? (socialPostComments[selectedPost.id] ?? []) : []}
         unitSystem={user.unit_system}
-        readOnly
         canDelete={Boolean(selectedPost && ownPosts.some((post) => post.id === selectedPost.id))}
         onOpenChange={setDetailOpen}
-        onToggleSave={() => {}}
-        onToggleLike={() => {}}
-        onAddComment={() => {}}
+        onToggleSave={() => {
+          if (!selectedPost) return
+          toggleSaveSocialPost(selectedPost.id, selectedPost)
+        }}
+        onToggleLike={() => {
+          if (!selectedPost) return
+          toggleLikeSocialPost(selectedPost.id, selectedPost)
+        }}
+        onAddComment={(body) => {
+          if (!selectedPost) return
+          addCommentToSocialPost(selectedPost.id, body)
+        }}
         onUse={() => {}}
+        onEdit={() => {
+          if (!selectedPost) return
+          setComposerDraft(buildSocialDraftFromPost(selectedPost))
+          setComposerEditingPostId(selectedPost.id)
+          setComposerOpen(true)
+          setDetailOpen(false)
+        }}
         onDelete={() => {
           if (!selectedPost) return
           removeSocialPost(selectedPost.id)
@@ -800,17 +792,30 @@ export default function ProfilePage() {
       <SocialPostComposerDialog
         open={composerOpen}
         unitSystem={user.unit_system}
-        initialDraft={null}
+        initialDraft={composerDraft}
         currentUser={currentSocialUser}
         availablePeople={socialProfiles.filter((profile) => profile.id !== user.id)}
         savedMeals={savedMeals}
         recipes={customRecipes}
         workouts={customWorkouts}
-        onOpenChange={setComposerOpen}
+        onOpenChange={(open) => {
+          setComposerOpen(open)
+          if (!open) {
+            setComposerDraft(null)
+            setComposerEditingPostId(null)
+          }
+        }}
         onSubmit={(draft) => {
-          createSocialPost(draft)
+          if (composerEditingPostId) {
+            updateSocialPost(composerEditingPostId, draft)
+            toast.success('Post updated.')
+          } else {
+            createSocialPost(draft)
+            toast.success('Post published to your feed.')
+          }
+          setComposerDraft(null)
+          setComposerEditingPostId(null)
           setComposerOpen(false)
-          toast.success('Post published to your feed.')
           router.push('/dashboard/feed')
         }}
       />
@@ -855,67 +860,6 @@ function EmptyState({ title, detail }: { title: string; detail: string }) {
         <p className="mt-2 text-sm text-muted-foreground">{detail}</p>
       </CardContent>
     </Card>
-  )
-}
-
-function PostMediaPreview({ post, onOpenPost }: { post: SocialPost; onOpenPost: () => void }) {
-  const mediaItems = post.media?.length
-    ? post.media
-    : post.image
-      ? [{ kind: 'image' as const, url: post.image }]
-      : []
-  if (mediaItems.length === 0) return null
-
-  let touchStartX = 0
-  let touchStartY = 0
-  let dragged = false
-
-  return (
-    <div className="space-y-2">
-      <div
-        className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-        onClick={(event) => {
-          event.stopPropagation()
-          if (!dragged) onOpenPost()
-        }}
-        onTouchStart={(event) => {
-          const touch = event.touches[0]
-          touchStartX = touch?.clientX ?? 0
-          touchStartY = touch?.clientY ?? 0
-          dragged = false
-        }}
-        onTouchMove={(event) => {
-          const touch = event.touches[0]
-          if (!touch) return
-          if (Math.abs(touch.clientX - touchStartX) > 10 || Math.abs(touch.clientY - touchStartY) > 10) {
-            dragged = true
-          }
-        }}
-      >
-        {mediaItems.map((mediaItem, index) => (
-          <div key={`${post.id}-media-${index}`} className="w-[84%] shrink-0 snap-center overflow-hidden rounded-[1.75rem] border border-border/50 bg-muted/20 sm:w-[68%]">
-            {mediaItem.kind === 'video' ? (
-              <video
-                src={mediaItem.url}
-                className="h-56 w-full object-cover"
-                muted
-                playsInline
-                preload="metadata"
-                controls
-              />
-            ) : (
-              <div
-                className="h-56 w-full bg-cover bg-center"
-                style={{ backgroundImage: `linear-gradient(180deg, rgba(15,23,42,0.04), rgba(15,23,42,0.18)), url("${mediaItem.url}")` }}
-              />
-            )}
-          </div>
-        ))}
-      </div>
-      {mediaItems.length > 1 ? (
-        <p className="text-xs text-muted-foreground">Swipe to browse {mediaItems.length} photos</p>
-      ) : null}
-    </div>
   )
 }
 

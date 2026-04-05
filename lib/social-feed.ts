@@ -885,6 +885,23 @@ export function createSocialPostFromDraft(draft: SocialPostDraft, user: SocialPo
   }
 }
 
+export function buildSocialDraftFromPost(post: SocialPost): SocialPostDraft {
+  return {
+    type: post.type,
+    image: post.image,
+    media: post.media,
+    title: post.title,
+    caption: post.caption,
+    tags: post.tags,
+    taggedUsers: post.taggedUsers,
+    audience: post.audience,
+    creationMode: post.creationMode,
+    mealData: post.mealData,
+    workoutData: post.workoutData,
+    dayData: post.dayData,
+  }
+}
+
 export function getDefaultExplorePosts() {
   return DEFAULT_SOCIAL_POSTS.filter((post) => post.audience === 'public')
 }

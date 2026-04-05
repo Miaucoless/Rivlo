@@ -4,7 +4,7 @@ import type { TouchEvent } from 'react'
 import { useMemo, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Apple, Bookmark, ChevronLeft, ChevronRight, Dumbbell, Heart, MessageCircle, Pill, Send, Share2, Trash2 } from 'lucide-react'
+import { Apple, Bookmark, ChevronLeft, ChevronRight, Dumbbell, Heart, MessageCircle, PencilLine, Pill, Send, Share2, Trash2 } from 'lucide-react'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -56,6 +56,7 @@ export function SocialPostDetailDialog({
   onToggleLike,
   onAddComment,
   onUse,
+  onEdit,
   onDelete,
 }: {
   post: SocialPost | null
@@ -71,6 +72,7 @@ export function SocialPostDetailDialog({
   onToggleLike: () => void
   onAddComment: (body: string) => void
   onUse: () => void
+  onEdit?: () => void
   onDelete?: () => void
 }) {
   const [shareOpen, setShareOpen] = useState(false)
@@ -659,6 +661,12 @@ export function SocialPostDetailDialog({
           <div className="shrink-0 border-t border-border/70 bg-background/95 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] backdrop-blur sm:px-6 sm:pb-4">
             {post.type === 'day' || post.type === 'general' || readOnly ? (
               <div className="flex flex-wrap justify-end gap-2">
+                {canDelete && onEdit ? (
+                  <Button variant="outline" className="h-11 rounded-full px-5" onClick={onEdit}>
+                    <PencilLine className="mr-2 h-4 w-4" />
+                    Edit
+                  </Button>
+                ) : null}
                 {canDelete && onDelete ? (
                   <Button variant="outline" className="h-11 rounded-full px-5 text-destructive hover:text-destructive" onClick={onDelete}>
                     <Trash2 className="mr-2 h-4 w-4" />
@@ -675,6 +683,12 @@ export function SocialPostDetailDialog({
                 <Button className="h-11 flex-1 rounded-full" onClick={onUse}>
                   Use This
                 </Button>
+                {canDelete && onEdit ? (
+                  <Button variant="outline" className="h-11 rounded-full px-5" onClick={onEdit}>
+                    <PencilLine className="mr-2 h-4 w-4" />
+                    Edit
+                  </Button>
+                ) : null}
                 {canDelete && onDelete ? (
                   <Button variant="outline" className="h-11 rounded-full px-5 text-destructive hover:text-destructive" onClick={onDelete}>
                     <Trash2 className="mr-2 h-4 w-4" />

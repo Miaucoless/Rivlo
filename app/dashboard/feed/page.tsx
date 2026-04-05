@@ -15,6 +15,7 @@ import { useAppStore } from '@/store/useAppStore'
 import {
   DEFAULT_SOCIAL_POSTS,
   buildSocialDraftFromRecipe,
+  buildSocialDraftFromPost,
   buildSocialDraftFromSavedMeal,
   buildSocialDraftFromWorkout,
   SOCIAL_FILTER_OPTIONS,
@@ -91,6 +92,17 @@ function writePublicSocialCache(userId: string, includeProfiles: boolean, payloa
   }
 }
 
+function clearPublicSocialCache(userId: string | null | undefined) {
+  if (typeof window === 'undefined' || !userId) return
+
+  try {
+    window.sessionStorage.removeItem(getPublicSocialCacheKey(userId, false))
+    window.sessionStorage.removeItem(getPublicSocialCacheKey(userId, true))
+  } catch {
+    // Ignore cache clear failures.
+  }
+}
+
 async function getToken() {
   const supabase = createClient()
   const {
@@ -117,6 +129,7 @@ export default function FeedPage() {
     addCommentToSocialPost,
     incrementSocialPostStats,
     createSocialPost,
+    updateSocialPost,
     removeSocialPost,
     requestToFollowUser,
     cancelFollowRequest,
@@ -144,6 +157,7 @@ export default function FeedPage() {
   const [actionMode, setActionMode] = useState<'use' | null>(null)
   const [composerOpen, setComposerOpen] = useState(false)
   const [composerDraft, setComposerDraft] = useState<SocialPostDraft | null>(null)
+  const [composerEditingPostId, setComposerEditingPostId] = useState<string | null>(null)
   const [remotePublicPosts, setRemotePublicPosts] = useState<SocialPost[]>([])
   const [remoteProfiles, setRemoteProfiles] = useState<SocialPostUser[]>([])
   const [remoteFollows, setRemoteFollows] = useState<SocialFollowRelationship[]>([])
@@ -227,13 +241,16 @@ export default function FeedPage() {
     const seededPosts = DEFAULT_SOCIAL_POSTS
     const combinedPosts = [
       ...socialPosts,
-      ...remotePublicPosts.filter((remotePost) => !socialPosts.some((post) => post.id === remotePost.id)),
+      ...remotePublicPosts.filter((remotePost) => {
+        if (remotePost.user.id === viewerId) return false
+        return !socialPosts.some((post) => post.id === remotePost.id)
+      }),
     ]
     return [
       ...combinedPosts,
       ...seededPosts.filter((defaultPost) => !combinedPosts.some((post) => post.id === defaultPost.id)),
     ]
-  }, [remotePublicPosts, socialPosts])
+  }, [remotePublicPosts, socialPosts, viewerId])
 
   // Explore: all posts marked public (no follow required)
   const explorePosts = useMemo(() => (
@@ -325,6 +342,7 @@ export default function FeedPage() {
     if (!nextDraft) return
 
     setComposerDraft(nextDraft)
+    setComposerEditingPostId(null)
     setComposerOpen(true)
     setSocialComposerPrefill(null)
     router.replace(pathname, { scroll: false })
@@ -463,8 +481,15 @@ export default function FeedPage() {
   }
 
   const publishPost = (draft: SocialPostDraft) => {
-    createSocialPost(draft)
+    const isEditing = !!composerEditingPostId
+    if (composerEditingPostId) {
+      updateSocialPost(composerEditingPostId, draft)
+    } else {
+      createSocialPost(draft)
+    }
+    clearPublicSocialCache(viewerId)
     setComposerDraft(null)
+    setComposerEditingPostId(null)
     setComposerOpen(false)
     setActiveTab('explore')
     setFilter('all')
@@ -475,7 +500,15 @@ export default function FeedPage() {
     requestAnimationFrame(() => {
       window.scrollTo({ top: 0, behavior: 'smooth' })
     })
-    toast.success('Post published to your feed.')
+    toast.success(isEditing ? 'Post updated.' : 'Post published to your feed.')
+  }
+
+  const handleEditPost = () => {
+    if (!activePost || !user || activePost.user.id !== user.id) return
+    setComposerDraft(buildSocialDraftFromPost(activePost))
+    setComposerEditingPostId(activePost.id)
+    setComposerOpen(true)
+    setDetailOpen(false)
   }
 
   const handleFollowAction = (profile: SocialPostUser) => {
@@ -502,6 +535,7 @@ export default function FeedPage() {
   const handleDeletePost = () => {
     if (!activePost || !user || activePost.user.id !== user.id) return
     removeSocialPost(activePost.id)
+    clearPublicSocialCache(user.id)
     setDetailOpen(false)
     setSelectedPost(null)
     setActionMode(null)
@@ -526,7 +560,7 @@ export default function FeedPage() {
         </div>
 
         <div className="flex flex-wrap gap-3">
-          <Button className="h-11 rounded-full px-5" onClick={() => { setComposerDraft(null); setComposerOpen(true) }}>
+          <Button className="h-11 rounded-full px-5" onClick={() => { setComposerDraft(null); setComposerEditingPostId(null); setComposerOpen(true) }}>
             <Plus className="mr-2 h-4 w-4" />
             Create Post
           </Button>
@@ -839,6 +873,7 @@ export default function FeedPage() {
           setDetailOpen(false)
           setActionMode('use')
         }}
+        onEdit={handleEditPost}
         onDelete={handleDeletePost}
       />
 
@@ -868,7 +903,10 @@ export default function FeedPage() {
         workouts={customWorkouts}
         onOpenChange={(open) => {
           setComposerOpen(open)
-          if (!open) setComposerDraft(null)
+          if (!open) {
+            setComposerDraft(null)
+            setComposerEditingPostId(null)
+          }
         }}
         onSubmit={publishPost}
       />

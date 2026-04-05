@@ -2,9 +2,10 @@
 
 import React from 'react'
 
-import { useEffect, useRef } from 'react'
+import { startTransition, useEffect, useMemo, useRef, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
+import { ArrowDown, Loader2 } from 'lucide-react'
 import { Sidebar } from '@/components/dashboard/Sidebar'
 import { BottomNav } from '@/components/dashboard/BottomNav'
 import { TopBar } from '@/components/dashboard/TopBar'
@@ -14,6 +15,8 @@ import { useIsMobile } from '@/hooks/useIsMobile'
 import { useAppStore } from '@/store/useAppStore'
 import { useAuthInit } from '@/hooks/useAuthInit'
 import { getCloudHydrationProfileForPath, getCloudHydrationScopesForPath } from '@/lib/cloud-sync'
+
+const PULL_TO_REFRESH_THRESHOLD = 72
 
 export default function DashboardLayout({
   children,
@@ -26,6 +29,14 @@ export default function DashboardLayout({
   const pathname = usePathname()
   const { loading } = useAuthInit()
   const mainRef = useRef<HTMLElement>(null)
+  const pullStartYRef = useRef<number | null>(null)
+  const pullDistanceRef = useRef(0)
+  const pullActiveRef = useRef(false)
+  const pullRefreshingRef = useRef(false)
+  const [pullDistance, setPullDistance] = useState(0)
+  const [isPullRefreshing, setIsPullRefreshing] = useState(false)
+  const routeScopes = useMemo(() => getCloudHydrationScopesForPath(pathname), [pathname])
+  const routeProfile = useMemo(() => getCloudHydrationProfileForPath(pathname), [pathname])
 
   useEffect(() => {
     if (loading) return
@@ -42,9 +53,6 @@ export default function DashboardLayout({
     let syncing = false
     let syncTimeoutId: ReturnType<typeof setTimeout> | null = null
     let initialSyncTimeoutId: ReturnType<typeof setTimeout> | null = null
-
-    const routeScopes = getCloudHydrationScopesForPath(pathname)
-    const routeProfile = getCloudHydrationProfileForPath(pathname)
 
     const triggerSync = async () => {
       if (syncing) return
@@ -97,7 +105,107 @@ export default function DashboardLayout({
       if (initialSyncTimeoutId) clearTimeout(initialSyncTimeoutId)
       if (syncTimeoutId) clearTimeout(syncTimeoutId)
     }
-  }, [flushPendingCloudWrites, isAuthenticated, loading, pathname, syncNow])
+  }, [flushPendingCloudWrites, isAuthenticated, loading, routeProfile, routeScopes, syncNow])
+
+  useEffect(() => {
+    if (!isMobile || loading || !isAuthenticated) return
+
+    let cancelled = false
+
+    const isAtTop = () => {
+      const pageAtTop = typeof window !== 'undefined' ? window.scrollY <= 0 : false
+      const containerAtTop = (mainRef.current?.scrollTop ?? 0) <= 0
+      return pageAtTop || containerAtTop
+    }
+
+    const resetPullState = () => {
+      pullStartYRef.current = null
+      pullDistanceRef.current = 0
+      pullActiveRef.current = false
+      if (!cancelled) setPullDistance(0)
+    }
+
+    const handleTouchStart = (event: TouchEvent) => {
+      if (pullRefreshingRef.current || !isAtTop()) return
+
+      const target = event.target as HTMLElement | null
+      if (target?.closest('input, textarea, select, button, [contenteditable="true"], [data-no-pull-refresh="true"]')) {
+        return
+      }
+
+      pullStartYRef.current = event.touches[0]?.clientY ?? null
+      pullDistanceRef.current = 0
+      pullActiveRef.current = true
+    }
+
+    const handleTouchMove = (event: TouchEvent) => {
+      if (!pullActiveRef.current || pullStartYRef.current == null) return
+
+      const currentY = event.touches[0]?.clientY ?? pullStartYRef.current
+      const deltaY = currentY - pullStartYRef.current
+
+      if (deltaY <= 0) {
+        if (pullDistanceRef.current !== 0) {
+          pullDistanceRef.current = 0
+          setPullDistance(0)
+        }
+        return
+      }
+
+      if (!isAtTop() && pullDistanceRef.current === 0) return
+
+      const nextDistance = Math.min(108, deltaY * 0.45)
+      pullDistanceRef.current = nextDistance
+      setPullDistance(nextDistance)
+    }
+
+    const handleTouchEnd = () => {
+      if (!pullActiveRef.current) return
+
+      const shouldRefresh = pullDistanceRef.current >= PULL_TO_REFRESH_THRESHOLD && !pullRefreshingRef.current
+      pullActiveRef.current = false
+      pullStartYRef.current = null
+
+      if (!shouldRefresh) {
+        pullDistanceRef.current = 0
+        setPullDistance(0)
+        return
+      }
+
+      pullRefreshingRef.current = true
+      setIsPullRefreshing(true)
+      setPullDistance(PULL_TO_REFRESH_THRESHOLD)
+
+      void (async () => {
+        try {
+          await syncNow({ force: true, scopes: routeScopes, profile: routeProfile })
+          startTransition(() => {
+            router.refresh()
+          })
+        } finally {
+          pullRefreshingRef.current = false
+          if (!cancelled) {
+            setIsPullRefreshing(false)
+            setPullDistance(0)
+          }
+          pullDistanceRef.current = 0
+        }
+      })()
+    }
+
+    window.addEventListener('touchstart', handleTouchStart, { passive: true })
+    window.addEventListener('touchmove', handleTouchMove, { passive: true })
+    window.addEventListener('touchend', handleTouchEnd, { passive: true })
+    window.addEventListener('touchcancel', resetPullState, { passive: true })
+
+    return () => {
+      cancelled = true
+      window.removeEventListener('touchstart', handleTouchStart)
+      window.removeEventListener('touchmove', handleTouchMove)
+      window.removeEventListener('touchend', handleTouchEnd)
+      window.removeEventListener('touchcancel', resetPullState)
+    }
+  }, [isAuthenticated, isMobile, loading, routeProfile, routeScopes, router, syncNow])
 
   if (loading) {
     return (
@@ -117,6 +225,27 @@ export default function DashboardLayout({
       {process.env.NODE_ENV === 'production' ? null : <ExposeStore />}
       {/* Subtle ambient gradient */}
       <div className="pointer-events-none fixed inset-0 bg-gradient-to-br from-emerald-500/[0.03] via-transparent to-transparent" />
+      <div className="pointer-events-none fixed left-1/2 top-[calc(env(safe-area-inset-top,0px)+3.85rem)] z-[55] -translate-x-1/2">
+        <motion.div
+          animate={{
+            opacity: isPullRefreshing || pullDistance > 0 ? 1 : 0,
+            y: isPullRefreshing ? 0 : Math.max(-10, 12 - pullDistance / 5),
+            scale: isPullRefreshing ? 1 : Math.min(1, 0.86 + pullDistance / 120),
+          }}
+          transition={{ duration: 0.18, ease: [0.22, 0.61, 0.36, 1] }}
+          className="flex items-center gap-2 rounded-full border border-white/10 bg-[rgba(8,18,17,0.9)] px-3 py-1.5 text-[11px] font-medium text-zinc-200 shadow-[0_14px_40px_rgba(0,0,0,0.35)] backdrop-blur-xl"
+        >
+          {isPullRefreshing ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-300" />
+          ) : (
+            <ArrowDown
+              className="h-3.5 w-3.5 text-emerald-300 transition-transform"
+              style={{ transform: pullDistance >= PULL_TO_REFRESH_THRESHOLD ? 'rotate(180deg)' : 'rotate(0deg)' }}
+            />
+          )}
+          <span>{isPullRefreshing ? 'Refreshing' : pullDistance >= PULL_TO_REFRESH_THRESHOLD ? 'Release to refresh' : 'Pull to refresh'}</span>
+        </motion.div>
+      </div>
       <Sidebar />
 
       {/* TopBar is OUTSIDE the animated motion.div so position:fixed works correctly.

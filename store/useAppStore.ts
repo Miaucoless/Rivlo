@@ -193,6 +193,7 @@ interface AppStore {
   updateCustomWorkout: (workoutId: string, updates: Partial<Workout>) => void
   removeCustomWorkout: (workoutId: string) => Promise<boolean>
   createSocialPost: (draft: SocialPostDraft) => string
+  updateSocialPost: (postId: string, draft: SocialPostDraft) => void
   removeSocialPost: (postId: string) => void
   requestToFollowUser: (target: { id: string; profile_visibility?: 'public' | 'private' }) => 'accepted' | 'pending' | 'noop'
   acceptFollowRequest: (followerId: string) => void
@@ -1281,15 +1282,15 @@ export const useAppStore = create<AppStore>()(
       weeklyMealPlan: null,
       groceryList: null,
       streak: 0,
-      syncStatus: 'idle',
-      lastSyncedAt: null,
-      pendingCloudWrites: 0,
-      cloudHydratedScopes: [],
+              syncStatus: 'idle',
+              lastSyncedAt: null,
+              pendingCloudWrites: 0,
               cloudHydratedUserId: null,
               cloudHydratedScopes: [],
               ...restoredBackup,
-              cloudHydratedUserId: restoredBackup?.cloudHydratedUserId ?? mergedUser?.id ?? null,
-              cloudHydratedScopes: normalizeHydratedScopes(restoredBackup?.cloudHydratedScopes),
+              lastSyncedAt: null,
+              cloudHydratedUserId: mergedUser?.id ?? null,
+              cloudHydratedScopes: [],
               user: mergedUser,
               isAuthenticated: !!mergedUser,
               isDemoMode: false,
@@ -1301,6 +1302,9 @@ export const useAppStore = create<AppStore>()(
             user: mergedUser,
             isAuthenticated: !!mergedUser,
             isDemoMode: false,
+            lastSyncedAt: null,
+            cloudHydratedUserId: mergedUser?.id ?? null,
+            cloudHydratedScopes: [],
             notificationPreferences: mergedUser?.notification_preferences ?? state.notificationPreferences,
           })
         })
@@ -1324,8 +1328,9 @@ export const useAppStore = create<AppStore>()(
           return withRefreshedNotifications(state, {
             ...restoredBackup,
             notificationPreferences: restoredBackup.notificationPreferences ?? state.notificationPreferences,
-            cloudHydratedUserId: restoredBackup.cloudHydratedUserId ?? state.cloudHydratedUserId,
-            cloudHydratedScopes: normalizeHydratedScopes(restoredBackup.cloudHydratedScopes ?? state.cloudHydratedScopes),
+            lastSyncedAt: null,
+            cloudHydratedUserId: userId,
+            cloudHydratedScopes: [],
           })
         })
       },
@@ -2613,6 +2618,34 @@ export const useAppStore = create<AppStore>()(
         return nextPost.id
       },
 
+      updateSocialPost: (postId, draft) => {
+        if (!get().socialPosts.some((post) => post.id === postId)) return
+
+        set((current) => ({
+          socialPosts: current.socialPosts.map((post) =>
+            post.id === postId
+              ? {
+                  ...post,
+                  type: draft.type,
+                  image: draft.image,
+                  media: draft.media,
+                  title: draft.title,
+                  caption: draft.caption,
+                  tags: draft.tags,
+                  taggedUsers: draft.taggedUsers,
+                  audience: draft.audience,
+                  creationMode: draft.creationMode,
+                  mealData: draft.mealData,
+                  workoutData: draft.workoutData,
+                  dayData: draft.dayData,
+                }
+              : post
+          ),
+        }))
+
+        queueSocialMetadataSync(set, get)
+      },
+
       removeSocialPost: (postId) => {
         set((state) => ({
           socialPosts: state.socialPosts.filter((post) => post.id !== postId),
@@ -2897,8 +2930,8 @@ export const useAppStore = create<AppStore>()(
           theme: state.theme === 'light' || state.theme === 'system' ? state.theme : 'dark',
           notificationPreferences: state.notificationPreferences ?? DEFAULT_NOTIFICATION_PREFERENCES,
           waterUnit: state.waterUnit === 'ml' || state.waterUnit === 'l' ? state.waterUnit : 'oz',
-          lastSyncedAt: typeof state.lastSyncedAt === 'string' ? state.lastSyncedAt : null,
-          cloudHydratedScopes: normalizeHydratedScopes(state.cloudHydratedScopes),
+          lastSyncedAt: null,
+          cloudHydratedScopes: [],
           socialPosts: Array.isArray(state.socialPosts) ? state.socialPosts : [],
         }
       },
@@ -2910,8 +2943,6 @@ export const useAppStore = create<AppStore>()(
         theme: state.theme,
         notificationPreferences: state.notificationPreferences,
         waterUnit: state.waterUnit,
-        lastSyncedAt: state.lastSyncedAt,
-        cloudHydratedScopes: normalizeHydratedScopes(state.cloudHydratedScopes),
         // Persist user's own social posts so they survive page refresh immediately
         // (cloud hydration will merge and sync any newer data from other devices)
         socialPosts: state.socialPosts,

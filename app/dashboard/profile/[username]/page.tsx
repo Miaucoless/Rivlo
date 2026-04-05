@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PeopleDialog } from '@/components/feed/PeopleDialog'
+import { SocialPostCard } from '@/components/feed/SocialPostCard'
 import { SocialPostDetailDialog } from '@/components/feed/SocialPostDetailDialog'
 import { SocialPostUseDialog, type SocialUseDialogPayload } from '@/components/feed/SocialPostUseDialog'
 import { createClient } from '@/lib/supabase'
@@ -189,13 +190,16 @@ export default function PublicProfilePage() {
     const seededPosts = DEFAULT_SOCIAL_POSTS
     const combinedPosts = [
       ...socialPosts,
-      ...remotePublicPosts.filter((post) => !socialPosts.some((existing) => existing.id === post.id)),
+      ...remotePublicPosts.filter((post) => {
+        if (post.user.id === viewerId) return false
+        return !socialPosts.some((existing) => existing.id === post.id)
+      }),
     ]
     return [
       ...combinedPosts,
       ...seededPosts.filter((post) => !combinedPosts.some((existing) => existing.id === post.id)),
     ]
-  }, [remotePublicPosts, socialPosts])
+  }, [remotePublicPosts, socialPosts, viewerId])
 
   const directory = useMemo(() => mergeSocialProfiles(allPosts, [...getSocialCreators(), ...remoteProfiles], user), [allPosts, remoteProfiles, user])
   const fallbackName = searchParams.get('name')?.trim() || null
@@ -392,7 +396,7 @@ export default function PublicProfilePage() {
 
       <section className="space-y-5">
         <div
-          className={`h-28 overflow-hidden rounded-[2rem] border border-border/50 ${profileUser?.banner_url ? 'bg-cover bg-center bg-no-repeat' : 'bg-[linear-gradient(135deg,rgba(16,185,129,0.2),rgba(20,184,166,0.08),rgba(15,23,42,0.04))]'}`}
+          className={`h-48 overflow-hidden rounded-[2rem] border border-border/50 ${profileUser?.banner_url ? 'bg-cover bg-center bg-no-repeat' : 'bg-[linear-gradient(135deg,rgba(16,185,129,0.2),rgba(20,184,166,0.08),rgba(15,23,42,0.04))]'}`}
           style={profileUser?.banner_url ? { backgroundImage: `linear-gradient(180deg,rgba(15,23,42,0.08),rgba(15,23,42,0.2)), url(${profileUser.banner_url})` } : undefined}
         />
         <div className="relative -mt-10 space-y-6 px-1 pb-1 pt-0 sm:px-2">
@@ -489,8 +493,13 @@ export default function PublicProfilePage() {
           <TabsContent value="posts" className="mt-0">
             <PostGrid
               posts={profilePosts}
+              savedPostIds={socialSavedPostIds}
+              likedPostIds={socialLikedPostIds}
               emptyTitle="No posts here yet"
               emptyDetail="This person has not published anything to the feed yet."
+              onToggleSave={toggleSaveSocialPost}
+              onToggleLike={toggleLikeSocialPost}
+              onAddComment={addCommentToSocialPost}
               onOpenPost={(post) => {
                 setSelectedPost(post)
                 setDetailOpen(true)
@@ -501,8 +510,13 @@ export default function PublicProfilePage() {
           <TabsContent value="tagged" className="mt-0">
             <PostGrid
               posts={taggedPosts}
+              savedPostIds={socialSavedPostIds}
+              likedPostIds={socialLikedPostIds}
               emptyTitle="No tagged posts yet"
               emptyDetail="Posts that tag this person will show up here."
+              onToggleSave={toggleSaveSocialPost}
+              onToggleLike={toggleLikeSocialPost}
+              onAddComment={addCommentToSocialPost}
               onOpenPost={(post) => {
                 setSelectedPost(post)
                 setDetailOpen(true)
@@ -584,13 +598,23 @@ export default function PublicProfilePage() {
 
 function PostGrid({
   posts,
+  savedPostIds,
+  likedPostIds,
   emptyTitle,
   emptyDetail,
+  onToggleSave,
+  onToggleLike,
+  onAddComment,
   onOpenPost,
 }: {
   posts: SocialPost[]
+  savedPostIds: string[]
+  likedPostIds: string[]
   emptyTitle: string
   emptyDetail: string
+  onToggleSave: (postId: string, sourcePost?: SocialPost) => void
+  onToggleLike: (postId: string, sourcePost?: SocialPost) => void
+  onAddComment: (postId: string, body: string) => void
   onOpenPost: (post: SocialPost) => void
 }) {
   if (posts.length === 0) {
@@ -605,99 +629,19 @@ function PostGrid({
   }
 
   return (
-    <div className="space-y-10">
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
       {posts.map((post) => (
-        <article
+        <SocialPostCard
           key={post.id}
-          className="cursor-pointer space-y-4"
-          onClick={() => onOpenPost(post)}
-        >
-          <PostMediaPreview post={post} onOpenPost={() => onOpenPost(post)} />
-
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                {post.type === 'meal' ? 'Meal post' : post.type === 'workout' ? 'Workout post' : post.type === 'day' ? 'Day post' : 'Post'}
-              </p>
-              <h3 className="mt-1 text-lg font-semibold">{post.title}</h3>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {format(new Date(post.createdAt), 'MMM d')}
-            </p>
-          </div>
-
-          {post.caption ? <p className="line-clamp-3 text-sm leading-6 text-muted-foreground">{post.caption}</p> : null}
-
-          {post.tags.length > 0 ? (
-            <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-              {post.tags.slice(0, 4).map((tag) => (
-                <span key={tag}>#{tag}</span>
-              ))}
-            </div>
-          ) : null}
-        </article>
+          post={post}
+          saved={savedPostIds.includes(post.id)}
+          liked={likedPostIds.includes(post.id)}
+          onOpen={onOpenPost}
+          onToggleSave={(nextPost) => onToggleSave(nextPost.id, nextPost)}
+          onToggleLike={(nextPost) => onToggleLike(nextPost.id, nextPost)}
+          onAddComment={(nextPost, body) => onAddComment(nextPost.id, body)}
+        />
       ))}
-    </div>
-  )
-}
-
-function PostMediaPreview({ post, onOpenPost }: { post: SocialPost; onOpenPost: () => void }) {
-  const mediaItems = post.media?.length
-    ? post.media
-    : post.image
-      ? [{ kind: 'image' as const, url: post.image }]
-      : []
-  if (mediaItems.length === 0) return null
-
-  let touchStartX = 0
-  let touchStartY = 0
-  let dragged = false
-
-  return (
-    <div className="space-y-2">
-      <div
-        className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-        onClick={(event) => {
-          event.stopPropagation()
-          if (!dragged) onOpenPost()
-        }}
-        onTouchStart={(event) => {
-          const touch = event.touches[0]
-          touchStartX = touch?.clientX ?? 0
-          touchStartY = touch?.clientY ?? 0
-          dragged = false
-        }}
-        onTouchMove={(event) => {
-          const touch = event.touches[0]
-          if (!touch) return
-          if (Math.abs(touch.clientX - touchStartX) > 10 || Math.abs(touch.clientY - touchStartY) > 10) {
-            dragged = true
-          }
-        }}
-      >
-        {mediaItems.map((mediaItem, index) => (
-          <div key={`${post.id}-media-${index}`} className="w-[84%] shrink-0 snap-center overflow-hidden rounded-[1.75rem] border border-border/50 bg-muted/20 sm:w-[68%]">
-            {mediaItem.kind === 'video' ? (
-              <video
-                src={mediaItem.url}
-                className="h-56 w-full object-cover"
-                muted
-                playsInline
-                preload="metadata"
-                controls
-              />
-            ) : (
-              <div
-                className="h-56 w-full bg-cover bg-center"
-                style={{ backgroundImage: `linear-gradient(180deg, rgba(15,23,42,0.04), rgba(15,23,42,0.18)), url("${mediaItem.url}")` }}
-              />
-            )}
-          </div>
-        ))}
-      </div>
-      {mediaItems.length > 1 ? (
-        <p className="text-xs text-muted-foreground">Swipe to browse {mediaItems.length} photos</p>
-      ) : null}
     </div>
   )
 }
