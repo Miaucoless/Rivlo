@@ -142,7 +142,15 @@ function JournalEditorDialog({
       toast.error('Please write something before saving')
       return
     }
-    onSave({ title: title || undefined, content, mood, energy, tags, linked_item: linkedItem || undefined })
+    onSave({
+      title: title || undefined,
+      content,
+      mood,
+      energy,
+      tags,
+      linked_item: linkedItem || undefined,
+      workout_id: linkedItem?.type === 'workout' ? linkedItem.id : undefined,
+    })
     setOpen(false)
     setTitle('')
     setContent('')
@@ -509,6 +517,8 @@ export default function JournalPage() {
       mood: data.mood!,
       energy: data.energy!,
       tags: data.tags || [],
+      workout_id: data.workout_id,
+      linked_item: data.linked_item,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     })

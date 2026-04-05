@@ -369,6 +369,7 @@ export default function TrackingPage() {
   const [editingEntry, setEditingEntry] = useState<any>(null)
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [nutritionMetric, setNutritionMetric] = useState<'calories' | 'protein'>('calories')
+  const [nutritionCoachFocus, setNutritionCoachFocus] = useState<'overview' | 'protein' | 'consistency'>('overview')
   const [selectedPrExercise, setSelectedPrExercise] = useState<string | null>(null)
 
   const handleDeleteWeight = (id: string) => {
@@ -473,6 +474,114 @@ export default function TrackingPage() {
     weightDeltaKg: recentWeightDeltaKg,
     loggedNutritionDays: calorieHistory.length,
   })
+  const calorieHitDays = calorieHistory.filter((day) => Math.abs(day.calories - user.calorie_target) <= Math.max(120, user.calorie_target * 0.1)).length
+  const proteinHitDays = calorieHistory.filter((day) => day.protein >= user.protein_target_g * 0.9).length
+  const avgCalorieDelta = Math.round(avgCalories - user.calorie_target)
+  const avgProteinDelta = Math.round(avgProtein - user.protein_target_g)
+  const loggingCoveragePct = Math.round((calorieHistory.length / 14) * 100)
+  const nutritionCoachViews: Array<{
+    key: 'overview' | 'protein' | 'consistency'
+    label: string
+    icon: typeof Target
+    title: string
+    body: string
+    stats: Array<{ label: string; value: string; sub: string }>
+    actions: Array<{ label: string; href: string; variant: 'default' | 'outline' }>
+  }> = [
+    {
+      key: 'overview',
+      label: 'Overview',
+      icon: Target,
+      title: connectedRecommendation.title,
+      body: connectedRecommendation.body,
+      stats: [
+        {
+          label: '7-day avg',
+          value: `${Math.round(avgCalories)}`,
+          sub: `${avgCalorieDelta >= 0 ? '+' : ''}${avgCalorieDelta} vs target`,
+        },
+        {
+          label: 'Protein days',
+          value: `${proteinHitDays}/${calorieHistory.length || 14}`,
+          sub: 'days near target',
+        },
+        {
+          label: 'Training',
+          value: `${workoutsThisWeek}`,
+          sub: 'workouts this week',
+        },
+      ],
+      actions: [
+        { label: connectedRecommendation.actionLabel, href: connectedRecommendation.actionHref, variant: 'default' },
+        { label: 'Open Meals', href: '/dashboard/meals', variant: 'outline' },
+      ],
+    },
+    {
+      key: 'protein',
+      label: 'Protein',
+      icon: Zap,
+      title: avgProtein >= user.protein_target_g * 0.9
+        ? 'Protein is supporting the plan'
+        : 'Protein is the clearest nutrition gap',
+      body: avgProtein >= user.protein_target_g * 0.9
+        ? 'You are consistently getting close to your protein target. Keep leaning on repeat meals that make that easy.'
+        : 'Your average protein intake is still lagging behind target. A more repeatable lunch, snack, or shake is likely the fastest fix.',
+      stats: [
+        {
+          label: 'Daily avg',
+          value: `${Math.round(avgProtein)}g`,
+          sub: `${avgProteinDelta >= 0 ? '+' : ''}${avgProteinDelta}g vs target`,
+        },
+        {
+          label: 'Hit rate',
+          value: `${proteinHitDays}/${calorieHistory.length || 14}`,
+          sub: 'days at 90%+ of goal',
+        },
+        {
+          label: 'Today',
+          value: `${getDailyTotals(format(new Date(), 'yyyy-MM-dd')).protein_g}g`,
+          sub: `${Math.max(0, user.protein_target_g - getDailyTotals(format(new Date(), 'yyyy-MM-dd')).protein_g)}g left`,
+        },
+      ],
+      actions: [
+        { label: 'Add a High-Protein Meal', href: '/dashboard/meals', variant: 'default' },
+        { label: 'Review Saved Meals', href: '/dashboard/meals', variant: 'outline' },
+      ],
+    },
+    {
+      key: 'consistency',
+      label: 'Consistency',
+      icon: Flame,
+      title: calorieHistory.length >= 10
+        ? 'You have enough data to coach from'
+        : 'Consistency is still the biggest unlock',
+      body: calorieHistory.length >= 10
+        ? 'Logging is steady enough that your trends are becoming meaningful. Now the goal is smoothing out the days that drift furthest from target.'
+        : 'You do not need a more aggressive plan yet. Logging a few more complete days will make the recommendations much sharper.',
+      stats: [
+        {
+          label: 'Logged days',
+          value: `${calorieHistory.length}/14`,
+          sub: `${loggingCoveragePct}% coverage`,
+        },
+        {
+          label: 'Calorie days',
+          value: `${calorieHitDays}/${calorieHistory.length || 14}`,
+          sub: 'within 10% of target',
+        },
+        {
+          label: 'Best next step',
+          value: calorieHistory.length >= 10 ? 'Tighten weekends' : 'Log 3 more days',
+          sub: calorieHistory.length >= 10 ? 'reduce drift' : 'build a better signal',
+        },
+      ],
+      actions: [
+        { label: 'Log Meals', href: '/dashboard/meals', variant: 'default' },
+        { label: 'Open Dashboard', href: '/dashboard/dashboard', variant: 'outline' },
+      ],
+    },
+  ]
+  const activeNutritionCoach = nutritionCoachViews.find((view) => view.key === nutritionCoachFocus) ?? nutritionCoachViews[0]
 
   const prProgressions = (() => {
     const byExercise = new Map<string, Array<{ isoDate: string; weightKg: number; workoutName: string }>>()
@@ -1444,17 +1553,59 @@ export default function TrackingPage() {
             <CardContent className="p-5">
               <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
                 <div className="max-w-2xl">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-primary">Connected Recommendation</p>
+                  <div className="flex flex-wrap gap-2">
+                    {nutritionCoachViews.map((view) => {
+                      const Icon = view.icon
+                      const isActive = activeNutritionCoach.key === view.key
+                      return (
+                        <button
+                          key={view.key}
+                          type="button"
+                          onClick={() => setNutritionCoachFocus(view.key)}
+                          className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                            isActive
+                              ? 'border-primary/30 bg-primary text-primary-foreground'
+                              : 'border-border/60 bg-background/70 text-muted-foreground hover:bg-background'
+                          }`}
+                        >
+                          <Icon className="h-3.5 w-3.5" />
+                          {view.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap items-center gap-2">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-primary">Nutrition Coach</p>
                     <Badge variant="outline" className="border-primary/20 bg-background/70 text-[10px]">
                       {connectedRecommendation.status}
                     </Badge>
                   </div>
-                  <h3 className="mt-2 text-lg font-semibold tracking-tight text-foreground">{connectedRecommendation.title}</h3>
-                  <p className="mt-2 text-sm leading-6 text-muted-foreground">{connectedRecommendation.body}</p>
+
+                  <h3 className="mt-2 text-lg font-semibold tracking-tight text-foreground">{activeNutritionCoach.title}</h3>
+                  <p className="mt-2 text-sm leading-6 text-muted-foreground">{activeNutritionCoach.body}</p>
                   <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                    {activeNutritionCoach.stats.map((stat) => (
+                      <div key={stat.label} className="rounded-xl border border-border/60 bg-background/70 px-3 py-3">
+                        <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">{stat.label}</p>
+                        <p className="mt-1 font-data text-lg font-semibold">{stat.value}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">{stat.sub}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {activeNutritionCoach.actions.map((action) => (
+                      <Button key={action.label} asChild size="sm" variant={action.variant} className="gap-1.5">
+                        <Link href={action.href}>
+                          {action.label}
+                          <ChevronRight className="h-3.5 w-3.5" />
+                        </Link>
+                      </Button>
+                    ))}
+                  </div>
+                  <div className="mt-4 flex flex-wrap gap-2">
                     {connectedRecommendation.supportingPoints.map((point) => (
-                      <div key={point} className="rounded-xl border border-border/60 bg-background/70 px-3 py-3 text-sm text-muted-foreground">
+                      <div key={point} className="rounded-full border border-border/60 bg-background/60 px-3 py-1.5 text-xs text-muted-foreground">
                         {point}
                       </div>
                     ))}
@@ -1463,7 +1614,7 @@ export default function TrackingPage() {
 
                 <div className="xl:w-[280px]">
                   <div className="rounded-2xl border border-border/60 bg-background/80 p-4">
-                    <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Read From Your Data</p>
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">At A Glance</p>
                     <div className="mt-3 space-y-3">
                       <div>
                         <div className="mb-1 flex items-center justify-between text-xs">
@@ -1485,8 +1636,8 @@ export default function TrackingPage() {
                       </div>
                       <div className="grid grid-cols-2 gap-2 text-xs">
                         <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5">
-                          <p className="text-muted-foreground">Workouts</p>
-                          <p className="mt-1 font-medium text-foreground">{workoutsThisWeek} this week</p>
+                          <p className="text-muted-foreground">Logged days</p>
+                          <p className="mt-1 font-medium text-foreground">{calorieHistory.length}/14</p>
                         </div>
                         <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5">
                           <p className="text-muted-foreground">Weight trend</p>
@@ -1499,8 +1650,8 @@ export default function TrackingPage() {
                       </div>
                     </div>
                     <Button asChild variant="outline" size="sm" className="mt-4 w-full gap-1.5">
-                      <Link href={connectedRecommendation.actionHref}>
-                        {connectedRecommendation.actionLabel}
+                      <Link href="/dashboard/meals">
+                        Open Meals
                         <ChevronRight className="h-3.5 w-3.5" />
                       </Link>
                     </Button>

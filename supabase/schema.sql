@@ -13,6 +13,8 @@ CREATE TABLE IF NOT EXISTS profiles (
   email         TEXT UNIQUE NOT NULL,
   name          TEXT NOT NULL,
   avatar_url    TEXT,
+  bio           TEXT,
+  profile_visibility TEXT NOT NULL DEFAULT 'public' CHECK (profile_visibility IN ('public', 'private')),
   height_cm     NUMERIC(5,1) NOT NULL DEFAULT 175,
   weight_kg     NUMERIC(5,2) NOT NULL DEFAULT 75,
   age           INTEGER NOT NULL DEFAULT 25,
@@ -59,6 +61,9 @@ ALTER TABLE profiles
 ALTER TABLE profiles
   ADD COLUMN IF NOT EXISTS goal_target_change_kg NUMERIC(5,2),
   ADD COLUMN IF NOT EXISTS goal_timeframe_weeks INTEGER,
+  ADD COLUMN IF NOT EXISTS bio TEXT,
+  ADD COLUMN IF NOT EXISTS profile_visibility TEXT NOT NULL DEFAULT 'public'
+  CHECK (profile_visibility IN ('public', 'private')),
   ADD COLUMN IF NOT EXISTS preferred_workout_time TEXT
   CHECK (preferred_workout_time IN ('early_morning','morning','afternoon','evening','late_night','flexible')),
   ADD COLUMN IF NOT EXISTS preferred_workout_days TEXT[] DEFAULT '{}',

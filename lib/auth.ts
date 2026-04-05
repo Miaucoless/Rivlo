@@ -18,6 +18,7 @@ function normalizeProfile(profile: Partial<UserProfile> | null | undefined): Use
     ...profile,
     workout_split: workoutSplit,
     split_schedule: profile.split_schedule ?? buildDefaultSchedule(workoutSplit),
+    profile_visibility: profile.profile_visibility === 'private' ? 'private' : 'public',
   } as UserProfile
 }
 

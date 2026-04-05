@@ -18,6 +18,7 @@ import {
   Trophy,
   Pill,
   Inbox,
+  Compass,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAppStore } from '@/store/useAppStore'
@@ -27,6 +28,7 @@ const NAV_ITEMS = [
   { label: 'Dashboard', href: '/dashboard/dashboard', icon: LayoutDashboard },
   { label: 'Meals', href: '/dashboard/meals', icon: Apple },
   { label: 'Workouts', href: '/dashboard/workouts', icon: Dumbbell },
+  { label: 'Feed', href: '/dashboard/feed', icon: Compass },
   { label: 'Tracking', href: '/dashboard/tracking', icon: BarChart3 },
   { label: 'Calendar', href: '/dashboard/calendar', icon: Calendar },
   { label: 'Journal', href: '/dashboard/journal', icon: BookOpen },
@@ -37,7 +39,10 @@ const NAV_ITEMS = [
 export function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
-  const { user, sidebarCollapsed, toggleSidebar, logout, streak, isDemoMode } = useAppStore()
+  const { user, sidebarCollapsed, toggleSidebar, logout, streak, isDemoMode, notifications } = useAppStore()
+  const unreadSharedCount = notifications.filter((notification) =>
+    !notification.read && notification.action_url?.startsWith('/dashboard/shared?conversation=')
+  ).length
 
   const handleLogout = async () => {
     // If not in demo mode, sign out from Supabase
@@ -95,6 +100,7 @@ export function Sidebar() {
       <nav className="flex-1 px-2 py-3 space-y-1 overflow-y-auto">
         {NAV_ITEMS.map(({ label, href, icon: Icon }) => {
           const isActive = pathname === href || pathname.startsWith(href + '/')
+          const hasUnreadShared = href === '/dashboard/shared' && unreadSharedCount > 0
           return (
             <Link
               key={href}
@@ -108,7 +114,12 @@ export function Sidebar() {
               )}
               title={sidebarCollapsed ? label : undefined}
             >
-              <Icon className="w-4.5 h-4.5 flex-shrink-0 w-[18px] h-[18px]" />
+              <div className="relative flex-shrink-0">
+                <Icon className="w-4.5 h-4.5 w-[18px] h-[18px]" />
+                {hasUnreadShared && (
+                  <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-card" />
+                )}
+              </div>
               <AnimatePresence>
                 {!sidebarCollapsed && (
                   <motion.span
@@ -122,6 +133,10 @@ export function Sidebar() {
                   </motion.span>
                 )}
               </AnimatePresence>
+
+              {!sidebarCollapsed && hasUnreadShared && (
+                <span className="ml-auto h-2.5 w-2.5 rounded-full bg-emerald-400" />
+              )}
 
               {/* Active indicator */}
               {isActive && (
@@ -189,9 +204,12 @@ export function Sidebar() {
           sidebarCollapsed ? 'justify-center' : 'justify-between'
         )}>
           {!sidebarCollapsed && user && (
-            <div className="flex items-center gap-2 min-w-0">
-              <div className="w-7 h-7 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
-                {user.name.charAt(0).toUpperCase()}
+            <Link href="/dashboard/profile" className="flex min-w-0 items-center gap-2">
+              <div
+                className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 text-xs font-bold text-white"
+                style={user.avatar_url ? { backgroundImage: `url(${user.avatar_url})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}
+              >
+                {!user.avatar_url ? user.name.charAt(0).toUpperCase() : null}
               </div>
               <div className="min-w-0">
                 <p className="text-xs font-semibold truncate">{user.name}</p>
@@ -199,7 +217,7 @@ export function Sidebar() {
                   <span className="text-xs text-amber-400">Demo Mode</span>
                 )}
               </div>
-            </div>
+            </Link>
           )}
 
           <button

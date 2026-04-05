@@ -539,8 +539,9 @@ export function sumMacros(entries: Array<{ macros: Macros }>): Macros {
       protein_g: acc.protein_g + entry.macros.protein_g,
       carbs_g: acc.carbs_g + entry.macros.carbs_g,
       fat_g: acc.fat_g + entry.macros.fat_g,
+      fiber_g: (acc.fiber_g ?? 0) + (entry.macros.fiber_g ?? 0),
     }),
-    { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 }
+    { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0, fiber_g: 0 } as Macros
   )
 }
 

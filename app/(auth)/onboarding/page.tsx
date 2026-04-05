@@ -42,6 +42,39 @@ type ChoiceCard = {
   emoji: string
 }
 
+const ONBOARDING_PROGRESS_STORAGE_KEY = 'rivora-onboarding-progress-v1'
+
+type SavedOnboardingProgress = {
+  userId: string
+  step: number
+  form: FormData
+}
+
+function readSavedOnboardingProgress(): SavedOnboardingProgress | null {
+  if (typeof window === 'undefined') return null
+
+  try {
+    const raw = window.localStorage.getItem(ONBOARDING_PROGRESS_STORAGE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as SavedOnboardingProgress
+    if (!parsed || typeof parsed !== 'object') return null
+    if (typeof parsed.userId !== 'string' || typeof parsed.step !== 'number' || !parsed.form || typeof parsed.form !== 'object') return null
+    return parsed
+  } catch {
+    return null
+  }
+}
+
+function persistSavedOnboardingProgress(progress: SavedOnboardingProgress) {
+  if (typeof window === 'undefined') return
+  window.localStorage.setItem(ONBOARDING_PROGRESS_STORAGE_KEY, JSON.stringify(progress))
+}
+
+function clearSavedOnboardingProgress() {
+  if (typeof window === 'undefined') return
+  window.localStorage.removeItem(ONBOARDING_PROGRESS_STORAGE_KEY)
+}
+
 const WORKOUT_DAY_OPTIONS = [
   { value: 'mon', label: 'Mon' },
   { value: 'tue', label: 'Tue' },
@@ -120,6 +153,7 @@ export default function OnboardingPage() {
     }
   })
   const [loading, setLoading] = useState(false)
+  const [hasHydratedSavedProgress, setHasHydratedSavedProgress] = useState(false)
 
   const update = <K extends keyof FormData>(key: K, value: FormData[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }))
@@ -139,25 +173,32 @@ export default function OnboardingPage() {
 
   useEffect(() => {
     if (user?.onboarded) {
+      clearSavedOnboardingProgress()
       router.replace('/dashboard')
     }
   }, [router, user?.onboarded])
 
   useEffect(() => {
-    document.documentElement.style.overflowY = 'auto'
-    document.documentElement.style.height = 'auto'
-    document.body.style.overflowY = 'auto'
-    document.body.style.height = 'auto'
-    document.body.style.pointerEvents = 'auto'
+    if (!user?.id || user.onboarded || hasHydratedSavedProgress) return
 
-    return () => {
-      document.documentElement.style.overflowY = ''
-      document.documentElement.style.height = ''
-      document.body.style.overflowY = ''
-      document.body.style.height = ''
-      document.body.style.pointerEvents = ''
+    const saved = readSavedOnboardingProgress()
+    if (saved?.userId === user.id) {
+      setStep(Math.min(Math.max(saved.step, 1), 6))
+      setForm((prev) => ({ ...prev, ...saved.form }))
     }
-  }, [])
+
+    setHasHydratedSavedProgress(true)
+  }, [hasHydratedSavedProgress, user?.id, user?.onboarded])
+
+  useEffect(() => {
+    if (!user?.id || user.onboarded || !hasHydratedSavedProgress) return
+
+    persistSavedOnboardingProgress({
+      userId: user.id,
+      step,
+      form,
+    })
+  }, [form, hasHydratedSavedProgress, step, user?.id, user?.onboarded])
 
   const handleUnitSystemChange = (unitSystem: UnitSystem) => {
     const currentHeightCm = parseHeightInput(form.height_input, form.unit_system) ?? user?.height_cm ?? 175
@@ -230,6 +271,7 @@ export default function OnboardingPage() {
     }
 
     toast.success('Profile set up! Your personalized plan is ready. 🎉')
+    clearSavedOnboardingProgress()
     router.push('/dashboard')
     setLoading(false)
   }
@@ -626,7 +668,7 @@ export default function OnboardingPage() {
 
   return (
     <div
-      className="min-h-[100dvh] overflow-y-auto bg-[#0a0a0a] px-6 py-8"
+      className="min-h-[100dvh] overflow-y-auto overflow-x-hidden overscroll-y-contain bg-[#0a0a0a] px-6 py-8 touch-pan-y"
       style={{ paddingTop: 'max(1.5rem, env(safe-area-inset-top))' }}
     >
       <div className="mx-auto w-full max-w-md">

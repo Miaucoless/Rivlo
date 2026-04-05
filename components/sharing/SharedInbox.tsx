@@ -3,13 +3,14 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Dumbbell, UtensilsCrossed, BookOpen, CheckCircle, ExternalLink, Loader2, Inbox, ShoppingCart, Trash2, Sparkles, Circle } from 'lucide-react'
+import { Dumbbell, UtensilsCrossed, BookOpen, CheckCircle, ExternalLink, Loader2, Inbox, ShoppingCart, Trash2, Sparkles, Circle, Share2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 import { useAppStore } from '@/store/useAppStore'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { formatDistanceToNow } from 'date-fns'
 import type { GroceryList, SavedMealTemplate, Workout } from '@/types'
+import { DEMO_INBOX_ITEMS } from '@/lib/demo-shares'
 
 const IMPORTED_FRIEND_SHARE_STORAGE_KEY = 'rivora-imported-friend-shares'
 
@@ -94,7 +95,7 @@ function normalizeImportedSavedMeal(raw: unknown): SavedMealTemplate | null {
 type InboxItem = {
   friend_share_id: string
   share_id: string
-  item_type: 'workout' | 'saved_meal' | 'recipe' | 'grocery_list' | 'weekly_recap'
+  item_type: 'workout' | 'saved_meal' | 'recipe' | 'grocery_list' | 'weekly_recap' | 'social_post'
   item_name: string
   token: string
   message?: string
@@ -103,12 +104,17 @@ type InboxItem = {
   imported_at?: string
 }
 
+type DemoInboxItem = InboxItem & {
+  demo_payload?: Workout | SavedMealTemplate | GroceryList | null
+}
+
 const TYPE_ICONS: Record<string, React.ReactNode> = {
   workout: <Dumbbell className="w-4 h-4 shrink-0" />,
   saved_meal: <UtensilsCrossed className="w-4 h-4 shrink-0" />,
   recipe: <BookOpen className="w-4 h-4 shrink-0" />,
   grocery_list: <ShoppingCart className="w-4 h-4 shrink-0" />,
   weekly_recap: <Sparkles className="w-4 h-4 shrink-0" />,
+  social_post: <Share2 className="w-4 h-4 shrink-0" />,
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -117,9 +123,10 @@ const TYPE_LABELS: Record<string, string> = {
   recipe: 'Recipe',
   grocery_list: 'Grocery List',
   weekly_recap: 'Weekly Recap',
+  social_post: 'Social Post',
 }
 
-const TYPE_FILTERS = ['all', 'workout', 'saved_meal', 'recipe', 'grocery_list'] as const
+const TYPE_FILTERS = ['all', 'workout', 'saved_meal', 'recipe', 'grocery_list', 'social_post'] as const
 type TypeFilter = typeof TYPE_FILTERS[number]
 
 async function getToken(): Promise<string | null> {
@@ -130,12 +137,13 @@ async function getToken(): Promise<string | null> {
 
 export function SharedInbox() {
   const router = useRouter()
+  const isDemoMode = useAppStore((state) => state.isDemoMode)
   const addSavedMeal = useAppStore((state) => state.addSavedMeal)
   const addCustomWorkout = useAppStore((state) => state.addCustomWorkout)
   const savedMeals = useAppStore((state) => state.savedMeals)
   const customWorkouts = useAppStore((state) => state.customWorkouts)
   const setGroceryList = useAppStore((state) => state.setGroceryList)
-  const [items, setItems] = useState<InboxItem[]>([])
+  const [items, setItems] = useState<DemoInboxItem[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<TypeFilter>('all')
   const [importing, setImporting] = useState<string | null>(null)
@@ -145,13 +153,21 @@ export function SharedInbox() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
   const loadInbox = useCallback(async () => {
+    if (isDemoMode) {
+      const demoItems = filter === 'all' ? DEMO_INBOX_ITEMS : DEMO_INBOX_ITEMS.filter((item) => item.item_type === filter)
+      setItems(demoItems)
+      setImportedIds(readStoredImportedFriendShareIds())
+      setLoading(false)
+      return
+    }
+
     const token = await getToken()
     if (!token) { setLoading(false); return }
     try {
       const url = filter === 'all' ? '/api/share/inbox' : `/api/share/inbox?type=${filter}`
       const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
       if (!res.ok) return
-      const data: InboxItem[] = await res.json()
+      const data: DemoInboxItem[] = await res.json()
       setItems(data)
       // Pre-mark already imported
       const alreadyImported = new Set(data.filter((i) => !!i.imported_at).map((i) => i.friend_share_id))
@@ -161,7 +177,7 @@ export function SharedInbox() {
     } finally {
       setLoading(false)
     }
-  }, [filter])
+  }, [filter, isDemoMode])
 
   useEffect(() => {
     setLoading(true)
@@ -196,7 +212,25 @@ export function SharedInbox() {
     })
   }, [items])
 
-  async function importItem(item: InboxItem) {
+  async function importItem(item: DemoInboxItem) {
+    if (isDemoMode) {
+      if (item.item_type === 'saved_meal' && item.demo_payload) {
+        const meal = item.demo_payload as SavedMealTemplate
+        if (!savedMeals.some((savedMeal) => savedMeal.id === meal.id)) addSavedMeal(meal)
+      }
+      if (item.item_type === 'workout' && item.demo_payload) {
+        const workout = item.demo_payload as Workout
+        if (!customWorkouts.some((savedWorkout) => savedWorkout.id === workout.id)) addCustomWorkout(workout)
+      }
+      if (item.item_type === 'grocery_list' && item.demo_payload) {
+        setGroceryList(item.demo_payload as GroceryList)
+      }
+
+      persistImportedFriendShareId(item.friend_share_id)
+      setImportedIds((prev) => { const next = new Set(prev); next.add(item.friend_share_id); return next })
+      return true
+    }
+
     try {
       const token = await getToken()
       if (!token) return false
@@ -230,7 +264,7 @@ export function SharedInbox() {
     }
   }
 
-  async function handleImport(item: InboxItem) {
+  async function handleImport(item: DemoInboxItem) {
     setImporting(item.friend_share_id)
     try {
       await importItem(item)
@@ -251,10 +285,10 @@ export function SharedInbox() {
     })
   }
 
-  const importableItems = items.filter((item) => item.item_type !== 'weekly_recap' && !importedIds.has(item.friend_share_id))
+  const importableItems = items.filter((item) => item.item_type !== 'weekly_recap' && item.item_type !== 'social_post' && !importedIds.has(item.friend_share_id))
   const selectedImportableItems = importableItems.filter((item) => selectedIds.has(item.friend_share_id))
 
-  async function handleImportMany(targetItems: InboxItem[], mode: 'all' | 'selected') {
+  async function handleImportMany(targetItems: DemoInboxItem[], mode: 'all' | 'selected') {
     if (targetItems.length === 0) return
 
     setBulkImporting(true)
@@ -294,9 +328,25 @@ export function SharedInbox() {
     toast.error(`Could not import ${mode === 'all' ? 'these items' : 'the selected items'}.`)
   }
 
-  async function handleDelete(item: InboxItem) {
+  async function handleDelete(item: DemoInboxItem) {
     setDeleting(item.friend_share_id)
     try {
+      if (isDemoMode) {
+        setItems((current) => current.filter((entry) => entry.friend_share_id !== item.friend_share_id))
+        setImportedIds((current) => {
+          const next = new Set(current)
+          next.delete(item.friend_share_id)
+          return next
+        })
+        setSelectedIds((current) => {
+          const next = new Set(current)
+          next.delete(item.friend_share_id)
+          return next
+        })
+        toast.success('Removed from Shared With Me.')
+        return
+      }
+
       const token = await getToken()
       if (!token) return
       const res = await fetch(`/api/share/inbox/${item.friend_share_id}`, {
@@ -395,7 +445,7 @@ export function SharedInbox() {
             const isImported = importedIds.has(item.friend_share_id)
             const isImporting = importing === item.friend_share_id
             const isDeleting = deleting === item.friend_share_id
-            const isViewOnly = item.item_type === 'weekly_recap'
+            const isViewOnly = item.item_type === 'weekly_recap' || item.item_type === 'social_post'
             const isSelectable = !isImported && !isViewOnly
             const isSelected = selectedIds.has(item.friend_share_id)
             return (

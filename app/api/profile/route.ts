@@ -6,12 +6,16 @@ export async function PATCH(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json()
-  const { name, username, avatar_url } = body
+  const { name, username, avatar_url, bio, profile_visibility } = body
 
-  const updates: Record<string, string> = {}
+  const updates: Record<string, string | null> = {}
   if (name !== undefined) updates.name = name
   if (avatar_url !== undefined) updates.avatar_url = avatar_url
-  if (username !== undefined) updates.username = (username as string).toLowerCase()
+  if (bio !== undefined) updates.bio = bio
+  if (username !== undefined) updates.username = typeof username === 'string' && username.trim() ? username.toLowerCase() : null
+  if (profile_visibility !== undefined) {
+    updates.profile_visibility = profile_visibility === 'private' ? 'private' : 'public'
+  }
 
   if (Object.keys(updates).length === 0) {
     return NextResponse.json({ error: 'No fields to update' }, { status: 400 })
@@ -19,12 +23,28 @@ export async function PATCH(req: NextRequest) {
 
   const db = getServiceClient()
 
-  const { data, error } = await db
-    .from('profiles')
-    .update(updates)
-    .eq('id', user.id)
-    .select('id, name, username, avatar_url')
-    .single()
+  const performUpdate = async (nextUpdates: Record<string, string | null>) => {
+    return db
+      .from('profiles')
+      .update(nextUpdates)
+      .eq('id', user.id)
+      .select('id, name, username, avatar_url, bio, profile_visibility')
+      .single()
+  }
+
+  let { data, error } = await performUpdate(updates)
+
+  const missingVisibilityColumn =
+    profile_visibility !== undefined &&
+    !!error &&
+    (error.message.includes('profile_visibility') || error.message.includes('schema cache'))
+
+  if (missingVisibilityColumn) {
+    const { profile_visibility: _ignored, ...fallbackUpdates } = updates
+    const retry = await performUpdate(fallbackUpdates)
+    data = retry.data
+    error = retry.error
+  }
 
   if (error) {
     if (error.code === '23505') {

@@ -21,6 +21,8 @@ export const DEMO_USER: UserProfile = {
   id: 'demo-user-001',
   email: 'alex@rivorafit.com',
   name: 'Alex Morgan',
+  bio: 'Training five days a week, keeping nutrition simple, and building momentum one consistent week at a time.',
+  profile_visibility: 'public',
   height_cm: 178,
   weight_kg: 82,
   age: 28,
@@ -195,7 +197,7 @@ export const RECIPES: Recipe[] = [
     ],
     macros: { calories: 420, protein_g: 48, carbs_g: 32, fat_g: 8, fiber_g: 4 },
     tags: ['high-protein', 'quick', 'no-cook', 'lunch'],
-    image_url: 'https://images.unsplash.com/photo-1580013759032-c96505e24c1f?w=400&q=80',
+    image_url: 'https://images.unsplash.com/photo-1626700051175-6818013e1d4f?w=400&q=80',
   },
 
   // ── BREAKFAST ───────────────────────────────────────────────────────────────
@@ -5412,7 +5414,7 @@ export interface MealLogEntry {
   id: string
   meal_type: 'breakfast' | 'lunch' | 'dinner' | 'snack' | 'drink'
   name: string
-  macros: { calories: number; protein_g: number; carbs_g: number; fat_g: number }
+  macros: { calories: number; protein_g: number; carbs_g: number; fat_g: number; fiber_g?: number }
   time: string
   recipe: Recipe | null
   recipe_amount?:
@@ -5420,7 +5422,7 @@ export interface MealLogEntry {
     | { kind: 'units'; units: number }
   meal_items?: Array<{
     name: string
-    macros: { calories: number; protein_g: number; carbs_g: number; fat_g: number }
+    macros: { calories: number; protein_g: number; carbs_g: number; fat_g: number; fiber_g?: number }
     amount?: number
     unit?: string
     servings?: number
@@ -5440,4 +5442,5 @@ export const TODAY_TOTALS = {
   protein_g: 119,
   carbs_g: 101,
   fat_g: 21,
+  fiber_g: 0,
 }

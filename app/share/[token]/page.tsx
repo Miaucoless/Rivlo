@@ -8,9 +8,9 @@ import { getStoredDemoShareByToken } from '@/lib/demo-shares'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Dumbbell, UtensilsCrossed, BookOpen, CheckCircle, Loader2, AlertCircle, ArrowLeft, ShoppingCart, Sparkles, CalendarRange, Droplets, Target, TrendingUp, Circle } from 'lucide-react'
+import { Dumbbell, UtensilsCrossed, BookOpen, CheckCircle, Loader2, AlertCircle, ArrowLeft, ShoppingCart, Sparkles, CalendarRange, Droplets, Target, TrendingUp, Circle, MessagesSquare, Share2 } from 'lucide-react'
 import { toast } from 'sonner'
-import type { GroceryItem, GroceryList, SavedMealTemplate, WeeklyRecapShareData, Workout } from '@/types'
+import type { GroceryItem, GroceryList, SavedMealTemplate, SocialPost, WeeklyRecapShareData, Workout } from '@/types'
 
 const IMPORTED_FRIEND_SHARE_STORAGE_KEY = 'rivora-imported-friend-shares'
 
@@ -68,7 +68,7 @@ function normalizeImportedSavedMeal(raw: unknown): SavedMealTemplate | null {
 
 type SharedItem = {
   share_id: string
-  item_type: 'workout' | 'saved_meal' | 'recipe' | 'grocery_list' | 'weekly_recap'
+  item_type: 'workout' | 'saved_meal' | 'recipe' | 'grocery_list' | 'weekly_recap' | 'social_post'
   item_name: string
   item_data: Record<string, unknown>
   owner_name: string
@@ -82,6 +82,7 @@ const TYPE_LABELS: Record<string, string> = {
   recipe: 'Recipe',
   grocery_list: 'Grocery List',
   weekly_recap: 'Weekly Recap',
+  social_post: 'Social Post',
 }
 
 const TYPE_ICONS: Record<string, React.ReactNode> = {
@@ -90,6 +91,7 @@ const TYPE_ICONS: Record<string, React.ReactNode> = {
   recipe: <BookOpen className="w-5 h-5" />,
   grocery_list: <ShoppingCart className="w-5 h-5" />,
   weekly_recap: <Sparkles className="w-5 h-5" />,
+  social_post: <Share2 className="w-5 h-5" />,
 }
 
 // Resolve exercise name from either workout template or log structure
@@ -290,11 +292,21 @@ export default function SharePage() {
     )
   }
 
-  const macros = item.item_data?.macros as Record<string, number> | undefined
+  const socialPost = item.item_type === 'social_post' ? item.item_data as unknown as SocialPost : null
+  const macros = socialPost?.type === 'meal'
+    ? {
+        calories: socialPost.mealData?.calories ?? 0,
+        protein_g: socialPost.mealData?.protein ?? 0,
+        carbs_g: socialPost.mealData?.carbs ?? 0,
+        fat_g: socialPost.mealData?.fat ?? 0,
+      }
+    : item.item_data?.macros as Record<string, number> | undefined
   const recap = item.item_type === 'weekly_recap' ? item.item_data as unknown as WeeklyRecapShareData : null
-  const isViewOnly = item.item_type === 'weekly_recap'
+  const isViewOnly = item.item_type === 'weekly_recap' || item.item_type === 'social_post'
 
-  const exercises = item.item_data?.exercises as Record<string, unknown>[] | undefined
+  const exercises = socialPost?.type === 'workout'
+    ? socialPost.workoutData?.exercises as unknown as Record<string, unknown>[] | undefined
+    : item.item_data?.exercises as Record<string, unknown>[] | undefined
   const sharedGroceryList = item.item_type === 'grocery_list' ? item.item_data as unknown as GroceryList : null
   const groceryItems = Array.isArray(sharedGroceryList?.items) ? sharedGroceryList.items : []
   const groceryByCategory = groceryItems.reduce<Record<string, GroceryItem[]>>((acc, groceryItem) => {
@@ -306,8 +318,16 @@ export default function SharePage() {
   const groceryProgress = groceryItems.length > 0
     ? Math.round((groceryItems.filter((groceryItem) => groceryItem.checked).length / groceryItems.length) * 100)
     : 0
-  const ingredients = item.item_data?.ingredients as { name: string; amount?: number; unit?: string }[] | undefined
-  const mealItems = item.item_data?.items as { matched_name?: string; input?: string; amount?: number; unit?: string }[] | undefined
+  const ingredients = socialPost?.type === 'meal'
+    ? socialPost.mealData?.ingredients
+    : item.item_data?.ingredients as { name: string; amount?: number; unit?: string }[] | undefined
+  const mealItems = socialPost?.type === 'meal'
+    ? socialPost.mealData?.ingredients?.map((ingredient) => ({
+        matched_name: ingredient.name,
+        amount: ingredient.amount,
+        unit: ingredient.unit,
+      }))
+    : item.item_data?.items as { matched_name?: string; input?: string; amount?: number; unit?: string }[] | undefined
 
   return (
     <div className="relative min-h-screen bg-transparent p-4 sm:p-6">
@@ -338,6 +358,26 @@ export default function SharePage() {
               {item.message && (
                 <p className="rounded-xl border border-white/30 bg-white/45 px-3 py-2 text-sm italic text-muted-foreground dark:border-white/10 dark:bg-white/5">&ldquo;{item.message}&rdquo;</p>
               )}
+
+              {socialPost ? (
+                <div className="space-y-3 rounded-2xl border border-white/25 bg-white/35 p-4 backdrop-blur-sm dark:border-white/10 dark:bg-white/5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="outline" className="border-white/30 bg-white/45 dark:border-white/10 dark:bg-white/5">
+                      {socialPost.type === 'meal' ? <UtensilsCrossed className="mr-1.5 h-3.5 w-3.5" /> : <Dumbbell className="mr-1.5 h-3.5 w-3.5" />}
+                      {socialPost.type === 'meal' ? 'Meal post' : 'Workout post'}
+                    </Badge>
+                    <Badge variant="outline" className="border-white/30 bg-white/45 dark:border-white/10 dark:bg-white/5">
+                      @{socialPost.user.username}
+                    </Badge>
+                  </div>
+                  {socialPost.caption ? (
+                    <div className="flex items-start gap-2.5 rounded-xl border border-white/20 bg-white/40 p-3 dark:border-white/10 dark:bg-white/[0.04]">
+                      <MessagesSquare className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                      <p className="text-sm text-foreground/90">{socialPost.caption}</p>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
 
               {recap && (
                 <div className="space-y-4 rounded-2xl border border-white/25 bg-white/35 p-4 backdrop-blur-sm dark:border-white/10 dark:bg-white/5">
@@ -412,7 +452,7 @@ export default function SharePage() {
                 </div>
               )}
 
-              {item.item_type === 'saved_meal' && mealItems && mealItems.length > 0 && (
+              {(item.item_type === 'saved_meal' || (item.item_type === 'social_post' && socialPost?.type === 'meal')) && mealItems && mealItems.length > 0 && (
                 <div className="space-y-1.5 rounded-2xl border border-white/25 bg-white/35 p-3 backdrop-blur-sm dark:border-white/10 dark:bg-white/5">
                   <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Ingredients</p>
                   <div className="space-y-1 max-h-44 overflow-y-auto">
@@ -426,16 +466,18 @@ export default function SharePage() {
                 </div>
               )}
 
-              {(item.item_type === 'workout' || item.item_type === 'workout_log' as string) && exercises && exercises.length > 0 && (
+              {(item.item_type === 'workout' || (item.item_type === 'social_post' && socialPost?.type === 'workout') || item.item_type === 'workout_log' as string) && exercises && exercises.length > 0 && (
                 <div className="space-y-1.5 rounded-2xl border border-white/25 bg-white/35 p-3 backdrop-blur-sm dark:border-white/10 dark:bg-white/5">
                   <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Exercises</p>
                   <div className="space-y-1 max-h-52 overflow-y-auto">
                     {exercises.map((ex, i) => (
                       <div key={i} className="flex items-center justify-between text-sm py-0.5">
                         <span className="truncate">{getExerciseName(ex)}</span>
-                        {Array.isArray(ex.sets) && (
+                        {'sets' in ex && typeof ex.sets === 'number' ? (
+                          <Badge variant="secondary" className="text-xs shrink-0 ml-2">{ex.sets} sets</Badge>
+                        ) : Array.isArray(ex.sets) ? (
                           <Badge variant="secondary" className="text-xs shrink-0 ml-2">{(ex.sets as unknown[]).length} sets</Badge>
-                        )}
+                        ) : null}
                       </div>
                     ))}
                   </div>
@@ -529,7 +571,7 @@ export default function SharePage() {
               {isViewOnly ? (
                 <div className="flex items-center gap-2 justify-center py-2 text-sm text-muted-foreground">
                   <Sparkles className="w-4 h-4" />
-                  Weekly recaps are view-only shares
+                  {item.item_type === 'social_post' ? 'Social posts are view-only shares' : 'Weekly recaps are view-only shares'}
                 </div>
               ) : imported ? (
                 <div className="flex items-center gap-2 justify-center py-2 text-emerald-500 font-medium text-sm">

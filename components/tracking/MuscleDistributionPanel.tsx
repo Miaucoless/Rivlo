@@ -7,7 +7,7 @@ import {
 } from 'recharts'
 import {
   CheckCircle2, AlertCircle, Clock, Dumbbell, ChevronRight,
-  Flame, BarChart3, X, Star, Eye,
+  Flame, BarChart3, X, Eye,
 } from 'lucide-react'
 import { useAppStore } from '@/store/useAppStore'
 import { EXERCISE_LIBRARY, WORKOUTS } from '@/lib/content-library'
@@ -199,20 +199,15 @@ function WorkoutPreviewDialog({ workout, onClose }: { workout: Workout | null; o
 }
 
 function WorkoutRecCard({ rec, onPreview }: { rec: WorkoutRec; onPreview: (w: Workout) => void }) {
-  const muscles = rec.workout.muscle_groups.slice(0, 3)
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-border/50 bg-muted/10 px-4 py-3 transition-colors hover:bg-muted/25">
+    <div className="rounded-xl border border-border/50 bg-muted/10 px-4 py-3 transition-colors hover:bg-muted/25">
+      <div className="flex items-start gap-3">
       <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted/40">
         <Dumbbell className="h-3.5 w-3.5 text-muted-foreground" />
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
           <p className="text-sm font-semibold truncate">{rec.workout.name}</p>
-          {rec.source === 'saved' && (
-            <Badge variant="secondary" className="text-[10px] h-4 px-1.5 gap-1 shrink-0">
-              <Star className="h-2.5 w-2.5" /> Saved
-            </Badge>
-          )}
         </div>
         <div className="flex items-center gap-3 mt-0.5">
           <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
@@ -221,20 +216,20 @@ function WorkoutRecCard({ rec, onPreview }: { rec: WorkoutRec; onPreview: (w: Wo
           <span className="flex items-center gap-1 text-[11px] text-muted-foreground capitalize">
             <Flame className="h-3 w-3" /> {rec.workout.difficulty}
           </span>
-          <div className="flex flex-wrap gap-1">
-            {muscles.map((m) => (
-              <span key={m} className="rounded-full bg-muted/50 px-1.5 py-0.5 text-[10px] text-muted-foreground capitalize">
-                {m}
-              </span>
-            ))}
-          </div>
         </div>
       </div>
-      <div className="flex shrink-0 gap-1">
-        <Button size="sm" variant="ghost" className="h-7 text-xs gap-1 text-muted-foreground px-2" onClick={() => onPreview(rec.workout)}>
-          <Eye className="h-3 w-3" /> Preview
+      </div>
+      <div className="mt-3 flex items-center gap-2 sm:mt-0 sm:justify-end">
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-8 w-8 rounded-full border border-border/60 bg-background/70 p-0 text-muted-foreground hover:bg-muted sm:h-7 sm:w-7"
+          onClick={() => onPreview(rec.workout)}
+          aria-label="Preview workout"
+        >
+          <Eye className="h-3.5 w-3.5" />
         </Button>
-        <Button asChild size="sm" variant="outline" className="h-7 text-xs gap-1 px-2">
+        <Button asChild size="sm" variant="outline" className="h-8 justify-center text-xs gap-1 px-2.5 sm:h-7">
           <Link href="/dashboard/workouts">Start <ChevronRight className="h-3 w-3" /></Link>
         </Button>
       </div>
@@ -332,6 +327,13 @@ export default function MuscleDistributionPanel() {
 
   const hasData = workoutLogs.length > 0
   const activeStat = selectedCat ? categoryStats.find((s) => s.category === selectedCat) ?? null : null
+  const recentWorkouts = [...workoutLogs]
+    .sort((a, b) => {
+      const dateCompare = b.date.localeCompare(a.date)
+      if (dateCompare !== 0) return dateCompare
+      return (b.completed_at || '').localeCompare(a.completed_at || '')
+    })
+    .slice(0, 8)
 
   const selectedIsOnTrack = activeStat?.status === 'great'
   const filteredRecs = selectedCat && !selectedIsOnTrack
@@ -560,6 +562,66 @@ export default function MuscleDistributionPanel() {
           )}
         </CardContent>
       </Card>
+
+      {recentWorkouts.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <CardTitle className="text-sm">Recent Workouts</CardTitle>
+                <p className="mt-0.5 text-xs text-muted-foreground">Swipe through your latest sessions.</p>
+              </div>
+              <Button asChild size="sm" variant="outline" className="h-8 gap-1.5 px-3 text-xs">
+                <Link href="/dashboard/workouts">
+                  View all
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </Link>
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="-mx-6 overflow-x-auto px-6 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <div className="flex gap-3">
+                {recentWorkouts.map((log) => {
+                  const totalSets = log.exercises.reduce((sum, exercise) => sum + exercise.sets.length, 0)
+                  return (
+                    <button
+                      key={log.id}
+                      type="button"
+                      onClick={() => setPreviewWorkout(log.workout)}
+                      className="min-w-[16.5rem] max-w-[16.5rem] rounded-2xl border border-border/50 bg-muted/15 p-4 text-left transition-colors hover:border-border hover:bg-muted/25"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold">{log.workout.name}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">{format(new Date(log.date), 'MMM d')}</p>
+                        </div>
+                        <div className="rounded-xl bg-muted/40 p-2 text-muted-foreground">
+                          <Dumbbell className="h-3.5 w-3.5" />
+                        </div>
+                      </div>
+                      <div className="mt-4 grid grid-cols-3 gap-2">
+                        <div className="rounded-xl border border-border/40 bg-background/80 px-2.5 py-2">
+                          <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Time</p>
+                          <p className="mt-1 text-sm font-semibold">{log.duration_min || 0}m</p>
+                        </div>
+                        <div className="rounded-xl border border-border/40 bg-background/80 px-2.5 py-2">
+                          <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Exercises</p>
+                          <p className="mt-1 text-sm font-semibold">{log.exercises.length}</p>
+                        </div>
+                        <div className="rounded-xl border border-border/40 bg-background/80 px-2.5 py-2">
+                          <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Sets</p>
+                          <p className="mt-1 text-sm font-semibold">{totalSets}</p>
+                        </div>
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Empty state */}
       {!hasData && (

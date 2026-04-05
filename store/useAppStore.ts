@@ -29,6 +29,11 @@ import type {
   Recipe,
   CalendarReminder,
   WaterEntry,
+  SocialPostComment,
+  SocialFollowRelationship,
+  SocialPost,
+  SocialPostDraft,
+  SocialPostStats,
 } from '@/types'
 import {
   DEMO_USER,
@@ -40,6 +45,7 @@ import {
   WORKOUTS,
   type MealLogEntry,
 } from '@/lib/content-library'
+import { DEFAULT_SOCIAL_POSTS, createSocialPostFromDraft } from '@/lib/social-feed'
 import {
   clearGroceryListCloud,
   deleteCustomWorkoutCloud,
@@ -78,6 +84,12 @@ interface AppStore {
   calendarReminders: CalendarReminder[]
   deletedSavedMealIds: string[]
   deletedCustomWorkoutIds: string[]
+  socialPosts: SocialPost[]
+  socialFollows: SocialFollowRelationship[]
+  socialSavedPostIds: string[]
+  socialLikedPostIds: string[]
+  socialPostComments: Record<string, SocialPostComment[]>
+  socialComposerPrefill: SocialPostDraft | null
 
   // Auth & Profile
   user: UserProfile | null
@@ -174,6 +186,18 @@ interface AppStore {
   addCustomWorkout: (workout: Workout) => void
   updateCustomWorkout: (workoutId: string, updates: Partial<Workout>) => void
   removeCustomWorkout: (workoutId: string) => Promise<boolean>
+  createSocialPost: (draft: SocialPostDraft) => string
+  removeSocialPost: (postId: string) => void
+  requestToFollowUser: (target: { id: string; profile_visibility?: 'public' | 'private' }) => 'accepted' | 'pending' | 'noop'
+  acceptFollowRequest: (followerId: string) => void
+  declineFollowRequest: (followerId: string) => void
+  cancelFollowRequest: (followingId: string) => void
+  unfollowUser: (followingId: string) => void
+  setSocialComposerPrefill: (draft: SocialPostDraft | null) => void
+  toggleSaveSocialPost: (postId: string) => void
+  toggleLikeSocialPost: (postId: string) => void
+  addCommentToSocialPost: (postId: string, body: string) => void
+  incrementSocialPostStats: (postId: string, updates: Partial<SocialPostStats>) => void
 
   // Getters
   getDailyMeals: (date: string) => MealLogEntry[]
@@ -245,6 +269,20 @@ function calculateActivityStreak(state: Pick<AppStore, 'weightHistory' | 'journa
   }
 
   return streak
+}
+
+function generateDemoSocialFollows(): SocialFollowRelationship[] {
+  const now = new Date().toISOString()
+  return [
+    { followerId: DEMO_USER.id, followingId: 'creator-devon', status: 'accepted', createdAt: now },
+    { followerId: DEMO_USER.id, followingId: 'creator-kira', status: 'accepted', createdAt: now },
+    { followerId: 'creator-marina', followingId: DEMO_USER.id, status: 'accepted', createdAt: now },
+    { followerId: 'creator-luca', followingId: DEMO_USER.id, status: 'accepted', createdAt: now },
+  ]
+}
+
+function slugifyUsername(name: string) {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '').slice(0, 24) || 'rivorauser'
 }
 
 const pendingCloudWriteQueue: Array<() => Promise<void>> = []
@@ -825,6 +863,12 @@ export const useAppStore = create<AppStore>()(
       calendarReminders: [],
       deletedSavedMealIds: [],
       deletedCustomWorkoutIds: [],
+      socialPosts: [],
+      socialFollows: [],
+      socialSavedPostIds: [],
+      socialLikedPostIds: [],
+      socialPostComments: {},
+      socialComposerPrefill: null,
       user: null,
       isAuthenticated: false,
       isDemoMode: false,
@@ -857,6 +901,12 @@ export const useAppStore = create<AppStore>()(
               calendarReminders: [],
               deletedSavedMealIds: [],
               deletedCustomWorkoutIds: [],
+              socialPosts: [],
+              socialFollows: [],
+              socialSavedPostIds: [],
+              socialLikedPostIds: [],
+              socialPostComments: {},
+              socialComposerPrefill: null,
               weightHistory: [],
               journalEntries: [],
               workoutLogs: [],
@@ -1066,9 +1116,24 @@ export const useAppStore = create<AppStore>()(
 
       updateProfile: (updates) => {
         // Optimistic local update (instant UI response)
-        set((state) => withRefreshedNotifications(state, {
-          user: state.user ? { ...state.user, ...updates } : null,
-        }))
+        set((state) => {
+          const nextUser = state.user ? { ...state.user, ...updates } : null
+
+          // If avatar changed, patch it on all posts authored by this user
+          const nextSocialPosts =
+            updates.avatar_url != null && state.user
+              ? state.socialPosts.map((post) =>
+                  post.user.id === state.user!.id
+                    ? { ...post, user: { ...post.user, avatar_url: updates.avatar_url } }
+                    : post
+                )
+              : state.socialPosts
+
+          return withRefreshedNotifications(state, {
+            user: nextUser,
+            socialPosts: nextSocialPosts,
+          })
+        })
 
         const state = get()
         if (!state.user || state.isDemoMode) return
@@ -1127,6 +1192,12 @@ export const useAppStore = create<AppStore>()(
           savedMeals: demoSavedMeals,
           customRecipes: [],
           customWorkouts: demoSavedWorkouts,
+          socialPosts: DEFAULT_SOCIAL_POSTS,
+          socialFollows: generateDemoSocialFollows(),
+          socialSavedPostIds: [],
+          socialLikedPostIds: [],
+          socialPostComments: {},
+          socialComposerPrefill: null,
           weightHistory: WEIGHT_HISTORY,
           journalEntries: JOURNAL_ENTRIES,
           workoutLogs: generateWorkoutLogs(),
@@ -1153,6 +1224,12 @@ export const useAppStore = create<AppStore>()(
           notificationPreferences: DEFAULT_NOTIFICATION_PREFERENCES,
           supplements: [],
           calendarReminders: [],
+          socialPosts: [],
+          socialFollows: [],
+          socialSavedPostIds: [],
+          socialLikedPostIds: [],
+          socialPostComments: {},
+          socialComposerPrefill: null,
           user: null,
           isAuthenticated: false,
           isDemoMode: false,
@@ -2014,6 +2091,217 @@ export const useAppStore = create<AppStore>()(
         return true
       },
 
+      createSocialPost: (draft) => {
+        const state = get()
+        const fallbackUser = state.user
+          ? {
+              id: state.user.id,
+              name: state.user.name,
+              username: state.user.username || slugifyUsername(state.user.name),
+              avatar_url: state.user.avatar_url,
+              bio: state.user.bio,
+              profile_visibility: state.user.profile_visibility,
+            }
+          : {
+              id: DEMO_USER.id,
+              name: DEMO_USER.name,
+              username: 'alexmorgan',
+            }
+        const nextPost = createSocialPostFromDraft(draft, fallbackUser)
+
+        set((current) => ({
+          socialPosts: [nextPost, ...current.socialPosts],
+        }))
+
+        return nextPost.id
+      },
+
+      removeSocialPost: (postId) => {
+        set((state) => ({
+          socialPosts: state.socialPosts.filter((post) => post.id !== postId),
+          socialSavedPostIds: state.socialSavedPostIds.filter((id) => id !== postId),
+          socialLikedPostIds: state.socialLikedPostIds.filter((id) => id !== postId),
+          socialPostComments: Object.fromEntries(
+            Object.entries(state.socialPostComments).filter(([key]) => key !== postId)
+          ),
+        }))
+      },
+
+      requestToFollowUser: (target) => {
+        const state = get()
+        const viewerId = state.user?.id ?? DEMO_USER.id
+        if (!target.id || target.id === viewerId) return 'noop'
+
+        const existing = state.socialFollows.find(
+          (item) => item.followerId === viewerId && item.followingId === target.id
+        )
+        if (existing?.status === 'accepted') return 'accepted'
+        if (existing?.status === 'pending') return 'pending'
+
+        const status = target.profile_visibility === 'private' ? 'pending' : 'accepted'
+        set((current) => ({
+          socialFollows: [
+            {
+              followerId: viewerId,
+              followingId: target.id,
+              status,
+              createdAt: new Date().toISOString(),
+            },
+            ...current.socialFollows,
+          ],
+        }))
+        return status
+      },
+
+      acceptFollowRequest: (followerId) => {
+        const ownerId = get().user?.id ?? DEMO_USER.id
+        set((state) => ({
+          socialFollows: state.socialFollows.map((item) => (
+            item.followerId === followerId && item.followingId === ownerId && item.status === 'pending'
+              ? { ...item, status: 'accepted' }
+              : item
+          )),
+        }))
+      },
+
+      declineFollowRequest: (followerId) => {
+        const ownerId = get().user?.id ?? DEMO_USER.id
+        set((state) => ({
+          socialFollows: state.socialFollows.filter(
+            (item) => !(item.followerId === followerId && item.followingId === ownerId && item.status === 'pending')
+          ),
+        }))
+      },
+
+      cancelFollowRequest: (followingId) => {
+        const viewerId = get().user?.id ?? DEMO_USER.id
+        set((state) => ({
+          socialFollows: state.socialFollows.filter(
+            (item) => !(item.followerId === viewerId && item.followingId === followingId && item.status === 'pending')
+          ),
+        }))
+      },
+
+      unfollowUser: (followingId) => {
+        const viewerId = get().user?.id ?? DEMO_USER.id
+        set((state) => ({
+          socialFollows: state.socialFollows.filter(
+            (item) => !(item.followerId === viewerId && item.followingId === followingId)
+          ),
+        }))
+      },
+
+      setSocialComposerPrefill: (draft) => {
+        set({ socialComposerPrefill: draft })
+      },
+
+      toggleSaveSocialPost: (postId) => {
+        set((state) => {
+          const alreadySaved = state.socialSavedPostIds.includes(postId)
+          return {
+            socialSavedPostIds: alreadySaved
+              ? state.socialSavedPostIds.filter((id) => id !== postId)
+              : [postId, ...state.socialSavedPostIds],
+            socialPosts: state.socialPosts.map((post) => {
+              if (post.id !== postId) return post
+              const nextSaved = Math.max(0, post.stats.saved + (alreadySaved ? -1 : 1))
+              return {
+                ...post,
+                stats: {
+                  ...post.stats,
+                  saved: nextSaved,
+                },
+              }
+            }),
+          }
+        })
+      },
+
+      toggleLikeSocialPost: (postId) => {
+        set((state) => {
+          const alreadyLiked = state.socialLikedPostIds.includes(postId)
+          return {
+            socialLikedPostIds: alreadyLiked
+              ? state.socialLikedPostIds.filter((id) => id !== postId)
+              : [postId, ...state.socialLikedPostIds],
+            socialPosts: state.socialPosts.map((post) => {
+              if (post.id !== postId) return post
+              const nextLikes = Math.max(0, (post.stats.likes ?? 0) + (alreadyLiked ? -1 : 1))
+              return {
+                ...post,
+                stats: {
+                  ...post.stats,
+                  likes: nextLikes,
+                },
+              }
+            }),
+          }
+        })
+      },
+
+      addCommentToSocialPost: (postId, body) => {
+        const trimmed = body.trim()
+        if (!trimmed) return
+
+        const state = get()
+        const commenter = state.user
+          ? {
+              userId: state.user.id,
+              userName: state.user.name,
+              userUsername: state.user.username || slugifyUsername(state.user.name),
+            }
+          : {
+              userId: DEMO_USER.id,
+              userName: DEMO_USER.name,
+              userUsername: 'alexmorgan',
+            }
+
+        const nextComment: SocialPostComment = {
+          id: `social-comment-${Date.now()}`,
+          postId,
+          ...commenter,
+          body: trimmed,
+          createdAt: new Date().toISOString(),
+        }
+
+        set((current) => ({
+          socialPostComments: {
+            ...current.socialPostComments,
+            [postId]: [nextComment, ...(current.socialPostComments[postId] ?? [])],
+          },
+          socialPosts: current.socialPosts.map((post) => (
+            post.id === postId
+              ? {
+                  ...post,
+                  stats: {
+                    ...post.stats,
+                    comments: (post.stats.comments ?? 0) + 1,
+                  },
+                }
+              : post
+          )),
+        }))
+      },
+
+      incrementSocialPostStats: (postId, updates) => {
+        set((state) => ({
+          socialPosts: state.socialPosts.map((post) => {
+            if (post.id !== postId) return post
+            return {
+              ...post,
+              stats: {
+                used: Math.max(0, post.stats.used + (updates.used ?? 0)),
+                completed: Math.max(0, post.stats.completed + (updates.completed ?? 0)),
+                saved: Math.max(0, post.stats.saved + (updates.saved ?? 0)),
+                likes: Math.max(0, (post.stats.likes ?? 0) + (updates.likes ?? 0)),
+                comments: Math.max(0, (post.stats.comments ?? 0) + (updates.comments ?? 0)),
+                remixed: Math.max(0, (post.stats.remixed ?? 0) + (updates.remixed ?? 0)),
+              },
+            }
+          }),
+        }))
+      },
+
       getDailyMeals: (date) => {
         const { mealEntries } = get()
         return mealEntries[date] || []
@@ -2081,7 +2369,7 @@ export const useAppStore = create<AppStore>()(
     }),
     {
       name: 'rivora-store',
-      version: 2, // bumped: PlannedSlot is now PlannedItem[] (array) instead of single item | null
+      version: 4,
       migrate: () => ({}), // clear stale state on version mismatch
       partialize: (state) => ({
         savedMeals: state.savedMeals,
@@ -2090,6 +2378,11 @@ export const useAppStore = create<AppStore>()(
         notificationPreferences: state.notificationPreferences,
         supplements: state.supplements,
         calendarReminders: state.calendarReminders,
+        socialPosts: state.socialPosts,
+        socialFollows: state.socialFollows,
+        socialSavedPostIds: state.socialSavedPostIds,
+        socialLikedPostIds: state.socialLikedPostIds,
+        socialPostComments: state.socialPostComments,
         user: state.user,
         isAuthenticated: state.isAuthenticated,
         isDemoMode: state.isDemoMode,

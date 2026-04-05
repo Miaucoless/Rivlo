@@ -3,12 +3,13 @@
 import React from 'react'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { format, startOfWeek, subDays } from 'date-fns'
 import {
   ChefHat, ShoppingCart, Clock, Users, Flame,
   CheckCircle, Circle, Plus, Zap, Pencil, Trash2, X, CalendarDays,
-  Coffee, Soup, Moon, Cookie, GlassWater, Search, BookOpen, ChevronDown, Share2, ScanLine,
+  Coffee, Soup, Moon, Cookie, GlassWater, Search, BookOpen, ChevronDown, MessageSquareText, Share2, ScanLine,
 } from 'lucide-react'
 import { ShareModal } from '@/components/sharing/ShareModal'
 import { CodeScannerDialog } from '@/components/meals/CodeScannerDialog'
@@ -23,6 +24,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useAppStore, type SavedMealTemplate } from '@/store/useAppStore'
 import { getTodayISO } from '@/lib/utils'
 import { RECIPES } from '@/lib/content-library'
+import { buildSocialDraftFromRecipe, buildSocialDraftFromSavedMeal } from '@/lib/social-feed'
 import type { Recipe, PlannedSlot, CustomMealIngredient } from '@/types'
 import type { BarcodeFoodLookupResult } from '@/lib/barcode-food'
 import { generateGroceryItems, categorizeIngredient, estimatePrice } from '@/lib/grocery-generator'
@@ -41,6 +43,12 @@ const MEAL_TYPES = ['breakfast', 'lunch', 'dinner', 'snack', 'drink'] as const
 type MealType = (typeof MEAL_TYPES)[number]
 type MealSource = 'search' | 'saved' | 'recent' | 'recipe' | 'manual'
 type SearchMeasureUnit = 'serving' | 'g' | 'oz' | 'ml' | 'fl_oz'
+const DAYS_OF_WEEK = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const
+const DAY_LABELS: Record<string, string> = { monday: 'Mon', tuesday: 'Tue', wednesday: 'Wed', thursday: 'Thu', friday: 'Fri', saturday: 'Sat', sunday: 'Sun' }
+const DAY_FULL: Record<string, string> = { monday: 'Monday', tuesday: 'Tuesday', wednesday: 'Wednesday', thursday: 'Thursday', friday: 'Friday', saturday: 'Saturday', sunday: 'Sunday' }
+const PLAN_SLOTS = ['breakfast', 'lunch', 'dinner', 'snack'] as const
+const SLOT_ICONS: Record<string, React.ComponentType<{ className?: string }>> = { breakfast: Coffee, lunch: Soup, dinner: Moon, snack: Cookie }
+const SLOT_COLORS: Record<string, string> = { breakfast: 'text-amber-400', lunch: 'text-sky-400', dinner: 'text-violet-400', snack: 'text-emerald-400' }
 
 type ManualItemRow = {
   id: string
@@ -52,6 +60,7 @@ type ManualItemRow = {
     protein_g?: number
     carbs_g?: number
     fat_g?: number
+    fiber_g?: number
   }
 }
 
@@ -76,7 +85,7 @@ function parseOptionalMacroInput(value: string) {
   return Number.isFinite(parsed) ? parsed : NaN
 }
 
-function renderMacroSummary(macros?: { calories?: number; protein_g?: number; carbs_g?: number; fat_g?: number }) {
+function renderMacroSummary(macros?: { calories?: number; protein_g?: number; carbs_g?: number; fat_g?: number; fiber_g?: number }) {
   if (!macros) return null
 
   const parts: React.ReactNode[] = []
@@ -93,6 +102,9 @@ function renderMacroSummary(macros?: { calories?: number; protein_g?: number; ca
   if ('fat_g' in macros && typeof macros.fat_g === 'number') {
     parts.push(<span key="fat" className="font-data text-xs text-muted-foreground">{fmtMacro(macros.fat_g)}g F</span>)
   }
+  if ('fiber_g' in macros && typeof macros.fiber_g === 'number') {
+    parts.push(<span key="fiber" className="font-data text-xs text-amber-500/80">{fmtMacro(macros.fiber_g)}g Fiber</span>)
+  }
 
   if (parts.length === 0) return null
 
@@ -108,12 +120,13 @@ function renderMacroSummary(macros?: { calories?: number; protein_g?: number; ca
   )
 }
 
-function buildItemMacros(calories: number, extras?: { protein_g?: number; carbs_g?: number; fat_g?: number }) {
+function buildItemMacros(calories: number, extras?: { protein_g?: number; carbs_g?: number; fat_g?: number; fiber_g?: number }): { calories: number; protein_g: number; carbs_g: number; fat_g: number; fiber_g?: number } {
   return {
     calories: Math.round(calories),
-    ...(extras?.protein_g !== undefined ? { protein_g: Math.round(extras.protein_g * 10) / 10 } : {}),
-    ...(extras?.carbs_g !== undefined ? { carbs_g: Math.round(extras.carbs_g * 10) / 10 } : {}),
-    ...(extras?.fat_g !== undefined ? { fat_g: Math.round(extras.fat_g * 10) / 10 } : {}),
+    protein_g: extras?.protein_g !== undefined ? Math.round(extras.protein_g * 10) / 10 : 0,
+    carbs_g: extras?.carbs_g !== undefined ? Math.round(extras.carbs_g * 10) / 10 : 0,
+    fat_g: extras?.fat_g !== undefined ? Math.round(extras.fat_g * 10) / 10 : 0,
+    ...(extras?.fiber_g !== undefined ? { fiber_g: Math.round(extras.fiber_g * 10) / 10 } : {}),
   }
 }
 
@@ -135,6 +148,7 @@ function scaleMealLogEntry(entry: MealLogEntry, multiplier: number): MealLogEntr
       protein_g: round1((entry.macros?.protein_g || 0) * clamp),
       carbs_g: round1((entry.macros?.carbs_g || 0) * clamp),
       fat_g: round1((entry.macros?.fat_g || 0) * clamp),
+      ...(entry.macros?.fiber_g !== undefined ? { fiber_g: round1(entry.macros.fiber_g * clamp) } : {}),
     },
     recipe_amount: entry.recipe_amount
       ? entry.recipe_amount.kind === 'servings'
@@ -148,11 +162,29 @@ function scaleMealLogEntry(entry: MealLogEntry, multiplier: number): MealLogEntr
         protein_g: round1((item.macros?.protein_g || 0) * clamp),
         carbs_g: round1((item.macros?.carbs_g || 0) * clamp),
         fat_g: round1((item.macros?.fat_g || 0) * clamp),
+        ...(item.macros?.fiber_g !== undefined ? { fiber_g: round1(item.macros.fiber_g * clamp) } : {}),
       },
       amount: item.amount != null ? round1(item.amount * clamp) : item.amount,
       servings: item.servings != null ? round1(item.servings * clamp) : item.servings,
     })),
   }
+}
+
+function getRecipeEntryMultiplier(entry: MealLogEntry) {
+  if (!entry.recipe) return 1
+
+  if (entry.recipe_amount?.kind === 'servings') {
+    return Math.max(0, entry.recipe_amount.servings)
+  }
+
+  if (entry.recipe_amount?.kind === 'units') {
+    const yieldQty = Number(entry.recipe.yield_quantity)
+    if (Number.isFinite(yieldQty) && yieldQty > 0) {
+      return Math.max(0, entry.recipe_amount.units / yieldQty)
+    }
+  }
+
+  return 1
 }
 
 function scaleSavedMealTemplate(meal: SavedMealTemplate, multiplier: number): SavedMealTemplate {
@@ -166,17 +198,18 @@ function scaleSavedMealTemplate(meal: SavedMealTemplate, multiplier: number): Sa
       protein_g: round1((meal.macros?.protein_g || 0) * clamp),
       carbs_g: round1((meal.macros?.carbs_g || 0) * clamp),
       fat_g: round1((meal.macros?.fat_g || 0) * clamp),
+      ...(meal.macros?.fiber_g !== undefined ? { fiber_g: round1(meal.macros.fiber_g * clamp) } : {}),
     },
     items: meal.items.map((item) => ({
       ...item,
       amount: item.amount != null ? round1(item.amount * clamp) : item.amount,
-      servings: item.servings != null ? round1(item.servings * clamp) : item.servings,
       macros: item.macros
         ? {
             calories: Math.round((item.macros.calories || 0) * clamp),
             protein_g: round1((item.macros.protein_g || 0) * clamp),
             carbs_g: round1((item.macros.carbs_g || 0) * clamp),
             fat_g: round1((item.macros.fat_g || 0) * clamp),
+            ...(item.macros.fiber_g !== undefined ? { fiber_g: round1(item.macros.fiber_g * clamp) } : {}),
           }
         : item.macros,
     })),
@@ -415,7 +448,7 @@ function DailyNutritionSummary({
   totals,
   user,
 }: {
-  totals: { calories: number; protein_g: number; carbs_g: number; fat_g: number }
+  totals: { calories: number; protein_g: number; carbs_g: number; fat_g: number; fiber_g: number }
   user: {
     calorie_target?: number
     protein_target_g?: number
@@ -436,24 +469,34 @@ function DailyNutritionSummary({
       consumed: Math.round(totals.protein_g),
       target: user.protein_target_g || 0,
       suffix: 'g',
+      showAlways: false,
     },
     {
       label: 'Carbs',
       consumed: Math.round(totals.carbs_g),
       target: user.carb_target_g || 0,
       suffix: 'g',
+      showAlways: false,
     },
     {
       label: 'Fat',
       consumed: Math.round(totals.fat_g),
       target: user.fat_target_g || 0,
       suffix: 'g',
+      showAlways: false,
     },
-  ].filter((macro) => macro.target > 0)
-  const macroGridClass = macroCards.length >= 3 ? 'grid-cols-3' : macroCards.length === 2 ? 'grid-cols-2' : 'grid-cols-1'
+    {
+      label: 'Fiber',
+      consumed: Math.round(totals.fiber_g * 10) / 10,
+      target: 0,
+      suffix: 'g',
+      showAlways: true,
+    },
+  ].filter((macro) => macro.target > 0 || macro.showAlways)
+  const macroGridClass = macroCards.length >= 4 ? 'grid-cols-4' : macroCards.length === 3 ? 'grid-cols-3' : macroCards.length === 2 ? 'grid-cols-2' : 'grid-cols-1'
 
   return (
-    <div className="grid gap-2.5 xl:grid-cols-[1.05fr_0.78fr_0.78fr_0.78fr]">
+    <div className="grid gap-2.5 xl:grid-cols-[1.05fr_0.7fr_0.7fr_0.7fr_0.7fr]">
       <div className="rounded-[1.1rem] border border-border/60 bg-[linear-gradient(135deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02))] p-3 shadow-[0_16px_44px_-38px_rgba(0,0,0,0.65)] xl:rounded-[1.35rem] xl:p-3.5">
         <div className="flex items-center justify-between gap-3">
           <div className="space-y-1">
@@ -486,6 +529,7 @@ function DailyNutritionSummary({
         {macroCards.map((macro) => {
           const pct = progressValue(macro.consumed, macro.target)
           const remaining = remainingValue(macro.consumed, macro.target)
+          const hasTarget = macro.target > 0
           return (
             <div
               key={macro.label}
@@ -498,21 +542,30 @@ function DailyNutritionSummary({
                   {' '}
                   {macro.suffix}
                 </span>
-                <span className="text-[10px] text-muted-foreground xl:text-[11px]">
-                  / {macro.target > 0 ? `${macro.target} ${macro.suffix}` : 'No target'}
-                </span>
+                {hasTarget && (
+                  <span className="text-[10px] text-muted-foreground xl:text-[11px]">
+                    / {macro.target} {macro.suffix}
+                  </span>
+                )}
               </div>
-              <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted/70 xl:mt-2.5">
-                <motion.div
-                  className="h-full rounded-full bg-primary"
-                  initial={{ width: 0 }}
-                  animate={{ width: `${pct}%` }}
-                  transition={{ duration: 0.5, ease: [0.22, 0.61, 0.36, 1] }}
-                />
-              </div>
-              <p className="mt-1 text-[10px] text-muted-foreground xl:mt-1.5 xl:text-[11px]">
-                {macro.target > 0 ? `${remaining} ${macro.suffix} remaining` : `${pct}% of goal`}
-              </p>
+              {hasTarget && (
+                <>
+                  <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted/70 xl:mt-2.5">
+                    <motion.div
+                      className="h-full rounded-full bg-primary"
+                      initial={{ width: 0 }}
+                      animate={{ width: `${pct}%` }}
+                      transition={{ duration: 0.5, ease: [0.22, 0.61, 0.36, 1] }}
+                    />
+                  </div>
+                  <p className="mt-1 text-[10px] text-muted-foreground xl:mt-1.5 xl:text-[11px]">
+                    {remaining} {macro.suffix} remaining
+                  </p>
+                </>
+              )}
+              {!hasTarget && (
+                <p className="mt-1.5 text-[10px] text-muted-foreground xl:mt-2.5 xl:text-[11px]">today&apos;s total</p>
+              )}
             </div>
           )
         })}
@@ -560,8 +613,9 @@ function MealTimelineSection({
       protein_g: acc.protein_g + meal.macros.protein_g,
       carbs_g: acc.carbs_g + meal.macros.carbs_g,
       fat_g: acc.fat_g + meal.macros.fat_g,
+      fiber_g: acc.fiber_g + (meal.macros.fiber_g ?? 0),
     }),
-    { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 }
+    { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0, fiber_g: 0 }
   )
 
   return (
@@ -630,12 +684,22 @@ function MealTimelineSection({
                 ].filter((macro) => macro.target > 0)
 
                 const mealItems = meal.recipe
-                  ? meal.recipe.ingredients.map((ingredient, index) => ({
-                      key: `${meal.id}-recipe-${index}`,
-                      name: ingredient.name,
-                      meta: ingredient.amount != null ? `${ingredient.amount} ${ingredient.unit}` : '',
-                      macros: null as null | typeof meal.meal_items[number]['macros'],
-                    }))
+                  ? (() => {
+                      const multiplier = getRecipeEntryMultiplier(meal)
+                      const round1 = (value: number) => Math.round(value * 10) / 10
+
+                      return meal.recipe.ingredients.map((ingredient, index) => ({
+                        key: `${meal.id}-recipe-${index}`,
+                        name: ingredient.name,
+                        meta: ingredient.amount != null ? `${fmtMacro(round1(ingredient.amount * multiplier))} ${ingredient.unit}` : '',
+                        macros: {
+                          calories: Math.round((ingredient.calories_per_unit || 0) * ingredient.amount * multiplier),
+                          protein_g: round1((ingredient.macros.protein_g || 0) * ingredient.amount * multiplier),
+                          carbs_g: round1((ingredient.macros.carbs_g || 0) * ingredient.amount * multiplier),
+                          fat_g: round1((ingredient.macros.fat_g || 0) * ingredient.amount * multiplier),
+                        } as { calories: number; protein_g: number; carbs_g: number; fat_g: number },
+                      }))
+                    })()
                   : (meal.meal_items || []).map((item, index) => ({
                       key: `${meal.id}-item-${index}`,
                       name: item.name,
@@ -960,6 +1024,7 @@ function MealEditorModal({
   editingSavedMeal,
   onSave,
   onSaveTemplate,
+  onOpenScanner,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -968,6 +1033,7 @@ function MealEditorModal({
   editingSavedMeal: SavedMealTemplate | null
   onSave: (data: Omit<MealLogEntry, 'id'>) => void
   onSaveTemplate: (meal: Omit<SavedMealTemplate, 'id' | 'updated_at'>, existingId?: string) => void
+  onOpenScanner?: () => void
 }) {
   const { savedMeals, customRecipes, mealEntries } = useAppStore()
   const isMealTypeLocked = initialMealType !== null && !editingMeal && !editingSavedMeal
@@ -1162,13 +1228,13 @@ function MealEditorModal({
 
   const manualTotals = useMemo(() => {
     return sumMacros(
-      manualItems.map((item) => ({ macros: item.macros }))
+      manualItems.map((item) => ({ macros: { calories: item.macros.calories, protein_g: item.macros.protein_g ?? 0, carbs_g: item.macros.carbs_g ?? 0, fat_g: item.macros.fat_g ?? 0, fiber_g: item.macros.fiber_g } }))
     )
   }, [manualItems])
 
   const searchTotals = useMemo(() => {
     return sumMacros(
-      searchItems.map((item) => ({ macros: item.macros }))
+      searchItems.map((item) => ({ macros: { calories: item.macros.calories, protein_g: item.macros.protein_g ?? 0, carbs_g: item.macros.carbs_g ?? 0, fat_g: item.macros.fat_g ?? 0, fiber_g: item.macros.fiber_g } }))
     )
   }, [searchItems])
 
@@ -1744,9 +1810,10 @@ function MealEditorModal({
             name: item.name,
             macros: {
               calories: Math.round(item.macros.calories),
-              protein_g: Math.round(item.macros.protein_g),
-              carbs_g: Math.round(item.macros.carbs_g),
-              fat_g: Math.round(item.macros.fat_g),
+              protein_g: Math.round(item.macros.protein_g ?? 0),
+              carbs_g: Math.round(item.macros.carbs_g ?? 0),
+              fat_g: Math.round(item.macros.fat_g ?? 0),
+              ...(item.macros.fiber_g !== undefined ? { fiber_g: Math.round(item.macros.fiber_g * 10) / 10 } : {}),
             },
             time: time.trim() || format(new Date(), 'h:mm a'),
             recipe: null,
@@ -1755,9 +1822,10 @@ function MealEditorModal({
                 name: item.name,
                 macros: {
                   calories: Math.round(item.macros.calories),
-                  protein_g: Math.round(item.macros.protein_g),
-                  carbs_g: Math.round(item.macros.carbs_g),
-                  fat_g: Math.round(item.macros.fat_g),
+                  protein_g: Math.round(item.macros.protein_g ?? 0),
+                  carbs_g: Math.round(item.macros.carbs_g ?? 0),
+                  fat_g: Math.round(item.macros.fat_g ?? 0),
+                  ...(item.macros.fiber_g !== undefined ? { fiber_g: Math.round(item.macros.fiber_g * 10) / 10 } : {}),
                 },
               },
             ],
@@ -1780,7 +1848,7 @@ function MealEditorModal({
               matched_name: item.name,
               amount: 1,
               unit: 'serving',
-              macros: item.macros,
+              macros: { calories: item.macros.calories, protein_g: item.macros.protein_g ?? 0, carbs_g: item.macros.carbs_g ?? 0, fat_g: item.macros.fat_g ?? 0, ...(item.macros.fiber_g !== undefined ? { fiber_g: item.macros.fiber_g } : {}) },
             })),
           });
         }
@@ -1795,6 +1863,7 @@ function MealEditorModal({
             protein_g: Math.round(searchTotals.protein_g),
             carbs_g: Math.round(searchTotals.carbs_g),
             fat_g: Math.round(searchTotals.fat_g),
+            ...((searchTotals.fiber_g ?? 0) > 0 ? { fiber_g: Math.round((searchTotals.fiber_g ?? 0) * 10) / 10 } : {}),
           }
         : {
             calories: Math.round(singleCalories),
@@ -1814,7 +1883,7 @@ function MealEditorModal({
       const mealItems = usingList
         ? searchItems.map((item) => ({
             name: item.name,
-            macros: item.macros,
+            macros: { calories: item.macros.calories, protein_g: item.macros.protein_g ?? 0, carbs_g: item.macros.carbs_g ?? 0, fat_g: item.macros.fat_g ?? 0, ...(item.macros.fiber_g !== undefined ? { fiber_g: item.macros.fiber_g } : {}) },
           }))
         : [
             {
@@ -1837,7 +1906,7 @@ function MealEditorModal({
             matched_name: item.name,
             amount: 1,
             unit: 'serving',
-            macros: item.macros,
+            macros: { ...item.macros, protein_g: item.macros.protein_g ?? 0, carbs_g: item.macros.carbs_g ?? 0, fat_g: item.macros.fat_g ?? 0 },
           })),
         });
       }
@@ -1885,6 +1954,7 @@ function MealEditorModal({
             protein_g: Math.round(manualTotals.protein_g),
             carbs_g: Math.round(manualTotals.carbs_g),
             fat_g: Math.round(manualTotals.fat_g),
+            ...((manualTotals.fiber_g ?? 0) > 0 ? { fiber_g: Math.round((manualTotals.fiber_g ?? 0) * 10) / 10 } : {}),
           }
         : buildItemMacros(singleCalories, {
             protein_g: singleProtein,
@@ -1906,7 +1976,7 @@ function MealEditorModal({
             matched_name: item.name,
             amount: item.amount ?? 1,
             unit: item.unit ?? 'serving',
-            macros: item.macros,
+            macros: { calories: item.macros.calories, protein_g: item.macros.protein_g ?? 0, carbs_g: item.macros.carbs_g ?? 0, fat_g: item.macros.fat_g ?? 0, ...(item.macros.fiber_g !== undefined ? { fiber_g: item.macros.fiber_g } : {}) },
           }))
         : [
             {
@@ -1962,7 +2032,7 @@ function MealEditorModal({
         meal_items: usingList
           ? manualItems.map((item) => ({
               name: item.name,
-              macros: item.macros,
+              macros: { calories: item.macros.calories, protein_g: item.macros.protein_g ?? 0, carbs_g: item.macros.carbs_g ?? 0, fat_g: item.macros.fat_g ?? 0, ...(item.macros.fiber_g !== undefined ? { fiber_g: item.macros.fiber_g } : {}) },
             }))
           : [
               {
@@ -1999,7 +2069,7 @@ function MealEditorModal({
         recipe: null,
         meal_items: template.items.map(item => ({
           name: item.matched_name,
-          macros: item.macros ?? { calories: 0 },
+          macros: item.macros ?? { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 },
           amount: item.amount,
           unit: item.unit,
         })),
@@ -2112,7 +2182,19 @@ function MealEditorModal({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
-        <DialogHeader>
+        {!editingMeal && !editingSavedMeal && onOpenScanner && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="absolute left-4 top-4 z-20 h-8 gap-1.5 rounded-full px-3 text-xs"
+            onClick={onOpenScanner}
+          >
+            <ScanLine className="h-3.5 w-3.5" />
+            Scan
+          </Button>
+        )}
+        <DialogHeader className={!editingMeal && !editingSavedMeal && onOpenScanner ? 'pl-16 pr-8' : 'pr-8'}>
           <DialogTitle>
             {editingSavedMeal ? 'Edit saved meal' : editingMeal ? 'Edit meal entry' : 'Add meal entry'}
           </DialogTitle>
@@ -3312,7 +3394,7 @@ function EditSavedMealModal({
     name: string
     amount: number
     unit: string
-    macros?: { calories: number; protein_g: number; carbs_g: number; fat_g: number }
+    macros?: { calories: number; protein_g?: number; carbs_g?: number; fat_g?: number; fiber_g?: number }
   }
 
   const [name, setName] = useState('')
@@ -3479,21 +3561,22 @@ function EditSavedMealModal({
         protein_g: acc.protein_g + (i.macros?.protein_g ?? 0),
         carbs_g: acc.carbs_g + (i.macros?.carbs_g ?? 0),
         fat_g: acc.fat_g + (i.macros?.fat_g ?? 0),
+        fiber_g: acc.fiber_g + (i.macros?.fiber_g ?? 0),
       }),
-      { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 }
+      { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0, fiber_g: 0 }
     )
   }, [items])
 
   const handleSave = () => {
     if (!name.trim()) { toast.error('Meal name is required.'); return }
     const macros = totalMacros
-      ? { calories: Math.round(totalMacros.calories), protein_g: Math.round(totalMacros.protein_g), carbs_g: Math.round(totalMacros.carbs_g), fat_g: Math.round(totalMacros.fat_g) }
+      ? { calories: Math.round(totalMacros.calories), protein_g: Math.round(totalMacros.protein_g), carbs_g: Math.round(totalMacros.carbs_g), fat_g: Math.round(totalMacros.fat_g), ...(totalMacros.fiber_g > 0 ? { fiber_g: Math.round(totalMacros.fiber_g * 10) / 10 } : {}) }
       : meal?.macros ?? { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 }
     onSave({
       name: name.trim(),
       meal_type: mealType,
       macros,
-      items: items.map(i => ({ input: i.name, matched_name: i.name, amount: i.amount, unit: i.unit, macros: i.macros })),
+      items: items.map(i => ({ input: i.name, matched_name: i.name, amount: i.amount, unit: i.unit, macros: i.macros ? { calories: i.macros.calories, protein_g: i.macros.protein_g ?? 0, carbs_g: i.macros.carbs_g ?? 0, fat_g: i.macros.fat_g ?? 0, ...(i.macros.fiber_g !== undefined ? { fiber_g: i.macros.fiber_g } : {}) } : undefined })),
     }, meal?.id)
     onOpenChange(false)
   }
@@ -3532,7 +3615,7 @@ function EditSavedMealModal({
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Ingredients</p>
               {totalMacros && (
                 <span className="font-data text-xs text-muted-foreground/70">
-                  {fmtMacro(totalMacros.calories)} kcal · {fmtMacro(totalMacros.protein_g)}g P · {fmtMacro(totalMacros.carbs_g)}g C · {fmtMacro(totalMacros.fat_g)}g F
+                  {fmtMacro(totalMacros.calories)} kcal · {fmtMacro(totalMacros.protein_g)}g P · {fmtMacro(totalMacros.carbs_g)}g C · {fmtMacro(totalMacros.fat_g)}g F{totalMacros.fiber_g > 0 ? ` · ${fmtMacro(totalMacros.fiber_g)}g Fiber` : ''}
                 </span>
               )}
             </div>
@@ -3803,8 +3886,8 @@ function ShareMealButton({ meal }: { meal: SavedMealTemplate }) {
   const [open, setOpen] = useState(false)
   return (
     <>
-      <Button variant="ghost" size="icon-sm" className="h-8 w-8 text-muted-foreground hover:text-foreground" onClick={() => setOpen(true)} title="Share meal">
-        <Share2 className="w-3.5 h-3.5" />
+      <Button variant="ghost" size="icon-sm" className="h-8 w-8 text-muted-foreground hover:text-foreground" onClick={() => setOpen(true)} title="Send meal in messages">
+        <MessageSquareText className="w-3.5 h-3.5" />
       </Button>
       <ShareModal
         open={open}
@@ -3822,8 +3905,8 @@ function ShareRecipeButton({ recipe }: { recipe: Recipe }) {
   return (
     <>
       <Button size="sm" variant="ghost" className="flex-1 text-xs text-muted-foreground hover:text-foreground gap-1" onClick={() => setOpen(true)}>
-        <Share2 className="w-3.5 h-3.5" />
-        Share
+        <MessageSquareText className="w-3.5 h-3.5" />
+        Message
       </Button>
       <ShareModal
         open={open}
@@ -3837,6 +3920,7 @@ function ShareRecipeButton({ recipe }: { recipe: Recipe }) {
 }
 
 export default function MealsPage() {
+  const router = useRouter()
   const {
     user,
     groceryList,
@@ -3862,6 +3946,7 @@ export default function MealsPage() {
     removeSavedMeal,
     customRecipes,
     removeCustomRecipe,
+    setSocialComposerPrefill,
   } = useAppStore()
   const [createRecipeOpen, setCreateRecipeOpen] = useState(false)
   const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null)
@@ -3909,6 +3994,16 @@ export default function MealsPage() {
   const [plannerRecipeAmountMode, setPlannerRecipeAmountMode] = useState<RecipeAmountMode>('servings')
   const [plannerRecipeServings, setPlannerRecipeServings] = useState('1')
   const [plannerRecipeUnits, setPlannerRecipeUnits] = useState('1')
+
+  const openPublishComposerForSavedMeal = (meal: SavedMealTemplate) => {
+    setSocialComposerPrefill(buildSocialDraftFromSavedMeal(meal))
+    router.push(`/dashboard/feed?compose=1&sourceKind=saved_meal&sourceId=${encodeURIComponent(meal.id)}`)
+  }
+
+  const openPublishComposerForRecipe = (recipe: Recipe) => {
+    setSocialComposerPrefill(buildSocialDraftFromRecipe(recipe))
+    router.push(`/dashboard/feed?compose=1&sourceKind=recipe&sourceId=${encodeURIComponent(recipe.id)}`)
+  }
   const [expandedMeals, setExpandedMeals] = useState<Record<string, boolean>>({})
   const [expandedMealSections, setExpandedMealSections] = useState<Record<MealType, boolean>>({
     breakfast: false,
@@ -4031,13 +4126,6 @@ export default function MealsPage() {
   }
 
   // ─── Meal planner constants & helpers ───────────────────────────────────────
-  const DAYS_OF_WEEK = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const
-  const DAY_LABELS: Record<string, string> = { monday: 'Mon', tuesday: 'Tue', wednesday: 'Wed', thursday: 'Thu', friday: 'Fri', saturday: 'Sat', sunday: 'Sun' }
-  const DAY_FULL: Record<string, string> = { monday: 'Monday', tuesday: 'Tuesday', wednesday: 'Wednesday', thursday: 'Thursday', friday: 'Friday', saturday: 'Saturday', sunday: 'Sunday' }
-  const PLAN_SLOTS = ['breakfast', 'lunch', 'dinner', 'snack'] as const
-  const SLOT_ICONS: Record<string, React.ComponentType<{ className?: string }>> = { breakfast: Coffee, lunch: Soup, dinner: Moon, snack: Cookie }
-  const SLOT_COLORS: Record<string, string> = { breakfast: 'text-amber-400', lunch: 'text-sky-400', dinner: 'text-violet-400', snack: 'text-emerald-400' }
-
   const filteredPlanRecipes = useMemo(() => {
     let list = RECIPES
     if (recipeSearchQuery.trim()) {
@@ -4372,7 +4460,7 @@ export default function MealsPage() {
 
         <TabsContent value="saved" className="mt-6 space-y-4">
           {/* Search + New button */}
-          <div className="flex gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
               <Input
@@ -4392,14 +4480,17 @@ export default function MealsPage() {
                 </button>
               )}
             </div>
-            <Button variant="brand" size="sm" className="gap-1.5 shrink-0" onClick={openNewSavedMeal}>
-              <Plus className="w-3.5 h-3.5" />
-              New Saved Meal
-            </Button>
-            <Button variant="outline" size="sm" className="gap-1.5 shrink-0" onClick={() => openScanner('saved')}>
-              <ScanLine className="w-3.5 h-3.5" />
-              Scan
-            </Button>
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:w-auto">
+              <Button variant="brand" size="sm" className="gap-1.5 shrink-0" onClick={openNewSavedMeal}>
+                <Plus className="w-3.5 h-3.5" />
+                <span className="sm:hidden">New Meal</span>
+                <span className="hidden sm:inline">New Saved Meal</span>
+              </Button>
+              <Button variant="outline" size="sm" className="gap-1.5 shrink-0" onClick={() => openScanner('saved')}>
+                <ScanLine className="w-3.5 h-3.5" />
+                Scan
+              </Button>
+            </div>
           </div>
           {/* Filter dropdowns */}
           <div className="flex gap-2">
@@ -4540,7 +4631,7 @@ export default function MealsPage() {
                         )}
                       </div>
 
-                      <div className="px-4 pb-4 pt-3 flex items-center gap-2 border-t border-border/20">
+                      <div className="px-4 pb-4 pt-3 flex flex-wrap items-center gap-2 border-t border-border/20">
                         <Select
                           value={selectedTarget}
                           onValueChange={(v) => setSavedMealTargets(prev => ({ ...prev, [meal.id]: v as MealType }))}
@@ -4557,6 +4648,9 @@ export default function MealsPage() {
                         <Button variant="brand" size="sm" className="gap-1.5 text-xs h-8 shrink-0" onClick={() => handleAddSavedMealToToday(meal)}>
                           <Plus className="w-3 h-3" />
                           Add
+                        </Button>
+                        <Button variant="outline" size="sm" className="text-xs h-8 shrink-0" onClick={() => openPublishComposerForSavedMeal(meal)}>
+                          Post
                         </Button>
                         <ShareMealButton meal={meal} />
                         <Button variant="ghost" size="icon-sm" className="h-8 w-8 text-muted-foreground hover:text-foreground" onClick={() => openEditSavedMeal(meal)}>
@@ -4689,6 +4783,14 @@ export default function MealsPage() {
                         <AddToTodayButton recipe={recipe} />
                         <div className="flex gap-1.5">
                           <ShareRecipeButton recipe={recipe} />
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="flex-1 text-xs"
+                            onClick={() => openPublishComposerForRecipe(recipe)}
+                          >
+                            Post
+                          </Button>
                           <Button
                             size="sm"
                             variant="ghost"
@@ -5488,6 +5590,10 @@ export default function MealsPage() {
         editingSavedMeal={null}
         onSave={handleSaveMeal}
         onSaveTemplate={handleSaveTemplate}
+        onOpenScanner={() => {
+          setEditorOpen(false)
+          openScanner('today', editingMeal?.meal_type ?? editorMealType ?? getSuggestedMealType())
+        }}
       />
 
       <EditSavedMealModal

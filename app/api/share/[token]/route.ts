@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getDemoSharedItemByToken } from '@/lib/demo-shares'
 import { getRedisJson, hasRedisClient, normalizeRedisKeyPart, setRedisJson, withRedisCacheHeader } from '@/lib/redis'
 import { getServiceClient } from '@/lib/supabase-server'
 
@@ -6,6 +7,11 @@ export async function GET(
   _req: NextRequest,
   { params }: { params: { token: string } }
 ) {
+  const demoItem = getDemoSharedItemByToken(params.token)
+  if (demoItem) {
+    return withRedisCacheHeader(NextResponse.json(demoItem), 'skip')
+  }
+
   const cacheEnabled = hasRedisClient()
   const cacheKey = `share-token:v1:${normalizeRedisKeyPart(params.token)}`
 

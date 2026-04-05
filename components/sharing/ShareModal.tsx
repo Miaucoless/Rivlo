@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Label } from '@/components/ui/label'
-import { Check, Copy, Link, Users, X, Loader2, Search } from 'lucide-react'
+import { Check, Copy, Link, MessageSquareText, Share2, Users, X, Loader2, Search } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 import { createStoredDemoShare, DEMO_FRIENDS } from '@/lib/demo-shares'
 import { useAppStore } from '@/store/useAppStore'
@@ -32,7 +32,7 @@ type FriendshipRow = {
 type ShareModalProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
-  itemType: 'workout' | 'saved_meal' | 'recipe' | 'grocery_list' | 'weekly_recap'
+  itemType: 'workout' | 'saved_meal' | 'recipe' | 'grocery_list' | 'weekly_recap' | 'social_post'
   itemName: string
   itemData: Record<string, unknown>
 }
@@ -52,7 +52,9 @@ export function ShareModal({ open, onOpenChange, itemType, itemName, itemData }:
   const [shareUrl, setShareUrl] = useState<string | null>(null)
   const [shareId, setShareId] = useState<string | null>(null)
   const [linkLoading, setLinkLoading] = useState(false)
+  const [nativeShareLoading, setNativeShareLoading] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [canNativeShare, setCanNativeShare] = useState(false)
 
   // Friends tab state
   const [friends, setFriends] = useState<Friend[]>([])
@@ -99,6 +101,7 @@ export function ShareModal({ open, onOpenChange, itemType, itemName, itemData }:
   // Reset state when modal opens
   useEffect(() => {
     if (open) {
+      setTab(itemType === 'social_post' ? 'link' : 'friends')
       setShareUrl(null)
       setShareId(null)
       setCopied(false)
@@ -109,7 +112,11 @@ export function ShareModal({ open, onOpenChange, itemType, itemName, itemData }:
       setFriends([])
       setFriendsLoaded(false)
     }
-  }, [open])
+  }, [itemType, open])
+
+  useEffect(() => {
+    setCanNativeShare(typeof navigator !== 'undefined' && typeof navigator.share === 'function')
+  }, [])
 
   // Prime the list as soon as the modal opens so mobile users do not need a
   // second interaction before the friends tab is usable.
@@ -161,6 +168,32 @@ export function ShareModal({ open, onOpenChange, itemType, itemName, itemData }:
       toast.error('Could not copy link.')
     } finally {
       setLinkLoading(false)
+    }
+  }
+
+  async function handleNativeShare() {
+    if (!canNativeShare) return
+
+    setNativeShareLoading(true)
+    try {
+      const result = await createShare()
+      if (!result) {
+        toast.error('Could not create share link.')
+        return
+      }
+
+      await navigator.share({
+        title: itemName,
+        text: itemType === 'social_post'
+          ? `Check out this post on Rivora: ${itemName}`
+          : `Check out this ${itemType === 'grocery_list' ? 'grocery list' : itemType.replace('_', ' ')} on Rivora: ${itemName}`,
+        url: result.url,
+      })
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') return
+      toast.error('Could not open the share sheet.')
+    } finally {
+      setNativeShareLoading(false)
     }
   }
 
@@ -217,13 +250,13 @@ export function ShareModal({ open, onOpenChange, itemType, itemName, itemData }:
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[calc(100vw-1.5rem)] max-w-sm max-h-[85dvh] overflow-hidden">
         <DialogHeader>
-          <DialogTitle className="text-base">Share &ldquo;{itemName}&rdquo;</DialogTitle>
+          <DialogTitle className="text-base">Send &ldquo;{itemName}&rdquo;</DialogTitle>
         </DialogHeader>
 
         <Tabs value={tab} onValueChange={(v) => setTab(v as 'link' | 'friends')} className="flex flex-col overflow-hidden">
           <TabsList className="w-full">
             <TabsTrigger value="link" className="flex-1 gap-1.5"><Link className="w-3.5 h-3.5" />Link</TabsTrigger>
-            <TabsTrigger value="friends" className="flex-1 gap-1.5"><Users className="w-3.5 h-3.5" />Friends</TabsTrigger>
+            <TabsTrigger value="friends" className="flex-1 gap-1.5"><MessageSquareText className="w-3.5 h-3.5" />Messages</TabsTrigger>
           </TabsList>
 
           {/* ── Link tab ── */}
@@ -231,6 +264,16 @@ export function ShareModal({ open, onOpenChange, itemType, itemName, itemData }:
             {shareUrl && (
               <Input value={shareUrl} readOnly className="text-xs font-mono bg-muted/40" />
             )}
+            {canNativeShare ? (
+              <Button onClick={handleNativeShare} disabled={nativeShareLoading} variant="outline" className="w-full gap-2">
+                {nativeShareLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Share2 className="w-4 h-4" />
+                )}
+                Share via device
+              </Button>
+            ) : null}
             <Button onClick={handleCopyLink} disabled={linkLoading} className="w-full gap-2">
               {linkLoading ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -243,6 +286,8 @@ export function ShareModal({ open, onOpenChange, itemType, itemName, itemData }:
             <p className="text-xs text-muted-foreground text-center">
               {itemType === 'weekly_recap'
                 ? 'Anyone with the link can view this weekly recap.'
+                : itemType === 'social_post'
+                ? 'Anyone with the link can view this social post.'
                 : `Anyone with the link can view and import this ${itemType === 'grocery_list' ? 'grocery list' : itemType.replace('_', ' ')}.`}
             </p>
           </TabsContent>
@@ -300,11 +345,11 @@ export function ShareModal({ open, onOpenChange, itemType, itemName, itemData }:
                 {selectedIds.size > 0 && (
                   <div className="space-y-2">
                     <div>
-                      <Label className="text-xs text-muted-foreground">Message (optional)</Label>
+                      <Label className="text-xs text-muted-foreground">DM note (optional)</Label>
                       <Textarea
                         value={message}
                         onChange={(e) => setMessage(e.target.value)}
-                        placeholder="Add a note…"
+                        placeholder="Write a quick message…"
                         rows={2}
                         className="mt-1 text-sm resize-none"
                         maxLength={200}
@@ -312,7 +357,7 @@ export function ShareModal({ open, onOpenChange, itemType, itemName, itemData }:
                     </div>
                     <Button onClick={handleSendToFriends} disabled={sending} className="w-full gap-2">
                       {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                      Send to {selectedIds.size} friend{selectedIds.size !== 1 ? 's' : ''}
+                      Send in messages to {selectedIds.size} friend{selectedIds.size !== 1 ? 's' : ''}
                     </Button>
                   </div>
                 )}

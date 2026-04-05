@@ -10,6 +10,7 @@ import {
   Apple,
   Dumbbell,
   Calendar,
+  Compass,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -17,6 +18,7 @@ const NAV_ITEMS = [
   { label: 'Home', href: '/dashboard/dashboard', icon: LayoutDashboard },
   { label: 'Meals', href: '/dashboard/meals', icon: Apple },
   { label: 'Workouts', href: '/dashboard/workouts', icon: Dumbbell },
+  { label: 'Feed', href: '/dashboard/feed', icon: Compass },
   { label: 'Calendar', href: '/dashboard/calendar', icon: Calendar },
 ]
 

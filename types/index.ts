@@ -19,7 +19,9 @@ export interface UserProfile {
   email: string
   name: string
   avatar_url?: string
+  bio?: string
   username?: string
+  profile_visibility?: 'public' | 'private'
   height_cm: number
   weight_kg: number
   age: number
@@ -120,14 +122,14 @@ export interface SavedMealItem {
   matched_name: string
   amount: number
   unit: string
-  macros?: { calories: number; protein_g: number; carbs_g: number; fat_g: number }
+  macros?: { calories: number; protein_g: number; carbs_g: number; fat_g: number; fiber_g?: number }
 }
 
 export interface SavedMealTemplate {
   id: string
   name: string
   meal_type: 'breakfast' | 'lunch' | 'dinner' | 'snack' | 'drink'
-  macros: { calories: number; protein_g: number; carbs_g: number; fat_g: number }
+  macros: { calories: number; protein_g: number; carbs_g: number; fat_g: number; fiber_g?: number }
   items: SavedMealItem[]
   updated_at: string
 }
@@ -294,6 +296,178 @@ export interface WorkoutLog {
   rating?: 1 | 2 | 3 | 4 | 5
   calories_burned_kcal?: number
   total_volume_kg?: number
+}
+
+// ─── Social Feed ───────────────────────────────────────────────────────────────
+
+export type SocialPostType = 'general' | 'meal' | 'workout' | 'day'
+export type SocialFeedAudience = 'followers' | 'public'
+export type SocialFeedFilter = 'all' | 'meals' | 'workouts' | 'plans' | 'progress'
+export type SocialFeedSort = 'most_used' | 'trending' | 'new' | 'most_completed' | 'most_saved'
+export type SocialPostCreationMode = 'simple' | 'structured'
+export type SocialFollowStatus = 'pending' | 'accepted'
+
+export interface SocialPostUser {
+  id: string
+  name: string
+  username: string
+  avatar_url?: string
+  bio?: string
+  profile_visibility?: 'public' | 'private'
+}
+
+export interface SocialFollowRelationship {
+  followerId: string
+  followingId: string
+  status: SocialFollowStatus
+  createdAt: string
+}
+
+export interface SocialPostStats {
+  used: number
+  completed: number
+  saved: number
+  likes?: number
+  comments?: number
+  remixed?: number
+}
+
+export interface SocialPostComment {
+  id: string
+  postId: string
+  userId: string
+  userName: string
+  userUsername: string
+  body: string
+  createdAt: string
+}
+
+export interface SocialMealIngredient {
+  name: string
+  amount: number
+  unit: string
+}
+
+export interface MealData {
+  calories: number
+  protein: number
+  carbs: number
+  fat: number
+  servings: number
+  ingredients: SocialMealIngredient[]
+  instructions: string[]
+  serving_size?: string
+}
+
+export interface SocialWorkoutExercise {
+  name: string
+  sets: number
+  reps: string
+  weight?: number
+  rest?: number
+  notes?: string
+}
+
+export interface WorkoutData {
+  duration: number
+  level: 'Beginner' | 'Intermediate' | 'Advanced'
+  equipment: string[]
+  focus: string[]
+  exercises: SocialWorkoutExercise[]
+  notes?: string
+}
+
+export interface SocialDayMeal {
+  id: string
+  mealType: MealEntry['meal_type']
+  name: string
+  time?: string
+  macros: Macros
+}
+
+export interface SocialDayWorkoutSet {
+  label: string
+  reps: number
+  weightKg?: number
+}
+
+export interface SocialDayWorkoutExercise {
+  name: string
+  sets: SocialDayWorkoutSet[]
+}
+
+export interface SocialDayWorkout {
+  id: string
+  name: string
+  startedAt?: string
+  completedAt?: string
+  durationMin?: number
+  caloriesBurnedKcal?: number
+  focus: string[]
+  exercises: SocialDayWorkoutExercise[]
+}
+
+export interface SocialDaySupplement {
+  id: string
+  name: string
+  amount: number
+  unit: string
+  category: SupplementCategory
+}
+
+export interface DayData {
+  date: string
+  meals: SocialDayMeal[]
+  workouts: SocialDayWorkout[]
+  supplements: SocialDaySupplement[]
+  totalCalories: number
+  totalProtein: number
+}
+
+export type PostMediaKind = 'image' | 'video'
+
+export interface PostMediaItem {
+  kind: PostMediaKind
+  url: string
+}
+
+export interface SocialPost {
+  id: string
+  type: SocialPostType
+  user: SocialPostUser
+  image?: string
+  media?: PostMediaItem[]
+  title: string
+  caption: string
+  stats: SocialPostStats
+  createdAt: string
+  tags: string[]
+  taggedUsers?: SocialPostUser[]
+  audience: SocialFeedAudience
+  creationMode: SocialPostCreationMode
+  mealData?: MealData
+  workoutData?: WorkoutData
+  dayData?: DayData
+}
+
+export interface SocialPostDraft {
+  type: SocialPostType
+  image?: string
+  media?: PostMediaItem[]
+  title: string
+  caption: string
+  tags: string[]
+  taggedUsers?: SocialPostUser[]
+  audience: SocialFeedAudience
+  creationMode: SocialPostCreationMode
+  mealData?: MealData
+  workoutData?: WorkoutData
+  dayData?: DayData
+  linkedSource?:
+    | { kind: 'saved_meal'; id: string; label: string }
+    | { kind: 'recipe'; id: string; label: string }
+    | { kind: 'workout'; id: string; label: string }
+    | { kind: 'day'; id: string; label: string }
 }
 
 // ─── Progress Tracking ──────────────────────────────────────────────────────────

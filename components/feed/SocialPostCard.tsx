@@ -1,0 +1,281 @@
+'use client'
+
+import { useRef, useState } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
+import { useRouter } from 'next/navigation'
+import { Bookmark, ChevronLeft, ChevronRight, Heart, MessageCircle } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import type { PostMediaItem, SocialPost } from '@/types'
+import { formatCompactNumber, getSocialPostBadge, getSocialPostPreview } from '@/lib/social-feed'
+import { buildSocialProfileHref } from '@/lib/social-connections'
+import { cn } from '@/lib/utils'
+
+const slideVariants = {
+  enter: (dir: number) => ({ x: dir >= 0 ? '100%' : '-100%' }),
+  center: { x: 0 },
+  exit: (dir: number) => ({ x: dir >= 0 ? '-100%' : '100%' }),
+}
+
+export function SocialPostCard({
+  post,
+  saved,
+  liked,
+  onOpen,
+}: {
+  post: SocialPost
+  saved: boolean
+  liked: boolean
+  onOpen: (post: SocialPost) => void
+}) {
+  const router = useRouter()
+  const badge = getSocialPostBadge(post)
+  const preview = getSocialPostPreview(post)
+  const compactPreview = getNoMediaHighlights(post)
+
+  const mediaItems: PostMediaItem[] =
+    post.media && post.media.length > 0
+      ? post.media
+      : post.image
+        ? [{ kind: 'image', url: post.image }]
+        : []
+
+  const [mediaIndex, setMediaIndex] = useState(0)
+  const [slideDir, setSlideDir] = useState(1)
+  const touchStartX = useRef(0)
+  const touchDeltaX = useRef(0)
+  const didSwipe = useRef(false)
+
+  const hasMultiple = mediaItems.length > 1
+  const currentMedia = mediaItems[mediaIndex]
+
+  const navigate = (next: number, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setSlideDir(next > mediaIndex ? 1 : -1)
+    setMediaIndex(next)
+  }
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX
+    touchDeltaX.current = 0
+    didSwipe.current = false
+  }
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    touchDeltaX.current = e.touches[0].clientX - touchStartX.current
+  }
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    const delta = touchDeltaX.current
+    if (Math.abs(delta) > 40 && hasMultiple) {
+      didSwipe.current = true
+      if (delta < 0 && mediaIndex < mediaItems.length - 1) {
+        setSlideDir(1)
+        setMediaIndex((i) => i + 1)
+      } else if (delta > 0 && mediaIndex > 0) {
+        setSlideDir(-1)
+        setMediaIndex((i) => i - 1)
+      }
+    }
+  }
+
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: 12 }}
+      whileHover={{ y: -2, scale: 1.01 }}
+      whileTap={{ scale: 0.995 }}
+      transition={{ duration: 0.18, ease: [0.22, 0.61, 0.36, 1] }}
+      onClick={() => { if (!didSwipe.current) onOpen(post) }}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          onOpen(post)
+        }
+      }}
+      role="button"
+      tabIndex={0}
+      className="group w-full overflow-hidden rounded-[1.35rem] border border-border/70 bg-card text-left shadow-[0_14px_40px_rgba(15,23,42,0.08)] transition-shadow hover:shadow-[0_20px_46px_rgba(15,23,42,0.12)]"
+    >
+      {mediaItems.length > 0 ? (
+        <div
+          className="relative h-52 w-full overflow-hidden sm:h-60"
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+        >
+          <AnimatePresence custom={slideDir} initial={false}>
+            <motion.div
+              key={mediaIndex}
+              custom={slideDir}
+              variants={slideVariants}
+              initial="enter"
+              animate="center"
+              exit="exit"
+              transition={{ duration: 0.22, ease: [0.22, 0.61, 0.36, 1] }}
+              className="absolute inset-0"
+            >
+              {currentMedia.kind === 'video' ? (
+                <video
+                  src={currentMedia.url}
+                  className="h-full w-full object-cover"
+                  muted
+                  playsInline
+                  loop
+                />
+              ) : (
+                <div
+                  className="h-full w-full bg-cover bg-center"
+                  style={{ backgroundImage: `linear-gradient(180deg, rgba(15,23,42,0.02), rgba(15,23,42,0.14)), url("${currentMedia.url}")` }}
+                />
+              )}
+            </motion.div>
+          </AnimatePresence>
+
+          {hasMultiple && mediaIndex > 0 ? (
+            <button
+              type="button"
+              onClick={(e) => navigate(mediaIndex - 1, e)}
+              className="absolute left-2 top-1/2 -translate-y-1/2 hidden h-7 w-7 items-center justify-center rounded-full bg-black/50 text-white opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100 sm:flex"
+              aria-label="Previous photo"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+          ) : null}
+
+          {hasMultiple && mediaIndex < mediaItems.length - 1 ? (
+            <button
+              type="button"
+              onClick={(e) => navigate(mediaIndex + 1, e)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 hidden h-7 w-7 items-center justify-center rounded-full bg-black/50 text-white opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100 sm:flex"
+              aria-label="Next photo"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          ) : null}
+
+          {hasMultiple ? (
+            <div className="absolute bottom-2.5 left-1/2 flex -translate-x-1/2 gap-1.5">
+              {mediaItems.map((_, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={(e) => navigate(i, e)}
+                  aria-label={`Go to photo ${i + 1}`}
+                  className={cn(
+                    'h-1.5 rounded-full transition-all duration-200',
+                    i === mediaIndex ? 'w-4 bg-white' : 'w-1.5 bg-white/55'
+                  )}
+                />
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      <div className="space-y-3 p-4 sm:p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="truncate text-base font-semibold tracking-tight text-foreground sm:text-lg">{post.title}</h3>
+            <p className="mt-1 line-clamp-2 text-sm leading-6 text-muted-foreground">{post.caption}</p>
+          </div>
+          <div
+            className={cn(
+              'mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border transition-colors',
+              saved
+                ? 'border-primary/20 bg-primary/10 text-primary'
+                : 'border-border/70 bg-background/90 text-muted-foreground'
+            )}
+          >
+            <Bookmark className={cn('h-4 w-4', saved ? 'fill-current' : '')} />
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2.5">
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation()
+              router.push(buildSocialProfileHref(post.user))
+            }}
+            className="flex min-w-0 items-center gap-2.5 rounded-2xl text-left transition-opacity hover:opacity-85"
+          >
+            <div
+              className={cn(
+                'flex h-8 w-8 items-center justify-center rounded-full bg-muted text-xs font-semibold text-foreground',
+                post.user.avatar_url ? 'bg-cover bg-center bg-no-repeat' : ''
+              )}
+              style={post.user.avatar_url ? { backgroundImage: `url(${post.user.avatar_url})` } : undefined}
+            >
+              {!post.user.avatar_url ? post.user.name.charAt(0).toUpperCase() : null}
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium text-foreground">@{post.user.username}</p>
+              <p className="text-xs text-muted-foreground">{post.user.name}</p>
+            </div>
+          </button>
+          {badge ? <Badge variant="outline" className="ml-auto rounded-full px-2.5 py-1 text-[10px] font-medium">{badge}</Badge> : null}
+        </div>
+
+        {preview ? (
+          <p className="text-sm font-medium text-muted-foreground">{preview}</p>
+        ) : null}
+
+        {mediaItems.length === 0 && compactPreview.length > 0 ? (
+          <div className="rounded-2xl border border-border/60 bg-muted/20 p-3">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Included</p>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {compactPreview.map((entry) => (
+                <span key={entry} className="rounded-full border border-border/60 bg-background px-2.5 py-1 text-[11px] text-muted-foreground">
+                  {entry}
+                </span>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          <span className={cn('inline-flex items-center gap-1', liked ? 'text-rose-400' : '')}>
+            <Heart className={cn('h-3.5 w-3.5', liked ? 'fill-current' : '')} />
+            {formatCompactNumber(post.stats.likes ?? 0)}
+          </span>
+          <span className="text-border">•</span>
+          <span className="inline-flex items-center gap-1">
+            <MessageCircle className="h-3.5 w-3.5" />
+            {formatCompactNumber(post.stats.comments ?? 0)}
+          </span>
+          <span className="text-border">•</span>
+          <span>Used {formatCompactNumber(post.stats.used)}</span>
+          <span className="text-border">•</span>
+          <span>Completed {formatCompactNumber(post.stats.completed)}</span>
+        </div>
+      </div>
+    </motion.div>
+  )
+}
+
+function getNoMediaHighlights(post: SocialPost): string[] {
+  if (post.type === 'meal' && post.mealData) {
+    const ingredients = post.mealData.ingredients
+      .slice(0, 4)
+      .map((ingredient) => ingredient.name)
+    return ingredients
+  }
+
+  if (post.type === 'workout' && post.workoutData) {
+    const exercises = post.workoutData.exercises
+      .slice(0, 4)
+      .map((exercise) => exercise.name)
+    return exercises
+  }
+
+  if (post.type === 'day' && post.dayData) {
+    const mealNames = post.dayData.meals.slice(0, 2).map((meal) => meal.name)
+    const workoutNames = post.dayData.workouts.slice(0, 2).map((workout) => workout.name)
+    const supplementNames = post.dayData.supplements.slice(0, 2).map((supplement) => supplement.name)
+    return [...mealNames, ...workoutNames, ...supplementNames].slice(0, 5)
+  }
+
+  return []
+}

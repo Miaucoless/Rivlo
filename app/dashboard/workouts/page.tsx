@@ -3,11 +3,11 @@
 import React from 'react'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   BookOpen, CheckCircle, ChevronDown, ChevronUp, Circle, Copy, Dumbbell, Eye, Loader2, Pencil, Play, PlayCircle, Plus, Search,
-  SlidersHorizontal, Sparkles, Trash2, Trophy, X, Share2, Zap,
+  SlidersHorizontal, Sparkles, Trash2, Trophy, X, MessageSquareText, Zap,
 } from 'lucide-react'
 import { WorkoutTimerBar } from '@/components/workout/WorkoutTimerBar'
 import { WorkoutTimerStrip } from '@/components/workout/WorkoutTimerStrip'
@@ -25,6 +25,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { useAppStore } from '@/store/useAppStore'
 import { EXERCISE_LIBRARY, WORKOUTS } from '@/lib/content-library'
 import { EXERCISE_CLASSIFICATIONS } from '@/lib/exercise-classifications'
+import { buildSocialDraftFromWorkout } from '@/lib/social-feed'
 import type { Exercise, ExerciseLibraryItem, ExerciseSetMetric, Gender, JournalEntry, MuscleGroup, SplitDayType, SplitSchedule, UserProfile, WeekDay, Workout, WorkoutExercise, WorkoutLog, WorkoutSet, WorkoutSplit } from '@/types'
 import { cn, formatVolumeValue, getTodayISO, getWeightUnitLabel, kgToLbs, lbsToKg } from '@/lib/utils'
 import { buildDefaultSchedule, getTodayWeekDay, getWorkoutsForDayType, SPLIT_DAY_LABELS, SPLIT_DAY_OPTIONS, WEEK_DAYS, WEEK_DAY_LABELS } from '@/lib/split-schedule'
@@ -961,6 +962,7 @@ function SavedWorkoutCard({
   onStart,
   onPreview,
   onEdit,
+  onPublish,
   onDelete,
 }: {
   workout: Workout
@@ -968,6 +970,7 @@ function SavedWorkoutCard({
   onStart: (workout: Workout) => void
   onPreview: (workout: Workout) => void
   onEdit: (workout: Workout) => void
+  onPublish?: (workout: Workout) => void
   onDelete?: (workout: Workout) => void
 }) {
   const [showConfirm, setShowConfirm] = useState(false)
@@ -978,19 +981,24 @@ function SavedWorkoutCard({
     onDelete && onDelete(workout)
   }
   const handleCancel = () => setShowConfirm(false)
+  const normalizedDayLabel = workout.day_label?.trim() ?? ''
+  const showDayLabel = normalizedDayLabel.length > 0 && normalizedDayLabel.toLowerCase() !== 'custom session'
 
   return (
     <div className="rounded-2xl border border-border/60 bg-card p-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-border hover:shadow-lg relative">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <div className="mb-2 flex items-center gap-2">
-            <Badge variant="outline" className="capitalize">{workout.source || 'premade'}</Badge>
-            <span className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">{workout.day_label}</span>
-          </div>
+          {showDayLabel ? (
+            <p className="mb-2 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">{normalizedDayLabel}</p>
+          ) : null}
           <p className="text-lg font-semibold">{workout.name}</p>
-          <p className="mt-1 text-sm text-muted-foreground">{workout.description}</p>
         </div>
-        <Badge variant="outline" className="capitalize">{workout.difficulty}</Badge>
+        <div className="flex items-center gap-2">
+          <Badge variant="outline" className="capitalize">{workout.difficulty}</Badge>
+          <Button variant="outline" size="icon" onClick={() => onEdit(workout)} title="Edit workout">
+            <Pencil className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
 
       <div className="mt-4 grid grid-cols-3 gap-2">
@@ -1021,39 +1029,40 @@ function SavedWorkoutCard({
         )}
       </div>
 
-      <div className="mt-4 flex gap-2">
-        <Button variant="brand" className="flex-1 gap-2" onClick={() => onStart(workout)}>
+      <div className="mt-4 grid grid-cols-[minmax(0,1fr)_auto_auto_auto_auto] gap-2">
+        <Button variant="brand" className="h-10 min-w-0 gap-1.5 px-4" onClick={() => onStart(workout)}>
           <Play className="h-4 w-4 fill-current" />
-          Start Workout
+          Start
         </Button>
-        <Button variant="outline" size="icon" onClick={() => onPreview(workout)} title="Preview workout">
+        {onPublish ? (
+          <Button variant="outline" className="h-10 px-3 sm:px-4" onClick={() => onPublish(workout)}>
+            Post
+          </Button>
+        ) : null}
+        <Button variant="outline" size="icon" className="h-10 w-10" onClick={() => onPreview(workout)} title="Preview workout">
           <Eye className="h-4 w-4" />
         </Button>
-        <Button variant="outline" size="icon" onClick={() => setShowShare(true)} title="Share workout">
-          <Share2 className="h-4 w-4" />
-        </Button>
-        <Button variant="outline" size="icon" onClick={() => onEdit(workout)}>
-          <Pencil className="h-4 w-4" />
+        <Button variant="outline" size="icon" className="h-10 w-10" onClick={() => setShowShare(true)} title="Send workout in messages">
+          <MessageSquareText className="h-4 w-4" />
         </Button>
         {onDelete && (
-          <Button variant="ghost" size="icon" className="text-destructive/70 hover:text-destructive" onClick={() => onDelete(workout)}>
+          <Button variant="ghost" size="icon" className="h-10 w-10 text-destructive/70 hover:text-destructive" onClick={handleDeleteClick}>
             <Trash2 className="h-4 w-4" />
-
-                {/* Confirmation Dialog */}
-                {showConfirm && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/40 z-10">
-                    <div className="bg-card border border-border rounded-xl p-6 shadow-xl flex flex-col items-center">
-                      <p className="mb-4 text-sm font-semibold">Are you sure you want to delete this saved workout?</p>
-                      <div className="flex gap-3">
-                        <Button variant="destructive" onClick={handleConfirm}>Delete</Button>
-                        <Button variant="outline" onClick={handleCancel}>Cancel</Button>
-                      </div>
-                    </div>
-                  </div>
-                )}
           </Button>
         )}
       </div>
+
+      {showConfirm && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-black/45 p-4">
+          <div className="flex w-full max-w-xs flex-col items-center rounded-xl border border-border bg-card p-6 text-center shadow-xl">
+            <p className="mb-4 text-sm font-semibold">Are you sure you want to delete this saved workout?</p>
+            <div className="flex gap-3">
+              <Button variant="destructive" onClick={handleConfirm}>Delete</Button>
+              <Button variant="outline" onClick={handleCancel}>Cancel</Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <ShareModal
         open={showShare}
@@ -3005,6 +3014,7 @@ function ExercisePreviewDialog({ exercise, onClose }: { exercise: Exercise | nul
 }
 
 export default function WorkoutsPage() {
+  const router = useRouter()
   const searchParams = useSearchParams()
   const {
     workoutLogs,
@@ -3018,6 +3028,7 @@ export default function WorkoutsPage() {
     addCustomWorkout,
     updateCustomWorkout,
     removeCustomWorkout,
+    setSocialComposerPrefill,
     updateProfile,
   } = useAppStore()
 
@@ -3090,6 +3101,11 @@ export default function WorkoutsPage() {
     )
   }, [isDemoMode, remoteCustomWorkouts, customWorkouts])
   const shouldResumeFromQuery = searchParams.get('resume') === '1'
+
+  const openPublishComposerForWorkout = useCallback((workout: Workout) => {
+    setSocialComposerPrefill(buildSocialDraftFromWorkout(workout))
+    router.push(`/dashboard/feed?compose=1&sourceKind=workout&sourceId=${encodeURIComponent(workout.id)}`)
+  }, [router, setSocialComposerPrefill])
 
   const workoutLibrary = useMemo(() => [...accountCustomWorkouts, ...WORKOUTS.map((workout) => ({ ...workout, source: 'premade' as const }))], [accountCustomWorkouts])
   const todayRecommendedWorkouts = useMemo(() => {
@@ -5183,7 +5199,7 @@ export default function WorkoutsPage() {
               ) : (
                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                   {filteredSavedWorkouts.map((workout) => (
-                    <SavedWorkoutCard key={workout.id} workout={workout} averageDurationMin={averageDurationByWorkoutId.get(workout.id)} onStart={startWorkout} onPreview={setPreviewWorkout} onEdit={(item) => { setEditingWorkout(item); setBuilderOpen(true) }} onDelete={handleDeleteWorkout} />
+                    <SavedWorkoutCard key={workout.id} workout={workout} averageDurationMin={averageDurationByWorkoutId.get(workout.id)} onStart={startWorkout} onPreview={setPreviewWorkout} onEdit={(item) => { setEditingWorkout(item); setBuilderOpen(true) }} onPublish={openPublishComposerForWorkout} onDelete={handleDeleteWorkout} />
                   ))}
                 </div>
               )}

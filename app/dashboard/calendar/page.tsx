@@ -2,7 +2,7 @@
 
 import React from 'react'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth,
@@ -10,7 +10,7 @@ import {
 } from 'date-fns'
 import {
   ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Dumbbell, Apple, Scale, BookOpen, Circle, Zap,
-  Flame, Clock, Pill, Plus, Trash2, Bell, CheckCircle2,
+  Flame, Clock, Pill, Plus, Trash2, Bell, CheckCircle2, Share2,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -21,7 +21,10 @@ import { Textarea } from '@/components/ui/textarea'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useAppStore } from '@/store/useAppStore'
 import { cn, formatWeightValue } from '@/lib/utils'
-import type { CalendarReminder } from '@/types'
+import { buildSocialDraftFromCalendarDay, buildSocialDraftFromMealLogEntry, buildSocialDraftFromWorkoutLog } from '@/lib/social-feed'
+import type { MealLogEntry } from '@/lib/content-library'
+import type { CalendarReminder, SocialFeedAudience, SocialPostDraft, SupplementEntry, WorkoutLog } from '@/types'
+import { toast } from 'sonner'
 
 const EVENT_COLORS = {
   workout: { bg: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30', icon: Dumbbell, dot: 'bg-emerald-400' },
@@ -96,8 +99,16 @@ export default function CalendarPage() {
   const [rTime, setRTime] = useState('')
   const [rNotes, setRNotes] = useState('')
   const [rColor, setRColor] = useState<CalendarReminder['color']>('default')
+  const [postDialogOpen, setPostDialogOpen] = useState(false)
+  const [postMode, setPostMode] = useState<'day' | 'selected'>('day')
+  const [postAudience, setPostAudience] = useState<SocialFeedAudience>('public')
+  const [postTitle, setPostTitle] = useState('')
+  const [postCaption, setPostCaption] = useState('')
+  const [selectedMealPostIds, setSelectedMealPostIds] = useState<string[]>([])
+  const [selectedWorkoutPostIds, setSelectedWorkoutPostIds] = useState<string[]>([])
+  const [selectedSupplementPostIds, setSelectedSupplementPostIds] = useState<string[]>([])
 
-  const { getCalendarEvents, getDailyMeals, workoutLogs, supplements, calendarReminders, addCalendarReminder, updateCalendarReminder, toggleCalendarReminderComplete, removeCalendarReminder, user } = useAppStore()
+  const { getCalendarEvents, getDailyMeals, workoutLogs, supplements, calendarReminders, addCalendarReminder, updateCalendarReminder, toggleCalendarReminderComplete, removeCalendarReminder, createSocialPost, user } = useAppStore()
   const unitSystem = user?.unit_system || 'imperial'
 
   const events = getCalendarEvents()
@@ -126,6 +137,56 @@ export default function CalendarPage() {
   const selectedReminders = selectedDateStr
     ? calendarReminders.filter((r) => r.date === selectedDateStr).sort(sortCalendarReminders)
     : []
+  const hasPostableContent = selectedMeals.length > 0 || selectedWorkoutLogs.length > 0 || selectedSupplements.length > 0
+
+  const selectedMealsForPost = postMode === 'day'
+    ? selectedMeals
+    : selectedMeals.filter((meal) => selectedMealPostIds.includes(meal.id))
+  const selectedWorkoutsForPost = postMode === 'day'
+    ? selectedWorkoutLogs
+    : selectedWorkoutLogs.filter((log) => selectedWorkoutPostIds.includes(log.id))
+  const selectedSupplementsForPost = postMode === 'day'
+    ? selectedSupplements
+    : selectedSupplements.filter((supplement) => selectedSupplementPostIds.includes(supplement.id))
+
+  const draftForCalendarPost = useMemo<SocialPostDraft | null>(() => {
+    if (!selectedDateStr) return null
+
+    if (
+      postMode === 'selected' &&
+      selectedMealsForPost.length === 1 &&
+      selectedWorkoutsForPost.length === 0 &&
+      selectedSupplementsForPost.length === 0
+    ) {
+      return buildSocialDraftFromMealLogEntry(selectedMealsForPost[0] as MealLogEntry, selectedDateStr)
+    }
+
+    if (
+      postMode === 'selected' &&
+      selectedMealsForPost.length === 0 &&
+      selectedWorkoutsForPost.length === 1 &&
+      selectedSupplementsForPost.length === 0
+    ) {
+      return buildSocialDraftFromWorkoutLog(selectedWorkoutsForPost[0] as WorkoutLog)
+    }
+
+    if (selectedMealsForPost.length === 0 && selectedWorkoutsForPost.length === 0 && selectedSupplementsForPost.length === 0) {
+      return null
+    }
+
+    return buildSocialDraftFromCalendarDay({
+      date: selectedDateStr,
+      meals: selectedMealsForPost as MealLogEntry[],
+      workoutLogs: selectedWorkoutsForPost as WorkoutLog[],
+      supplements: selectedSupplementsForPost as SupplementEntry[],
+    })
+  }, [postMode, selectedDateStr, selectedMealsForPost, selectedSupplementsForPost, selectedWorkoutsForPost])
+
+  const calendarPostKindLabel = draftForCalendarPost?.type === 'meal'
+    ? 'meal post'
+    : draftForCalendarPost?.type === 'workout'
+      ? 'workout post'
+      : 'day post'
 
   const openNewReminder = () => {
     setEditingReminder(null)
@@ -135,6 +196,36 @@ export default function CalendarPage() {
     setRNotes('')
     setRColor('default')
     setReminderDialogOpen(true)
+  }
+
+  const openPostDialog = () => {
+    if (!selectedDate || !selectedDateStr) return
+
+    setPostMode('day')
+    setPostAudience('public')
+    setPostTitle('')
+    setPostCaption('')
+    setSelectedMealPostIds(selectedMeals.map((meal) => meal.id))
+    setSelectedWorkoutPostIds(selectedWorkoutLogs.map((log) => log.id))
+    setSelectedSupplementPostIds(selectedSupplements.map((supplement) => supplement.id))
+    setPostDialogOpen(true)
+  }
+
+  const publishCalendarPost = () => {
+    if (!draftForCalendarPost) {
+      toast.error('Pick at least one meal, workout, or supplement to post.')
+      return
+    }
+
+    createSocialPost({
+      ...draftForCalendarPost,
+      title: postTitle.trim() || draftForCalendarPost.title,
+      caption: postCaption.trim(),
+      audience: postAudience,
+    })
+
+    setPostDialogOpen(false)
+    toast.success(`Posted ${calendarPostKindLabel} to your feed.`)
   }
 
   const openEditReminder = (r: CalendarReminder) => {
@@ -305,20 +396,30 @@ export default function CalendarPage() {
           <div className="flex flex-col gap-4 lg:max-h-[calc(100vh-7.5rem)]">
           <Card className="overflow-hidden lg:flex-1 lg:min-h-0">
             <CardHeader className="pb-3 border-b border-border/50">
-              <div className="flex items-center justify-between gap-2">
-                <CardTitle className="text-sm flex items-center gap-2">
-                  <Zap className="w-4 h-4 text-primary" />
-                  {selectedDate ? format(selectedDate, 'EEEE, MMMM d') : 'Select a day'}
-                  {selectedDate && isToday(selectedDate) && (
-                    <Badge variant="success" className="text-xs">Today</Badge>
-                  )}
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <CardTitle className="flex min-w-0 items-start gap-2 text-sm">
+                  <Zap className="mt-0.5 w-4 h-4 shrink-0 text-primary" />
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    <span className="min-w-0 break-words">{selectedDate ? format(selectedDate, 'EEEE, MMMM d') : 'Select a day'}</span>
+                    {selectedDate && isToday(selectedDate) && (
+                      <Badge variant="success" className="text-xs">Today</Badge>
+                    )}
+                  </div>
                 </CardTitle>
-                {selectedDate && (
-                  <Button variant="outline" size="sm" onClick={openNewReminder} className="gap-2">
-                    <Bell className="w-4 h-4" />
-                    Add Item
-                  </Button>
-                )}
+                {selectedDate ? (
+                  <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                    {hasPostableContent ? (
+                      <Button variant="outline" size="sm" onClick={openPostDialog} className="h-9 gap-2 px-3">
+                        <Share2 className="w-4 h-4" />
+                        Post Day
+                      </Button>
+                    ) : null}
+                    <Button variant="outline" size="sm" onClick={openNewReminder} className="h-9 gap-2 px-3">
+                      <Bell className="w-4 h-4" />
+                      Add Item
+                    </Button>
+                  </div>
+                ) : null}
               </div>
             </CardHeader>
             <CardContent className="p-0 lg:min-h-0">
@@ -543,7 +644,7 @@ export default function CalendarPage() {
 
                             {/* Supplement detail expansion */}
                             {event.type === 'supplement' && isExpanded && selectedSupplements.length > 0 && (
-                              <div className="mt-3 space-y-1.5" onClick={e => e.stopPropagation()}>
+                              <div className="mt-3 max-h-44 space-y-1.5 overflow-y-auto pr-1" onClick={e => e.stopPropagation()}>
                                 {selectedSupplements.map((s) => (
                                   <div key={s.id} className="rounded-lg border border-border/50 bg-muted/20 px-3 py-2">
                                     <p className="text-sm font-medium">{s.name}</p>
@@ -664,6 +765,200 @@ export default function CalendarPage() {
           </div>
         </div>
       </div>
+
+      <Dialog open={postDialogOpen} onOpenChange={setPostDialogOpen}>
+        <DialogContent className="max-h-[88vh] max-w-2xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Post From Calendar</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-5 pt-1">
+            {selectedDate ? (
+              <p className="text-xs text-muted-foreground">{format(selectedDate, 'EEEE, MMMM d, yyyy')}</p>
+            ) : null}
+
+            <div className="flex flex-wrap gap-2">
+              {([
+                { value: 'day', label: 'Whole Day' },
+                { value: 'selected', label: 'Select Items' },
+              ] as const).map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setPostMode(option.value)}
+                  className={cn(
+                    'rounded-full border px-3 py-1.5 text-xs font-medium transition-colors',
+                    postMode === option.value
+                      ? 'border-primary/50 bg-primary/10 text-primary'
+                      : 'border-border/60 bg-muted/20 text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+
+            {postMode === 'selected' ? (
+              <div className="space-y-4 rounded-2xl border border-border/60 bg-muted/10 p-4">
+                <div>
+                  <p className="text-sm font-medium">Choose what to include</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    A single selected workout becomes a workout post, a single meal becomes a meal post, and anything larger publishes as a day post.
+                  </p>
+                </div>
+
+                {selectedWorkoutLogs.length > 0 ? (
+                  <div className="space-y-2">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Workouts</p>
+                    <div className="space-y-2">
+                      {selectedWorkoutLogs.map((log) => (
+                        <label key={log.id} className="flex items-start gap-3 rounded-xl border border-border/60 bg-background/80 px-3 py-3">
+                          <input
+                            type="checkbox"
+                            checked={selectedWorkoutPostIds.includes(log.id)}
+                            onChange={(event) => {
+                              setSelectedWorkoutPostIds((current) => (
+                                event.target.checked
+                                  ? [...current, log.id]
+                                  : current.filter((id) => id !== log.id)
+                              ))
+                            }}
+                            className="mt-1"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium">{log.workout.name}</p>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              {log.exercises.length} exercises • {log.duration_min || 0} min
+                            </p>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                {selectedMeals.length > 0 ? (
+                  <div className="space-y-2">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Meals</p>
+                    <div className="space-y-2">
+                      {selectedMeals.map((meal) => (
+                        <label key={meal.id} className="flex items-start gap-3 rounded-xl border border-border/60 bg-background/80 px-3 py-3">
+                          <input
+                            type="checkbox"
+                            checked={selectedMealPostIds.includes(meal.id)}
+                            onChange={(event) => {
+                              setSelectedMealPostIds((current) => (
+                                event.target.checked
+                                  ? [...current, meal.id]
+                                  : current.filter((id) => id !== meal.id)
+                              ))
+                            }}
+                            className="mt-1"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium">{meal.name}</p>
+                            <p className="mt-1 text-xs text-muted-foreground capitalize">
+                              {meal.meal_type} • {meal.time} • {meal.macros.calories} kcal
+                            </p>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                {selectedSupplements.length > 0 ? (
+                  <div className="space-y-2">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Supplements</p>
+                    <div className="space-y-2">
+                      {selectedSupplements.map((supplement) => (
+                        <label key={supplement.id} className="flex items-start gap-3 rounded-xl border border-border/60 bg-background/80 px-3 py-3">
+                          <input
+                            type="checkbox"
+                            checked={selectedSupplementPostIds.includes(supplement.id)}
+                            onChange={(event) => {
+                              setSelectedSupplementPostIds((current) => (
+                                event.target.checked
+                                  ? [...current, supplement.id]
+                                  : current.filter((id) => id !== supplement.id)
+                              ))
+                            }}
+                            className="mt-1"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium">{supplement.name}</p>
+                            <p className="mt-1 text-xs text-muted-foreground capitalize">
+                              {supplement.amount} {supplement.unit} • {supplement.category}
+                            </p>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-border/60 bg-muted/10 p-4">
+                <p className="text-sm font-medium">Everything from this day will be included</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {selectedMeals.length} meals • {selectedWorkoutLogs.length} workouts • {selectedSupplements.length} supplements
+                </p>
+              </div>
+            )}
+
+            <div className="rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-muted-foreground">
+              This will publish as a <span className="font-medium text-foreground">{calendarPostKindLabel}</span>.
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>Title</Label>
+                <Input
+                  value={postTitle}
+                  onChange={(e) => setPostTitle(e.target.value)}
+                  placeholder={draftForCalendarPost?.title || 'Post title'}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Audience</Label>
+                <div className="flex gap-2">
+                  {(['public', 'followers'] as const).map((audience) => (
+                    <button
+                      key={audience}
+                      type="button"
+                      onClick={() => setPostAudience(audience)}
+                      className={cn(
+                        'flex-1 rounded-xl border px-3 py-2 text-sm font-medium transition-colors',
+                        postAudience === audience
+                          ? 'border-primary/50 bg-primary/10 text-primary'
+                          : 'border-border/60 bg-background text-muted-foreground hover:text-foreground'
+                      )}
+                    >
+                      {audience === 'followers' ? 'Followers' : 'Public'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Caption</Label>
+              <Textarea
+                value={postCaption}
+                onChange={(e) => setPostCaption(e.target.value)}
+                placeholder="Add context to what you posted from this day."
+                className="min-h-[96px]"
+              />
+            </div>
+
+            <div className="flex gap-2 pt-1">
+              <Button variant="outline" className="flex-1" onClick={() => setPostDialogOpen(false)}>Cancel</Button>
+              <Button variant="brand" className="flex-1" onClick={publishCalendarPost} disabled={!draftForCalendarPost}>
+                Post to Feed
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Reminder dialog */}
       <Dialog open={reminderDialogOpen} onOpenChange={setReminderDialogOpen}>

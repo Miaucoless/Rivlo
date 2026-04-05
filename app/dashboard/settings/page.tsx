@@ -1255,14 +1255,14 @@ function FriendsTab() {
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2"><UserPlus className="w-4 h-4" />Add Friend</CardTitle>
-          <CardDescription>Search by username (@handle) or email address</CardDescription>
+          <CardDescription>Search by name, username (@handle), or email address</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex flex-col gap-2 sm:flex-row">
             <div className="relative flex-1">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
               <Input
-                placeholder="@username or email"
+                placeholder="Name, @username, or email"
                 value={addQuery}
                 onChange={(e) => setAddQuery(e.target.value)}
                 className="pl-8"
@@ -1282,6 +1282,7 @@ function FriendsTab() {
           {searching && <p className="text-xs text-muted-foreground">Searching…</p>}
           {searchResults.length > 0 && (
             <div className="space-y-1">
+              <p className="px-1 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">Suggested matches</p>
               {searchResults.map((r) => (
                 <div key={r.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg border border-border/50 bg-muted/20">
                   <span className="flex-1 text-sm font-medium truncate">{r.name}</span>

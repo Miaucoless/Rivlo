@@ -6,12 +6,13 @@ import { usePathname, useRouter } from 'next/navigation'
 import {
   Bell, Sun, Moon, Search, ChevronRight, Sparkles, CheckCheck, Settings,
   Menu, X, LayoutDashboard, Apple, Dumbbell, BarChart3, Calendar, BookOpen, Pill, Zap, LogOut, Flame, RefreshCw,
-  Users, UserPlus, UserCheck, UserX, Loader2, Download,
+  Users, UserPlus, UserCheck, UserX, Loader2, Download, MessageSquareText,
 } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { motion } from 'framer-motion'
 import { useAppStore } from '@/store/useAppStore'
 import { formatDate } from '@/lib/utils'
+import { buildSocialProfileHref } from '@/lib/social-connections'
 import { toast } from 'sonner'
 import { useIsMobile } from '@/hooks/useIsMobile'
 import { Button } from '@/components/ui/button'
@@ -26,9 +27,7 @@ import {
 } from '@/components/ui/dialog'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { createClient } from '@/lib/supabase'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import type { GroceryList, SavedMealTemplate, SplitDayType, SplitSchedule, WeekDay, WorkoutSplit } from '@/types'
-import { buildDefaultSchedule, SPLIT_DAY_LABELS, SPLIT_DAY_OPTIONS, WEEK_DAYS, WEEK_DAY_LABELS, getTodayWeekDay } from '@/lib/split-schedule'
+import type { GroceryList, SavedMealTemplate } from '@/types'
 
 type Friendship = {
   id: string
@@ -45,26 +44,39 @@ async function getToken(): Promise<string | null> {
   return session?.access_token ?? null
 }
 
+function getFriendProfileHref(friend: Friendship) {
+  if (!friend.other_user?.name && !friend.other_user?.username) return null
+  return buildSocialProfileHref({
+    username: friend.other_user?.username,
+    name: friend.other_user?.name,
+  })
+}
+
 const PAGE_TITLES: Record<string, string> = {
   '/dashboard/dashboard': 'Dashboard',
   '/dashboard/meals': 'Meal Planning',
   '/dashboard/workouts': 'Workouts',
+  '/dashboard/feed': 'Feed',
   '/dashboard/tracking': 'Progress Tracking',
   '/dashboard/calendar': 'Calendar',
   '/dashboard/journal': 'Journal',
   '/dashboard/supplements': 'Supplements',
   '/dashboard/settings': 'Settings',
   '/dashboard/shared': 'Shared With Me',
+  '/dashboard/profile': 'My Profile',
 }
 
 const SEARCH_ITEMS = [
   { href: '/dashboard/dashboard', title: 'Dashboard', description: 'See your daily overview, streaks, and progress snapshot.', keywords: ['home', 'overview', 'summary', 'stats'] },
   { href: '/dashboard/meals', title: 'Meal Planning', description: 'Log meals, search foods, and manage saved meal templates.', keywords: ['food', 'nutrition', 'calories', 'macros'] },
   { href: '/dashboard/workouts', title: 'Workouts', description: 'Search exercises, run sessions, and manage custom routines.', keywords: ['training', 'exercise', 'lift', 'gym'] },
+  { href: '/dashboard/feed', title: 'Feed', description: 'Browse community meals and workouts or publish your own posts.', keywords: ['social', 'posts', 'explore', 'followers'] },
   { href: '/dashboard/tracking', title: 'Progress Tracking', description: 'Track body metrics, habits, and long-term trends.', keywords: ['progress', 'metrics', 'body', 'check-in'] },
   { href: '/dashboard/calendar', title: 'Calendar', description: 'Review upcoming plans and your workout and meal activity by date.', keywords: ['schedule', 'planner', 'dates', 'timeline'] },
   { href: '/dashboard/journal', title: 'Journal', description: 'Write reflections and search past entries by mood or topic.', keywords: ['notes', 'mindset', 'mood', 'reflection'] },
   { href: '/dashboard/supplements', title: 'Supplements', description: 'Track vitamins, herbals, medications, and reminder schedules in one place.', keywords: ['vitamins', 'medicine', 'herbal', 'pills'] },
+  { href: '/dashboard/shared', title: 'Shared With Me', description: 'Import shared items and reply on conversations with followers.', keywords: ['inbox', 'messages', 'shares', 'followers'] },
+  { href: '/dashboard/profile', title: 'My Profile', description: 'Update your bio, profile photo, posts, and saved library at a glance.', keywords: ['account', 'bio', 'profile', 'posts'] },
   { href: '/dashboard/settings', title: 'Settings', description: 'Update profile details, preferences, and reminder settings.', keywords: ['preferences', 'account', 'profile', 'notifications'] },
 ] as const
 
@@ -89,7 +101,6 @@ export function TopBar() {
     flushPendingCloudWrites,
     addSavedMeal,
     setGroceryList,
-    updateProfile,
   } = useAppStore()
   const [isPending, startTransition] = useTransition()
   const [isSearchOpen, setIsSearchOpen] = useState(false)
@@ -108,41 +119,19 @@ export function TopBar() {
   const [friendSearching, setFriendSearching] = useState(false)
   const [friendSending, setFriendSending] = useState(false)
   const [friendsLoaded, setFriendsLoaded] = useState(false)
+  const authTokenRef = useRef<string | null>(null)
 
-  // Split schedule panel state
-  const [isSplitPanelOpen, setIsSplitPanelOpen] = useState(false)
-  const [draftSplit, setDraftSplit] = useState<WorkoutSplit>(user?.workout_split ?? 'ppl')
-  const [draftSchedule, setDraftSchedule] = useState<SplitSchedule>(
-    user?.split_schedule ?? buildDefaultSchedule(user?.workout_split ?? 'ppl')
-  )
-  const [splitSaving, setSplitSaving] = useState(false)
-
-  const openSplitPanel = () => {
-    setDraftSplit(user?.workout_split ?? 'ppl')
-    setDraftSchedule(user?.split_schedule ?? buildDefaultSchedule(user?.workout_split ?? 'ppl'))
-    setIsSplitPanelOpen(true)
-  }
-
-  const handleSplitSave = async () => {
-    setSplitSaving(true)
-    try {
-      await updateProfile({ workout_split: draftSplit, split_schedule: draftSchedule })
-      toast.success('Split schedule saved!')
-      setIsSplitPanelOpen(false)
-    } catch {
-      toast.error('Could not save split schedule.')
-    } finally {
-      setSplitSaving(false)
-    }
-  }
-
-  const todayWeekDay = getTodayWeekDay()
-  const todayDayType = user?.split_schedule?.[todayWeekDay] ?? null
-
-  const loadFriends = useCallback(async () => {
-    if (friendsLoading) return
-    setFriendsLoading(true)
+  const getCachedToken = useCallback(async () => {
+    if (authTokenRef.current) return authTokenRef.current
     const token = await getToken()
+    authTokenRef.current = token
+    return token
+  }, [])
+
+  const loadFriends = useCallback(async (force = false) => {
+    if (friendsLoading || (friendsLoaded && !force)) return
+    setFriendsLoading(true)
+    const token = await getCachedToken()
     if (!token) { setFriendsLoading(false); return }
     const res = await fetch('/api/friends', { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' })
     if (res.ok) {
@@ -150,7 +139,7 @@ export function TopBar() {
       setFriendsLoaded(true)
     }
     setFriendsLoading(false)
-  }, [friendsLoading])
+  }, [friendsLoaded, friendsLoading, getCachedToken])
 
   const openFriends = (open: boolean) => {
     setIsFriendsOpen(open)
@@ -163,13 +152,22 @@ export function TopBar() {
   }
 
   useEffect(() => {
-    if (!isFriendsOpen || friendsTab !== 'add' || addQuery.length < 2) {
+    if (isDemoMode) return
+    const timeoutId = window.setTimeout(() => {
+      void loadFriends()
+    }, 400)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [isDemoMode, loadFriends])
+
+  useEffect(() => {
+    if (!isFriendsOpen || friendsTab !== 'add' || addQuery.trim().length < 1) {
       setSearchResults([])
       return
     }
     const timer = window.setTimeout(async () => {
       setFriendSearching(true)
-      const token = await getToken()
+      const token = await getCachedToken()
       if (!token) { setFriendSearching(false); return }
       const res = await fetch(`/api/friends/search?q=${encodeURIComponent(addQuery.trim())}`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -178,11 +176,11 @@ export function TopBar() {
       setFriendSearching(false)
     }, 350)
     return () => window.clearTimeout(timer)
-  }, [addQuery, friendsTab, isFriendsOpen])
+  }, [addQuery, friendsTab, getCachedToken, isFriendsOpen])
 
   async function sendFriendRequest(addresseeId?: string, email?: string) {
     setFriendSending(true)
-    const token = await getToken()
+    const token = await getCachedToken()
     if (!token) { setFriendSending(false); return }
     const body = addresseeId ? { addressee_id: addresseeId } : { email }
     const res = await fetch('/api/friends/request', {
@@ -195,7 +193,7 @@ export function TopBar() {
       toast.success(data.message ?? 'Friend request sent!')
       setAddQuery('')
       setSearchResults([])
-      await loadFriends()
+      await loadFriends(true)
     } else {
       toast.error(data.error ?? 'Could not send request.')
     }
@@ -203,7 +201,7 @@ export function TopBar() {
   }
 
   async function respondToFriendRequest(friendshipId: string, action: 'accept' | 'decline') {
-    const token = await getToken()
+    const token = await getCachedToken()
     if (!token) return
     await fetch('/api/friends/respond', {
       method: 'POST',
@@ -211,18 +209,18 @@ export function TopBar() {
       body: JSON.stringify({ friendship_id: friendshipId, action }),
     })
     toast.success(action === 'accept' ? 'Friend request accepted!' : 'Request declined.')
-    await loadFriends()
+    await loadFriends(true)
   }
 
   async function removeFriend(friendshipId: string) {
-    const token = await getToken()
+    const token = await getCachedToken()
     if (!token) return
     await fetch(`/api/friends/${friendshipId}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${token}` },
     })
     setFriends((prev) => prev.filter((f) => f.id !== friendshipId))
-    await loadFriends()
+    await loadFriends(true)
   }
 
   // Share import state
@@ -283,8 +281,6 @@ export function TopBar() {
   }
 
   const today = formatDate(new Date(), 'EEEE, MMMM d')
-  const splitLabel = todayDayType ? SPLIT_DAY_LABELS[todayDayType] : 'Set split'
-  const mobileSplitLabel = todayDayType ? SPLIT_DAY_LABELS[todayDayType] : 'Split'
   const deferredSearchQuery = useDeferredValue(searchQuery)
   const syncLabel = syncStatus === 'offline'
     ? `${pendingCloudWrites > 0 ? `${pendingCloudWrites} pending` : 'Offline mode'}`
@@ -342,6 +338,9 @@ export function TopBar() {
   }, [deferredSearchQuery])
 
   const unreadCount = notifications.filter((item) => !item.read).length
+  const unreadSharedCount = notifications.filter((item) =>
+    !item.read && item.action_url?.startsWith('/dashboard/shared?conversation=')
+  ).length
 
   const openRoute = (href: string) => {
     setIsSearchOpen(false)
@@ -409,19 +408,18 @@ export function TopBar() {
 
         {/* Right — actions */}
         <div className="flex items-center gap-1.5 sm:gap-2">
-          <button
-            type="button"
-            onClick={openSplitPanel}
-            aria-label={splitLabel}
-            className={`inline-flex max-w-[5.5rem] items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-medium transition-colors sm:max-w-none sm:px-2.5 ${
-              todayDayType
-                ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20'
-                : 'border-border/60 bg-background/60 text-muted-foreground hover:border-emerald-500/30 hover:text-emerald-400'
-            }`}
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Shared messages"
+            className="text-muted-foreground relative"
+            onClick={() => router.push('/dashboard/shared')}
           >
-            <Zap className="w-2.5 h-2.5" />
-            <span className="truncate">{isMobile ? mobileSplitLabel : splitLabel}</span>
-          </button>
+            <MessageSquareText className="w-4 h-4" />
+            {unreadSharedCount > 0 && (
+              <span className="absolute top-1 right-1 flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
+            )}
+          </Button>
           <Button
             variant="ghost"
             size="icon-sm"
@@ -435,7 +433,7 @@ export function TopBar() {
           <Button
             variant="ghost"
             size="icon-sm"
-            aria-label="Friends"
+            aria-label="Followers"
             className="text-muted-foreground relative"
             onClick={() => openFriends(true)}
           >
@@ -459,106 +457,19 @@ export function TopBar() {
           </Button>
 
           {user && (
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-sm font-bold text-white ml-1">
-              {user.name.charAt(0)}
-            </div>
+            <button
+              type="button"
+              onClick={() => router.push('/dashboard/profile')}
+              aria-label="Open profile"
+              className="ml-1 flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-border/60 bg-gradient-to-br from-emerald-400 to-teal-500 text-sm font-bold text-white transition-transform hover:scale-[1.02]"
+              style={user.avatar_url ? { backgroundImage: `url(${user.avatar_url})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}
+            >
+              {!user.avatar_url ? user.name.charAt(0) : null}
+            </button>
           )}
         </div>
         </div>
       </motion.header>
-
-      {/* Split Schedule Panel */}
-      <Dialog open={isSplitPanelOpen} onOpenChange={setIsSplitPanelOpen}>
-        <DialogContent className="max-w-lg flex flex-col overflow-hidden border-border/60 bg-card/95 p-0 backdrop-blur sm:max-h-[85vh] max-h-[90dvh]">
-          <DialogHeader className="border-b border-border/60 px-5 py-4 flex-shrink-0">
-            <DialogTitle className="flex items-center gap-2 text-base">
-              <Zap className="h-4 w-4 text-emerald-400" />
-              Workout Split Schedule
-            </DialogTitle>
-            <DialogDescription>
-              Choose your training split and assign a workout type to each day.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="flex-1 overflow-y-auto overscroll-contain p-5 space-y-6">
-            {/* Split selector */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Training Split</label>
-              <Select
-                value={draftSplit}
-                onValueChange={(v) => {
-                  const split = v as WorkoutSplit
-                  setDraftSplit(split)
-                  setDraftSchedule(buildDefaultSchedule(split))
-                }}
-              >
-                <SelectTrigger className="bg-background border-border/60">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ppl">Push / Pull / Legs (PPL)</SelectItem>
-                  <SelectItem value="upper_lower">Upper / Lower</SelectItem>
-                  <SelectItem value="3day_fullbody">3-Day Full Body</SelectItem>
-                  <SelectItem value="4day">4-Day Split</SelectItem>
-                  <SelectItem value="5day">5-Day Split</SelectItem>
-                  <SelectItem value="6day">6-Day PPL</SelectItem>
-                  <SelectItem value="cardio_focus">Cardio Focus</SelectItem>
-                  <SelectItem value="custom">Custom</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Weekly schedule grid */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Weekly Schedule</label>
-              <div className="grid gap-2">
-                {WEEK_DAYS.map((day) => (
-                  <div key={day} className="flex items-center gap-3">
-                    <span className={`w-10 text-xs font-medium shrink-0 ${day === todayWeekDay ? 'text-emerald-400' : 'text-muted-foreground'}`}>
-                      {WEEK_DAY_LABELS[day]}
-                      {day === todayWeekDay && <span className="ml-1 text-[9px]">•</span>}
-                    </span>
-                    <Select
-                      value={draftSchedule[day] ?? 'rest'}
-                      onValueChange={(v) => setDraftSchedule((prev) => ({ ...prev, [day]: v as SplitDayType }))}
-                    >
-                      <SelectTrigger className="h-8 bg-background border-border/60 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {SPLIT_DAY_OPTIONS[draftSplit].map((opt) => (
-                          <SelectItem key={opt} value={opt} className="text-xs">
-                            {SPLIT_DAY_LABELS[opt]}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="border-t border-border/60 px-5 py-4 flex-shrink-0 flex items-center justify-end gap-3">
-            <button
-              type="button"
-              onClick={() => setIsSplitPanelOpen(false)}
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleSplitSave}
-              disabled={splitSaving}
-              className="inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-600 disabled:opacity-50 transition-colors"
-            >
-              {splitSaving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              Save Schedule
-            </button>
-          </div>
-        </DialogContent>
-      </Dialog>
 
       <Dialog open={isSearchOpen} onOpenChange={(open) => {
         setIsSearchOpen(open)
@@ -620,23 +531,23 @@ export function TopBar() {
         </DialogContent>
       </Dialog>
 
-      {/* Friends dialog */}
+      {/* Followers dialog */}
       <Dialog open={isFriendsOpen} onOpenChange={openFriends}>
         <DialogContent className="w-[calc(100vw-1.5rem)] max-w-sm max-h-[85dvh] overflow-hidden border-border/60 bg-card/95 p-0 backdrop-blur">
           <DialogHeader className="border-b border-border/60 px-5 py-4">
             <DialogTitle className="text-base flex items-center gap-2">
               <Users className="w-4 h-4" />
-              Friends
+              Followers
               {pendingCount > 0 && <Badge variant="secondary" className="text-xs">{pendingCount} pending</Badge>}
             </DialogTitle>
-            <DialogDescription>Your friends, requests, and add new connections.</DialogDescription>
+            <DialogDescription>Your followers, requests, and add new connections.</DialogDescription>
           </DialogHeader>
 
           <Tabs value={friendsTab} onValueChange={(v) => setFriendsTab(v as typeof friendsTab)} className="flex flex-col">
             <TabsList className="mx-5 mt-4 mb-0 grid grid-cols-3">
               <TabsTrigger value="friends" className="text-xs gap-1">
                 <UserCheck className="w-3.5 h-3.5" />
-                Friends {acceptedFriends.length > 0 && <span className="font-data">({acceptedFriends.length})</span>}
+                Followers {acceptedFriends.length > 0 && <span className="font-data">({acceptedFriends.length})</span>}
               </TabsTrigger>
               <TabsTrigger value="add" className="text-xs gap-1">
                 <UserPlus className="w-3.5 h-3.5" />
@@ -648,12 +559,12 @@ export function TopBar() {
               </TabsTrigger>
             </TabsList>
 
-            {/* Friends list */}
+            {/* Followers list */}
             <TabsContent value="friends" className="px-5 pb-5 pt-4 mt-0 min-h-[160px] overflow-y-auto">
               {friendsLoading ? (
                 <div className="flex justify-center py-6"><Loader2 className="w-4 h-4 animate-spin text-muted-foreground" /></div>
               ) : acceptedFriends.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-6">No friends yet. Add someone in the Add tab!</p>
+                <p className="text-sm text-muted-foreground text-center py-6">No followers yet. Add someone in the Add tab!</p>
               ) : (
                 <div className="space-y-2 max-h-56 overflow-y-auto">
                   {acceptedFriends.map((f) => (
@@ -661,14 +572,42 @@ export function TopBar() {
                       <div className="w-7 h-7 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
                         {f.other_user?.name.charAt(0).toUpperCase() ?? '?'}
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{f.other_user?.name}</p>
-                        {f.other_user?.username && <p className="text-xs text-muted-foreground">@{f.other_user.username}</p>}
-                      </div>
+                      {getFriendProfileHref(f) ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            openFriends(false)
+                            router.push(getFriendProfileHref(f)!)
+                          }}
+                          className="flex-1 min-w-0 text-left"
+                        >
+                          <p className="text-sm font-medium truncate hover:text-primary">{f.other_user?.name}</p>
+                          {f.other_user?.username && <p className="text-xs text-muted-foreground">@{f.other_user.username}</p>}
+                        </button>
+                      ) : (
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{f.other_user?.name}</p>
+                          {f.other_user?.username && <p className="text-xs text-muted-foreground">@{f.other_user.username}</p>}
+                        </div>
+                      )}
+                      {getFriendProfileHref(f) ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 rounded-full px-2 text-xs"
+                          onClick={() => {
+                            openFriends(false)
+                            router.push(getFriendProfileHref(f)!)
+                          }}
+                        >
+                          View
+                        </Button>
+                      ) : null}
                       <button
                         onClick={() => removeFriend(f.id)}
                         className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                        title="Remove friend"
+                        title="Remove follower"
                       >
                         <X className="w-3.5 h-3.5" />
                       </button>
@@ -678,11 +617,11 @@ export function TopBar() {
               )}
             </TabsContent>
 
-            {/* Add friend */}
+            {/* Add follower */}
             <TabsContent value="add" className="px-5 pb-5 pt-4 mt-0 min-h-[160px] space-y-3 overflow-y-auto">
               <div className="flex flex-col gap-2 sm:flex-row">
                 <Input
-                  placeholder="@username or email"
+                  placeholder="Name, @username, or email"
                   value={addQuery}
                   onChange={(e) => setAddQuery(e.target.value)}
                   onKeyDown={(e) => {
@@ -701,6 +640,7 @@ export function TopBar() {
               {friendSearching && <p className="text-xs text-muted-foreground">Searching…</p>}
               {searchResults.length > 0 && (
                 <div className="space-y-1">
+                  <p className="px-1 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">Suggested matches</p>
                   {searchResults.map((r) => (
                     <div key={r.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg border border-border/50 bg-muted/20">
                       <div className="w-6 h-6 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
@@ -717,8 +657,8 @@ export function TopBar() {
                   ))}
                 </div>
               )}
-              {addQuery.length >= 2 && !friendSearching && searchResults.length === 0 && !addQuery.includes('@') && (
-                <p className="text-xs text-muted-foreground">No users found. Try searching by @username or enter an email to invite.</p>
+              {addQuery.trim().length >= 1 && !friendSearching && searchResults.length === 0 && !addQuery.includes('@') && (
+                <p className="text-xs text-muted-foreground">No users found. Try searching by name, @username, or enter an email to invite.</p>
               )}
             </TabsContent>
 
@@ -732,7 +672,20 @@ export function TopBar() {
                       <div className="w-6 h-6 rounded-full bg-gradient-to-br from-sky-400 to-blue-500 flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
                         {f.other_user?.name.charAt(0).toUpperCase() ?? '?'}
                       </div>
-                      <p className="text-sm flex-1 truncate">{f.other_user?.name ?? f.invited_email}</p>
+                      {getFriendProfileHref(f) ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            openFriends(false)
+                            router.push(getFriendProfileHref(f)!)
+                          }}
+                          className="text-sm flex-1 truncate text-left hover:text-primary"
+                        >
+                          {f.other_user?.name ?? f.invited_email}
+                        </button>
+                      ) : (
+                        <p className="text-sm flex-1 truncate">{f.other_user?.name ?? f.invited_email}</p>
+                      )}
                       <button onClick={() => respondToFriendRequest(f.id, 'accept')} className="p-1 rounded text-emerald-400 hover:bg-emerald-500/10 transition-colors" title="Accept">
                         <UserCheck className="w-4 h-4" />
                       </button>
@@ -751,7 +704,20 @@ export function TopBar() {
                       <div className="w-6 h-6 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
                         {f.other_user?.name.charAt(0).toUpperCase() ?? (f.invited_email?.[0].toUpperCase() ?? '?')}
                       </div>
-                      <p className="text-sm flex-1 truncate">{f.other_user?.name ?? f.invited_email}</p>
+                      {getFriendProfileHref(f) ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            openFriends(false)
+                            router.push(getFriendProfileHref(f)!)
+                          }}
+                          className="text-sm flex-1 truncate text-left hover:text-primary"
+                        >
+                          {f.other_user?.name ?? f.invited_email}
+                        </button>
+                      ) : (
+                        <p className="text-sm flex-1 truncate">{f.other_user?.name ?? f.invited_email}</p>
+                      )}
                       <Badge variant="outline" className="text-[10px]">{f.status === 'invited' ? 'Invited' : 'Pending'}</Badge>
                       <button onClick={() => removeFriend(f.id)} className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors" title="Cancel">
                         <X className="w-3.5 h-3.5" />
@@ -921,13 +887,16 @@ export function TopBar() {
                 { label: 'Dashboard',  href: '/dashboard/dashboard',   icon: LayoutDashboard },
                 { label: 'Meals',      href: '/dashboard/meals',        icon: Apple },
                 { label: 'Workouts',   href: '/dashboard/workouts',     icon: Dumbbell },
+                { label: 'Feed',       href: '/dashboard/feed',         icon: Sparkles },
                 { label: 'Tracking',   href: '/dashboard/tracking',     icon: BarChart3 },
                 { label: 'Calendar',   href: '/dashboard/calendar',     icon: Calendar },
                 { label: 'Journal',    href: '/dashboard/journal',      icon: BookOpen },
                 { label: 'Supplements',href: '/dashboard/supplements',  icon: Pill },
                 { label: 'Shared With Me', href: '/dashboard/shared', icon: Users },
+                { label: 'My Profile', href: '/dashboard/profile', icon: Settings },
               ].map(({ label, href, icon: Icon }) => {
                 const isActive = pathname === href || pathname.startsWith(href + '/')
+                const hasUnreadShared = href === '/dashboard/shared' && unreadSharedCount > 0
                 return (
                   <button
                     key={href}
@@ -938,8 +907,16 @@ export function TopBar() {
                         : 'text-muted-foreground hover:bg-accent hover:text-foreground'
                     }`}
                   >
-                    <Icon className="w-[18px] h-[18px] flex-shrink-0" />
+                    <div className="relative flex-shrink-0">
+                      <Icon className="w-[18px] h-[18px]" />
+                      {hasUnreadShared && (
+                        <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-card" />
+                      )}
+                    </div>
                     {label}
+                    {hasUnreadShared && (
+                      <span className="ml-auto h-2.5 w-2.5 rounded-full bg-emerald-400" />
+                    )}
                   </button>
                 )
               })}
@@ -958,15 +935,22 @@ export function TopBar() {
               )}
               <div className="flex items-center justify-between px-1">
                 {user && (
-                  <div className="flex items-center gap-2 min-w-0">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
-                      {user.name.charAt(0).toUpperCase()}
+                  <button
+                    type="button"
+                    onClick={() => handleMobileNavNavigate('/dashboard/profile')}
+                    className="flex min-w-0 items-center gap-2 text-left"
+                  >
+                    <div
+                      className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 text-xs font-bold text-white"
+                      style={user.avatar_url ? { backgroundImage: `url(${user.avatar_url})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}
+                    >
+                      {!user.avatar_url ? user.name.charAt(0).toUpperCase() : null}
                     </div>
                     <div className="min-w-0">
                       <p className="text-sm font-semibold truncate">{user.name}</p>
                       {isDemoMode && <span className="text-xs text-amber-400">Demo Mode</span>}
                     </div>
-                  </div>
+                  </button>
                 )}
                 <div className="flex items-center gap-1">
                   <button

@@ -1823,18 +1823,19 @@ export default function DashboardPage() {
         </motion.div>
 
         {/* Right rail */}
-        <motion.div variants={stagger.item} initial="initial" animate="animate" className="space-y-4">
-          <TodayRemindersCard
-            reminders={todayReminders}
-            onAdd={handleAddTodayReminder}
-            onToggle={toggleCalendarReminderComplete}
-            onRemove={removeCalendarReminder}
-            onOpenCalendar={() => router.push('/dashboard/calendar')}
-          />
-
-          {/* Daily quote */}
-          <DailyQuoteCard />
-
+        <motion.div variants={stagger.item} initial="initial" animate="animate" className="flex flex-col gap-4">
+          <div className="order-1 md:order-2">
+            <DailyQuoteCard />
+          </div>
+          <div className="order-2 md:order-1">
+            <TodayRemindersCard
+              reminders={todayReminders}
+              onAdd={handleAddTodayReminder}
+              onToggle={toggleCalendarReminderComplete}
+              onRemove={removeCalendarReminder}
+              onOpenCalendar={() => router.push('/dashboard/calendar')}
+            />
+          </div>
         </motion.div>
       </div>
     </div>

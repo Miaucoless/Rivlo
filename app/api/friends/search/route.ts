@@ -2,6 +2,33 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getRedisJson, hasRedisClient, normalizeRedisKeyPart, setRedisJson, withRedisCacheHeader } from '@/lib/redis'
 import { getAuthUser, getServiceClient } from '@/lib/supabase-server'
 
+function normalizeSearchValue(value: string | null | undefined) {
+  return (value ?? '').trim().toLowerCase()
+}
+
+function scoreProfileMatch(
+  profile: { name: string; username?: string | null },
+  query: string
+) {
+  const normalizedQuery = normalizeSearchValue(query)
+  const normalizedName = normalizeSearchValue(profile.name)
+  const normalizedUsername = normalizeSearchValue(profile.username)
+
+  if (!normalizedQuery) return 0
+  if (normalizedUsername === normalizedQuery) return 500
+  if (normalizedName === normalizedQuery) return 460
+  if (normalizedUsername.startsWith(normalizedQuery)) return 380
+  if (normalizedName.startsWith(normalizedQuery)) return 340
+
+  const usernameWords = normalizedUsername.split(/[^a-z0-9]+/).filter(Boolean)
+  const nameWords = normalizedName.split(/[^a-z0-9]+/).filter(Boolean)
+  if (usernameWords.some((word) => word.startsWith(normalizedQuery))) return 300
+  if (nameWords.some((word) => word.startsWith(normalizedQuery))) return 270
+  if (normalizedUsername.includes(normalizedQuery)) return 220
+  if (normalizedName.includes(normalizedQuery)) return 180
+  return 0
+}
+
 export async function GET(req: NextRequest) {
   const user = await getAuthUser(req)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -24,6 +51,8 @@ export async function GET(req: NextRequest) {
   let results: { id: string; name: string; username?: string; avatar_url?: string }[] = []
 
   const isEmail = q.includes('@') && !q.startsWith('@')
+  const normalizedLookup = q.replace(/^@/, '').trim()
+  const escapedLookup = normalizedLookup.replace(/[%_,]/g, (char) => `\\${char}`)
 
   if (isEmail) {
     const { data } = await db
@@ -36,8 +65,9 @@ export async function GET(req: NextRequest) {
     const { data } = await db
       .from('profiles')
       .select('id, name, username, avatar_url')
-      .eq('username', q.replace(/^@/, '').toLowerCase())
+      .or(`username.ilike.%${escapedLookup}%,name.ilike.%${escapedLookup}%`)
       .neq('id', user.id)
+      .limit(20)
     results = data ?? []
   }
 
@@ -61,7 +91,14 @@ export async function GET(req: NextRequest) {
     if (f.addressee_id) existingIds.add(f.addressee_id)
   }
 
-  const payload = results.filter((r) => !existingIds.has(r.id))
+  const payload = results
+    .filter((r) => !existingIds.has(r.id))
+    .sort((a, b) => {
+      const scoreDiff = scoreProfileMatch(b, normalizedLookup) - scoreProfileMatch(a, normalizedLookup)
+      if (scoreDiff !== 0) return scoreDiff
+      return a.name.localeCompare(b.name)
+    })
+    .slice(0, 8)
 
   if (cacheEnabled) {
     await setRedisJson(cacheKey, payload, 60)

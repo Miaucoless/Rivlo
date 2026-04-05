@@ -1,9 +1,9 @@
 import { WORKOUTS } from '@/lib/content-library'
-import type { GroceryList, SavedMealTemplate, WeeklyRecapShareData, Workout } from '@/types'
+import type { GroceryList, SavedMealTemplate, SocialPost, WeeklyRecapShareData, Workout } from '@/types'
 
-export type DemoSharedItemType = 'workout' | 'saved_meal' | 'recipe' | 'grocery_list' | 'weekly_recap'
+export type DemoSharedItemType = 'workout' | 'saved_meal' | 'recipe' | 'grocery_list' | 'weekly_recap' | 'social_post'
 
-export type DemoSharedItemPayload = Workout | SavedMealTemplate | GroceryList | WeeklyRecapShareData | null
+export type DemoSharedItemPayload = Workout | SavedMealTemplate | GroceryList | WeeklyRecapShareData | SocialPost | null
 
 export type DemoFriend = {
   id: string

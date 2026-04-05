@@ -9,6 +9,7 @@ function inboxCacheKeys(userId: string) {
     `share-inbox:v1:${userId}:workout`,
     `share-inbox:v1:${userId}:saved_meal`,
     `share-inbox:v1:${userId}:grocery_list`,
+    `share-inbox:v1:${userId}:social_post`,
   ]
 }
 

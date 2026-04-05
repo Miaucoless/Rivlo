@@ -11,6 +11,7 @@ function inboxCacheKeys(userId: string) {
     `share-inbox:v1:${userId}:saved_meal`,
     `share-inbox:v1:${userId}:grocery_list`,
     `share-inbox:v1:${userId}:weekly_recap`,
+    `share-inbox:v1:${userId}:social_post`,
   ]
 }
 
@@ -383,8 +384,8 @@ export async function POST(
 
     resultId = listId
     importedItem = importedList as unknown as Record<string, unknown>
-  } else if (item.item_type === 'weekly_recap') {
-    return NextResponse.json({ error: 'Weekly recaps are view-only.' }, { status: 422 })
+  } else if (item.item_type === 'weekly_recap' || item.item_type === 'social_post') {
+    return NextResponse.json({ error: `${item.item_type === 'social_post' ? 'Social posts' : 'Weekly recaps'} are view-only.` }, { status: 422 })
   }
 
   if (!resultId) {
