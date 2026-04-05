@@ -4,15 +4,13 @@
 import React from 'react'
 
 import { useEffect, useState } from 'react'
+import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Flame, Zap, Apple, Dumbbell, Plus, ScanLine, Search,
   ChevronDown, ChevronUp, Sparkles, Bell, CheckCircle2, Circle, Trash2, Clock3,
 } from 'lucide-react'
-import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell,
-} from 'recharts'
 import { format, subDays } from 'date-fns'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -25,7 +23,6 @@ import { Textarea } from '@/components/ui/textarea'
 import { useAppStore } from '@/store/useAppStore'
 import { WaterIntakeCard } from '@/components/dashboard/WaterIntakeCard'
 import { DailyQuoteCard } from '@/components/dashboard/DailyQuoteCard'
-import { CodeScannerDialog } from '@/components/meals/CodeScannerDialog'
 import { getKnownFoodCatalog, primeFoodSearchCache } from '@/lib/food-search'
 import { buildWeeklyReview } from '@/lib/weekly-review'
 import type { BarcodeFoodLookupResult } from '@/lib/barcode-food'
@@ -42,19 +39,24 @@ const stagger = {
   },
 }
 
-function CustomTooltip({ active, payload, label, unitSystem }: any) {
-  if (!active || !payload?.length) return null
-  return (
-    <div className="bg-card border border-border rounded-lg p-3 shadow-xl text-xs">
-      <p className="text-muted-foreground mb-1">{label}</p>
-      {payload.map((p: any) => (
-        <p key={p.name} style={{ color: p.color }} className="font-semibold">
-          {p.name}: {typeof p.value === 'number' && p.name === 'weight' ? formatWeightValue(p.value, unitSystem) : `${Math.round(p.value)} kcal`}
-        </p>
-      ))}
-    </div>
-  )
-}
+const CodeScannerDialog = dynamic(
+  () => import('@/components/meals/CodeScannerDialog').then((mod) => mod.CodeScannerDialog),
+  { ssr: false }
+)
+const CalorieHistoryCard = dynamic(
+  () => import('@/components/dashboard/DashboardCharts').then((mod) => mod.CalorieHistoryCard),
+  {
+    ssr: false,
+    loading: () => <Card className="h-[287px] animate-pulse bg-muted/20" />,
+  }
+)
+const MacroBreakdownCard = dynamic(
+  () => import('@/components/dashboard/DashboardCharts').then((mod) => mod.MacroBreakdownCard),
+  {
+    ssr: false,
+    loading: () => <Card className="h-[287px] animate-pulse bg-muted/20" />,
+  }
+)
 
 function getWorkoutSetDisplayName(set: { set_number: number; set_type?: 'standard' | 'drop'; drop_set_index?: number }) {
   if (set.set_type === 'drop') {
@@ -1244,125 +1246,12 @@ export default function DashboardPage() {
           animate="animate"
           className="lg:col-span-2"
         >
-          <Card>
-            <CardHeader className="pb-2">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-sm font-semibold">Calorie History</CardTitle>
-                <Badge variant="outline" className="text-xs">Last 7 days</Badge>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {calorieChartData.length > 0 ? (
-                <>
-                  <ResponsiveContainer width="100%" height={208}>
-                    <AreaChart data={calorieChartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
-                      <defs>
-                        <linearGradient id="cal-area" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
-                          <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="day" tick={{ fontSize: 11 }} />
-                      <YAxis tick={{ fontSize: 11 }} />
-                      <Tooltip content={<CustomTooltip unitSystem={unitSystem} />} />
-                      <Area
-                        type="monotone"
-                        dataKey="calories"
-                        stroke="#10b981"
-                        strokeWidth={2}
-                        fill="url(#cal-area)"
-                        dot={{ fill: '#10b981', r: 3 }}
-                        name="calories"
-                      />
-                      <Area
-                        type="monotone"
-                        dataKey="target"
-                        stroke="#f59e0b"
-                        strokeWidth={1.5}
-                        strokeDasharray="4 2"
-                        fill="none"
-                        dot={false}
-                        name="target"
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                  <div className="flex gap-4 mt-2 text-xs text-muted-foreground">
-                    <span className="flex items-center gap-1.5">
-                      <span className="w-3 h-0.5 bg-emerald-500 inline-block" /> Actual
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                      <span className="w-3 h-0.5 bg-amber-500 border-dashed inline-block" style={{ borderStyle: 'dashed', borderTopWidth: 1, backgroundColor: 'transparent', borderColor: '#f59e0b' }} /> Target
-                    </span>
-                  </div>
-                </>
-              ) : (
-                <div className="flex h-[208px] flex-col items-center justify-center text-center text-sm text-muted-foreground">
-                  <Flame className="mb-3 h-10 w-10 opacity-20" />
-                  <p>No calorie history yet</p>
-                  <p className="mt-1 text-xs">Your chart will appear once you log meals on at least one day.</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          <CalorieHistoryCard calorieChartData={calorieChartData} />
         </motion.div>
 
         {/* Macro breakdown pie */}
         <motion.div variants={stagger.item} initial="initial" animate="animate">
-          <Card className="h-full">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-semibold">Today&apos;s Macros</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {todayTotals.calories > 0 ? (
-                <>
-                  <div className="mb-1 flex justify-center">
-                    <PieChart width={120} height={120}>
-                      <Pie
-                        data={macroPieData}
-                        cx={60}
-                        cy={60}
-                        innerRadius={36}
-                        outerRadius={54}
-                        paddingAngle={3}
-                        dataKey="value"
-                      >
-                        {macroPieData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.color} />
-                        ))}
-                      </Pie>
-                    </PieChart>
-                  </div>
-                  <div className="space-y-2.5">
-                    {[
-                      { label: 'Protein', value: todayTotals.protein_g, target: user.protein_target_g, color: '#10b981', unit: 'g' },
-                      { label: 'Carbs', value: todayTotals.carbs_g, target: user.carb_target_g, color: '#3b82f6', unit: 'g' },
-                      { label: 'Fat', value: todayTotals.fat_g, target: user.fat_target_g, color: '#f59e0b', unit: 'g' },
-                    ].map((m) => (
-                      <div key={m.label}>
-                        <div className="mb-1 flex justify-between text-xs">
-                          <span className="text-muted-foreground">{m.label}</span>
-                          <span className="font-medium">{m.value}g / {m.target}g</span>
-                        </div>
-                        <div className="progress-track h-1.5">
-                          <div
-                            className="progress-fill"
-                            style={{ width: `${percentage(m.value, m.target)}%`, backgroundColor: m.color }}
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              ) : (
-                <div className="flex flex-col items-center justify-center h-48 text-muted-foreground text-sm text-center">
-                  <Apple className="w-10 h-10 mb-3 opacity-20" />
-                  <p>No meals logged today</p>
-                  <p className="text-xs mt-1">Add your first meal above</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          <MacroBreakdownCard todayTotals={todayTotals} macroPieData={macroPieData} user={user} />
         </motion.div>
       </div>
 

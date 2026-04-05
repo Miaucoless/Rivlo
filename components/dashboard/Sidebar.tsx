@@ -45,14 +45,16 @@ export function Sidebar() {
   ).length
 
   const handleLogout = async () => {
-    // If not in demo mode, sign out from Supabase
-    if (!isDemoMode) {
-      const { signOut } = await import('@/lib/auth')
-      await signOut()
+    try {
+      if (!isDemoMode) {
+        const { signOut } = await import('@/lib/auth')
+        await signOut()
+      }
+    } finally {
+      logout()
+      toast.success('Logged out successfully')
+      router.replace('/')
     }
-    logout()
-    toast.success('Logged out successfully')
-    router.push('/')
   }
 
   return (

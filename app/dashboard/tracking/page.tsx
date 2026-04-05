@@ -3,6 +3,7 @@
 import React from 'react'
 
 import { useState, useEffect } from 'react'
+import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
 import { format, subDays } from 'date-fns'
@@ -10,10 +11,6 @@ import {
   Scale, Plus, Download,
   Target, Dumbbell, Flame, Zap, Trophy, Edit, Trash2, ChevronRight,
 } from 'lucide-react'
-import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  LineChart, Line, ReferenceLine, BarChart, Bar,
-} from 'recharts'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -24,7 +21,35 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { useAppStore } from '@/store/useAppStore'
 import { formatWeightForInput, formatWeightValue, getTodayISO, getWeightUnitLabel, kgToLbs, lbsToKg, percentage } from '@/lib/utils'
 import { toast } from 'sonner'
-import MuscleDistributionPanel from '@/components/tracking/MuscleDistributionPanel'
+
+const WeightTrendCharts = dynamic(
+  () => import('@/components/tracking/TrackingCharts').then((mod) => mod.WeightTrendCharts),
+  {
+    ssr: false,
+    loading: () => <div className="grid gap-4 lg:grid-cols-2"><Card className="h-[309px] animate-pulse bg-muted/20" /><Card className="h-[309px] animate-pulse bg-muted/20" /></div>,
+  }
+)
+const NutritionTrendChart = dynamic(
+  () => import('@/components/tracking/TrackingCharts').then((mod) => mod.NutritionTrendChart),
+  {
+    ssr: false,
+    loading: () => <div className="h-[240px] animate-pulse rounded-2xl bg-muted/20" />,
+  }
+)
+const PrProgressChart = dynamic(
+  () => import('@/components/tracking/TrackingCharts').then((mod) => mod.PrProgressChart),
+  {
+    ssr: false,
+    loading: () => <div className="h-[170px] animate-pulse rounded-2xl bg-muted/20" />,
+  }
+)
+const MuscleDistributionPanel = dynamic(
+  () => import('@/components/tracking/MuscleDistributionPanel'),
+  {
+    ssr: false,
+    loading: () => <Card className="h-[420px] animate-pulse bg-muted/20" />,
+  }
+)
 
 function TrackingEmptyState({
   icon: Icon,
@@ -169,21 +194,6 @@ function buildTrackingRecommendation(args: {
     actionLabel: 'Review Tracking',
     actionHref: '/dashboard/tracking',
   }
-}
-
-function CustomTooltip({ active, payload, label, unitSystem }: any) {
-  if (!active || !payload?.length) return null
-  return (
-    <div className="bg-card border border-border rounded-lg p-3 shadow-xl text-xs">
-      <p className="text-muted-foreground mb-1">{label}</p>
-      {payload.map((p: any) => (
-        <p key={p.name} style={{ color: p.color }} className="font-semibold">
-          {p.name}: {p.value?.toFixed ? p.value.toFixed(1) : p.value}
-          {p.name === 'weight' ? ` ${getWeightUnitLabel(unitSystem)}` : p.name === 'calories' ? ' kcal' : p.name === 'protein' ? 'g' : ''}
-        </p>
-      ))}
-    </div>
-  )
 }
 
 // Log weight dialog
@@ -1373,66 +1383,12 @@ export default function TrackingPage() {
 
         {/* Weight tab */}
         <TabsContent value="weight">
-          <div className="grid lg:grid-cols-2 gap-4">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm">Weight Over Time</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="w-full">
-                  <ResponsiveContainer width="100%" height={220}>
-                    <AreaChart data={weightChartData} margin={{ top: 6, right: 18, left: 0, bottom: 0 }}>
-                        <defs>
-                          <linearGradient id="wt-grad" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
-                            <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis
-                          dataKey="date"
-                          tick={{ fontSize: 10 }}
-                          interval={Math.floor(weightChartData.length / 6)}
-                          padding={{ left: 4, right: 16 }}
-                        />
-                        <YAxis
-                          tick={{ fontSize: 10 }}
-                          domain={weightAxisDomain}
-                          tickFormatter={(value) => `${Number(value).toFixed(0)}`}
-                          width={38}
-                        />
-                        <Tooltip content={<CustomTooltip unitSystem={unitSystem} />} cursor={{ fill: 'rgba(16, 185, 129, 0.08)' }} />
-                        <Area type="monotone" dataKey="weight" stroke="#10b981" strokeWidth={2} fill="url(#wt-grad)" dot={false} name="weight" />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm">Body Fat % Trend</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="w-full">
-                  <ResponsiveContainer width="100%" height={220}>
-                    <LineChart data={weightChartData.filter(d => d.bodyFat)} margin={{ top: 6, right: 10, left: 0, bottom: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="date" tick={{ fontSize: 10 }} interval={Math.floor(weightChartData.length / 6)} />
-                        <YAxis
-                          tick={{ fontSize: 10 }}
-                          domain={bodyFatAxisDomain}
-                          tickFormatter={(value) => `${Number(value).toFixed(1)}%`}
-                          width={42}
-                        />
-                        <Tooltip content={<CustomTooltip unitSystem={unitSystem} />} cursor={{ fill: 'rgba(16, 185, 129, 0.08)' }} />
-                        <Line type="monotone" dataKey="bodyFat" stroke="#10b981" strokeWidth={2} dot={false} name="bodyFat" />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+          <WeightTrendCharts
+            weightChartData={weightChartData}
+            weightAxisDomain={weightAxisDomain}
+            bodyFatAxisDomain={bodyFatAxisDomain}
+            unitSystem={unitSystem}
+          />
 
           {/* Weight log table */}
           <Card className="mt-4">
@@ -1523,28 +1479,12 @@ export default function TrackingPage() {
                   </Button>
                 </TrackingEmptyState>
               ) : (
-                <ResponsiveContainer width="100%" height={240}>
-                  <BarChart data={calorieHistory} margin={{ top: 5, right: 8, left: -22, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="date" tick={{ fontSize: 10 }} />
-                    <YAxis tick={{ fontSize: 10 }} />
-                    <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(16, 185, 129, 0.08)' }} />
-                    <ReferenceLine
-                      y={nutritionMetric === 'calories' ? user.calorie_target : user.protein_target_g}
-                      stroke="#f59e0b"
-                      strokeDasharray="4 2"
-                      label={{ value: 'Target', position: 'right', fontSize: 10 }}
-                    />
-                    <Bar
-                      dataKey={nutritionMetric}
-                      fill={nutritionMetric === 'calories' ? '#10b981' : '#0ea5e9'}
-                      opacity={0.85}
-                      radius={[3, 3, 0, 0]}
-                      name={nutritionMetric}
-                      maxBarSize={32}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
+                <NutritionTrendChart
+                  calorieHistory={calorieHistory}
+                  nutritionMetric={nutritionMetric}
+                  calorieTarget={user.calorie_target}
+                  proteinTarget={user.protein_target_g}
+                />
               )}
             </CardContent>
           </Card>
@@ -1760,23 +1700,7 @@ export default function TrackingPage() {
                                   : `${selectedPrDelta > 0 ? '+' : ''}${selectedPrDelta}${unitSystem === 'metric' ? ' kg' : ' lb'}`}
                               </Badge>
                             </div>
-                            <ResponsiveContainer width="100%" height={170}>
-                              <LineChart data={selectedPrProgress} margin={{ top: 4, right: 10, left: 0, bottom: 0 }}>
-                                <CartesianGrid strokeDasharray="3 3" />
-                                <XAxis dataKey="displayDate" tick={{ fontSize: 10 }} />
-                                <YAxis tick={{ fontSize: 10 }} width={42} />
-                                <Tooltip content={<CustomTooltip unitSystem={unitSystem} />} cursor={{ fill: 'rgba(16, 185, 129, 0.08)' }} />
-                                <Line
-                                  type="monotone"
-                                  dataKey="weight"
-                                  stroke="#10b981"
-                                  strokeWidth={2.25}
-                                  dot={{ r: 3, fill: '#10b981' }}
-                                  activeDot={{ r: 5 }}
-                                  name="weight"
-                                />
-                              </LineChart>
-                            </ResponsiveContainer>
+                            <PrProgressChart selectedPrProgress={selectedPrProgress} unitSystem={unitSystem} />
                             {selectedPrProgress.length === 1 && (
                               <p className="mt-2 text-xs text-muted-foreground">
                                 First logged PR on {selectedPrProgress[0].displayDate}

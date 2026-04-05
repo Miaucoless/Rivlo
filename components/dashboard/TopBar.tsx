@@ -153,15 +153,6 @@ export function TopBar() {
   }
 
   useEffect(() => {
-    if (isDemoMode) return
-    const timeoutId = window.setTimeout(() => {
-      void loadFriends()
-    }, 400)
-
-    return () => window.clearTimeout(timeoutId)
-  }, [isDemoMode, loadFriends])
-
-  useEffect(() => {
     if (!isFriendsOpen || friendsTab !== 'add' || addQuery.trim().length < 1) {
       setSearchResults([])
       return
@@ -304,12 +295,15 @@ export function TopBar() {
 
   const handleMobileLogout = async () => {
     handleMobileNavClose()
-    if (!isDemoMode) {
-      const { signOut } = await import('@/lib/auth')
-      await signOut()
+    try {
+      if (!isDemoMode) {
+        const { signOut } = await import('@/lib/auth')
+        await signOut()
+      }
+    } finally {
+      logout()
+      router.replace('/')
     }
-    logout()
-    router.push('/')
   }
 
   const today = formatDate(new Date(), 'EEEE, MMMM d')

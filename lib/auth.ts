@@ -7,7 +7,15 @@ export type AuthResponse = {
   error?: string
   user?: UserProfile
   pendingConfirmation?: boolean
+  usedFallbackProfile?: boolean
 }
+
+const DEFAULT_NOTIFICATION_PREFERENCES = {
+  daily_workout_reminder: true,
+  meal_logging_reminder: true,
+  weekly_progress_summary: false,
+  goal_milestone_alerts: true,
+} as const
 
 function normalizeProfile(profile: Partial<UserProfile> | null | undefined): UserProfile | null {
   if (!profile) return null
@@ -27,6 +35,76 @@ function normalizeProfile(profile: Partial<UserProfile> | null | undefined): Use
     split_schedule: profile.split_schedule ?? buildDefaultSchedule(workoutSplit),
     profile_visibility: profile.profile_visibility === 'private' ? 'private' : 'public',
   } as UserProfile
+}
+
+function buildFallbackProfileFromAuthUser(authUser: {
+  id: string
+  email?: string | null
+  created_at?: string
+  updated_at?: string
+  user_metadata?: Record<string, unknown>
+}): UserProfile {
+  const metadata = authUser.user_metadata ?? {}
+  const email = authUser.email ?? ''
+  const fallbackName = email ? email.split('@')[0] || 'Rivora User' : 'Rivora User'
+  const rawName = typeof metadata.name === 'string' && metadata.name.trim() ? metadata.name.trim() : fallbackName
+  const rawUsername =
+    typeof metadata.username === 'string' && metadata.username.trim()
+      ? metadata.username.trim().toLowerCase()
+      : rawName.toLowerCase().replace(/[^a-z0-9_]+/g, '')
+  const workoutSplit: UserProfile['workout_split'] =
+    metadata.workout_split === 'upper_lower' ||
+    metadata.workout_split === '3day_fullbody' ||
+    metadata.workout_split === '4day' ||
+    metadata.workout_split === '5day' ||
+    metadata.workout_split === '6day' ||
+    metadata.workout_split === 'cardio_focus' ||
+    metadata.workout_split === 'custom'
+      ? metadata.workout_split
+      : 'ppl'
+  const timestamp = authUser.updated_at ?? authUser.created_at ?? new Date().toISOString()
+
+  return {
+    id: authUser.id,
+    email,
+    name: rawName,
+    username: rawUsername || undefined,
+    avatar_url: typeof metadata.avatar_url === 'string' ? metadata.avatar_url : undefined,
+    banner_url: typeof metadata.banner_url === 'string' ? metadata.banner_url : undefined,
+    bio: typeof metadata.bio === 'string' ? metadata.bio : undefined,
+    profile_visibility: metadata.profile_visibility === 'private' ? 'private' : 'public',
+    height_cm: typeof metadata.height_cm === 'number' ? metadata.height_cm : 175,
+    weight_kg: typeof metadata.weight_kg === 'number' ? metadata.weight_kg : 75,
+    age: typeof metadata.age === 'number' ? metadata.age : 25,
+    unit_system: metadata.unit_system === 'metric' ? 'metric' : 'imperial',
+    gender: metadata.gender === 'female' || metadata.gender === 'other' ? metadata.gender : 'male',
+    activity_level:
+      metadata.activity_level === 'sedentary' ||
+      metadata.activity_level === 'lightly_active' ||
+      metadata.activity_level === 'very_active' ||
+      metadata.activity_level === 'extra_active'
+        ? metadata.activity_level
+        : 'moderately_active',
+    fitness_goal:
+      metadata.fitness_goal === 'muscle_gain' ||
+      metadata.fitness_goal === 'maintenance' ||
+      metadata.fitness_goal === 'athletic_performance'
+        ? metadata.fitness_goal
+        : 'fat_loss',
+    workout_split: workoutSplit,
+    split_schedule: buildDefaultSchedule(workoutSplit),
+    notification_preferences: DEFAULT_NOTIFICATION_PREFERENCES,
+    bmr: typeof metadata.bmr === 'number' ? metadata.bmr : 0,
+    tdee: typeof metadata.tdee === 'number' ? metadata.tdee : 0,
+    calorie_target: typeof metadata.calorie_target === 'number' ? metadata.calorie_target : 2000,
+    protein_target_g: typeof metadata.protein_target_g === 'number' ? metadata.protein_target_g : 150,
+    carb_target_g: typeof metadata.carb_target_g === 'number' ? metadata.carb_target_g : 200,
+    fat_target_g: typeof metadata.fat_target_g === 'number' ? metadata.fat_target_g : 70,
+    water_goal_ml: typeof metadata.water_goal_ml === 'number' ? metadata.water_goal_ml : 0,
+    onboarded: metadata.onboarded === false ? false : true,
+    created_at: authUser.created_at ?? timestamp,
+    updated_at: timestamp,
+  }
 }
 
 export async function signUpWithEmail(
@@ -105,18 +183,33 @@ export async function signInWithEmail(
       return { success: false, error: 'Failed to sign in' }
     }
 
-    // Fetch user profile
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', authData.user.id)
-      .single()
+    const fallbackUser = buildFallbackProfileFromAuthUser(authData.user)
 
-    if (profileError) {
-      return { success: false, error: profileError.message }
+    const profileResult = await Promise.race([
+      supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', authData.user.id)
+        .single(),
+      new Promise<null>((resolve) => {
+        setTimeout(() => resolve(null), 1200)
+      }),
+    ])
+
+    if (!profileResult) {
+      return { success: true, user: fallbackUser, usedFallbackProfile: true }
     }
 
-    return { success: true, user: normalizeProfile(profile) ?? undefined }
+    if (profileResult.error || !profileResult.data) {
+      console.warn('Profile fetch was unavailable during sign-in, continuing with fallback profile.', profileResult.error)
+      return {
+        success: true,
+        user: fallbackUser,
+        usedFallbackProfile: true,
+      }
+    }
+
+    return { success: true, user: normalizeProfile(profileResult.data) ?? fallbackUser }
   } catch (error) {
     return { success: false, error: String(error) }
   }
@@ -261,7 +354,7 @@ export async function confirmPasswordReset(
 export async function signOut(): Promise<AuthResponse> {
   try {
     const supabase = createClient()
-    const { error } = await supabase.auth.signOut()
+    const { error } = await supabase.auth.signOut({ scope: 'local' })
 
     if (error) {
       return { success: false, error: error.message }

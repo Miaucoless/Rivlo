@@ -122,6 +122,7 @@ export async function GET(_req: NextRequest) {
         .select('id, share_id, user_id, body, created_at')
         .in('share_id', shareIds)
         .order('created_at', { ascending: false })
+        .limit(250)
     : { data: [], error: null }
 
   const { data: profiles, error: profileError } = counterpartIds.size > 0

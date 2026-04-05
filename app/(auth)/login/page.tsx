@@ -19,7 +19,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useAppStore } from '@/store/useAppStore'
-import { signInWithEmail } from '@/lib/auth'
+import { getCurrentUser, signInWithEmail } from '@/lib/auth'
 import { toast } from 'sonner'
 
 const dailyFlowSteps = [
@@ -72,6 +72,11 @@ export default function LoginPage() {
     }
   }, [])
 
+  useEffect(() => {
+    void router.prefetch('/dashboard')
+    void router.prefetch('/onboarding')
+  }, [router])
+
   const handleDemoLogin = () => {
     loginDemo()
     toast.success('Welcome to the demo! 🎉')
@@ -91,7 +96,17 @@ export default function LoginPage() {
     if (response.success && response.user) {
       setUser(response.user)
       toast.success('Welcome back! 👋')
-      router.push(response.user.onboarded ? '/dashboard' : '/onboarding')
+      const initialDestination =
+        response.usedFallbackProfile || response.user.onboarded ? '/dashboard' : '/onboarding'
+      router.replace(initialDestination)
+
+      if (response.usedFallbackProfile) {
+        void getCurrentUser().then((profile) => {
+          if (!profile) return
+          setUser(profile)
+          router.replace(profile.onboarded ? '/dashboard' : '/onboarding')
+        })
+      }
     } else {
       toast.error(response.error || 'Failed to sign in')
     }

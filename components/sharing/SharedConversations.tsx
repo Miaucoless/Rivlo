@@ -73,6 +73,7 @@ type DemoConversation = ConversationSummary & ConversationDetail
 
 const DEMO_THREAD_STORAGE_KEY = 'rivora-demo-conversation-messages'
 const IMPORTED_FRIEND_SHARE_STORAGE_KEY = 'rivora-imported-friend-shares'
+const SHARED_CONVERSATIONS_CACHE_PREFIX = 'rivora-shared-conversations'
 const TYPE_LABELS: Record<string, string> = {
   workout: 'Workout',
   saved_meal: 'Saved Meal',
@@ -265,6 +266,33 @@ function persistImportedFriendShareId(friendShareId: string) {
   }
 }
 
+function getSharedConversationCacheKey(userId: string) {
+  return `${SHARED_CONVERSATIONS_CACHE_PREFIX}:${userId}`
+}
+
+function readSharedConversationCache(userId: string): ConversationSummary[] {
+  if (typeof window === 'undefined') return []
+
+  try {
+    const raw = window.sessionStorage.getItem(getSharedConversationCacheKey(userId))
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed as ConversationSummary[] : []
+  } catch {
+    return []
+  }
+}
+
+function writeSharedConversationCache(userId: string, conversations: ConversationSummary[]) {
+  if (typeof window === 'undefined') return
+
+  try {
+    window.sessionStorage.setItem(getSharedConversationCacheKey(userId), JSON.stringify(conversations))
+  } catch {
+    // Ignore storage failures.
+  }
+}
+
 function normalizeImportedSavedMeal(raw: unknown): SavedMealTemplate | null {
   if (!raw || typeof raw !== 'object') return null
   const meal = raw as Record<string, unknown>
@@ -351,6 +379,7 @@ export function SharedConversations() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const isDemoMode = useAppStore((state) => state.isDemoMode)
+  const user = useAppStore((state) => state.user)
   const addSavedMeal = useAppStore((state) => state.addSavedMeal)
   const addCustomWorkout = useAppStore((state) => state.addCustomWorkout)
   const setGroceryList = useAppStore((state) => state.setGroceryList)
@@ -374,6 +403,7 @@ export function SharedConversations() {
   const timelineEndRef = useRef<HTMLDivElement | null>(null)
   const authTokenRef = useRef<string | null>(null)
   const hydratedDetailIdRef = useRef<string | null>(null)
+  const requestedConversation = searchParams.get('conversation')
 
   const getCachedToken = async () => {
     if (authTokenRef.current) return authTokenRef.current
@@ -410,30 +440,31 @@ export function SharedConversations() {
   }, [selectedId, detail, detailLoading, detail?.timeline.length])
 
   useEffect(() => {
-    if (!selectedId || !detail || detailLoading) return
-
-    const timeout = window.setTimeout(() => {
-      const container = timelineScrollRef.current
-      if (!container) return
-      container.scrollTop = container.scrollHeight
-      timelineEndRef.current?.scrollIntoView({ block: 'end' })
-    }, 80)
-
-    return () => window.clearTimeout(timeout)
-  }, [selectedId, detail, detailLoading, detail?.timeline.length])
-
-  useEffect(() => {
     let active = true
 
     async function loadConversations() {
-      setLoading(true)
-
       if (isDemoMode) {
         const demoConversations = getDemoConversations()
         if (!active) return
         setConversations(demoConversations)
         setLoading(false)
         return
+      }
+
+      if (!user?.id) {
+        if (active) {
+          setConversations([])
+          setLoading(false)
+        }
+        return
+      }
+
+      const cachedConversations = readSharedConversationCache(user.id)
+      if (cachedConversations.length > 0) {
+        setConversations(cachedConversations)
+        setLoading(false)
+      } else {
+        setLoading(true)
       }
 
       try {
@@ -443,12 +474,7 @@ export function SharedConversations() {
           return
         }
 
-        const requestedConversation = searchParams.get('conversation')
-        const endpoint = requestedConversation
-          ? `/api/share/conversations?selected=${encodeURIComponent(requestedConversation)}`
-          : '/api/share/conversations'
-
-        const res = await fetch(endpoint, {
+        const res = await fetch('/api/share/conversations', {
           headers: { Authorization: `Bearer ${token}` },
           cache: 'no-store',
         })
@@ -458,26 +484,16 @@ export function SharedConversations() {
         if (!active) return
 
         if (Array.isArray(data)) {
-          setConversations(data as ConversationSummary[])
+          const nextConversations = data as ConversationSummary[]
+          setConversations(nextConversations)
+          writeSharedConversationCache(user.id, nextConversations)
           return
         }
 
         const payload = data as ConversationsResponse
-        setConversations(payload.conversations ?? [])
-
-        if (payload.initialConversationId) {
-          hydratedDetailIdRef.current = payload.initialDetail ? payload.initialConversationId : null
-          setSelectedId(payload.initialConversationId)
-        } else {
-          hydratedDetailIdRef.current = null
-          setSelectedId(null)
-        }
-
-        if (payload.initialDetail) {
-          setDetail(payload.initialDetail)
-        } else {
-          setDetail(null)
-        }
+        const nextConversations = payload.conversations ?? []
+        setConversations(nextConversations)
+        writeSharedConversationCache(user.id, nextConversations)
       } catch (error) {
         if (active) setConversations([])
         toast.error(error instanceof Error ? error.message : 'Could not load shared threads.')
@@ -491,16 +507,17 @@ export function SharedConversations() {
     return () => {
       active = false
     }
-  }, [isDemoMode, searchParams])
+  }, [isDemoMode, user?.id])
 
   useEffect(() => {
-    const requestedConversation = searchParams.get('conversation')
     if (requestedConversation) {
       setSelectedId(requestedConversation)
       return
     }
-
-  }, [searchParams])
+    hydratedDetailIdRef.current = null
+    setSelectedId(null)
+    setDetail(null)
+  }, [requestedConversation])
 
   useEffect(() => {
     if (!selectedId) return

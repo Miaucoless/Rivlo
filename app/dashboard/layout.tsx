@@ -39,6 +39,7 @@ export default function DashboardLayout({
 
     let syncing = false
     let syncTimeoutId: ReturnType<typeof setTimeout> | null = null
+    let initialSyncTimeoutId: ReturnType<typeof setTimeout> | null = null
 
     const triggerSync = async () => {
       if (syncing) return
@@ -73,7 +74,9 @@ export default function DashboardLayout({
       if (e.persisted) void triggerSync()
     }
 
-    void triggerSync()
+    initialSyncTimeoutId = setTimeout(() => {
+      void triggerSync()
+    }, 350)
     window.addEventListener('focus', handleFocus)
     document.addEventListener('visibilitychange', handleVisibility)
     window.addEventListener('pageshow', handlePageShow)
@@ -86,6 +89,7 @@ export default function DashboardLayout({
       window.removeEventListener('pageshow', handlePageShow)
       window.removeEventListener('online', handleOnline)
       window.removeEventListener('offline', handleOffline)
+      if (initialSyncTimeoutId) clearTimeout(initialSyncTimeoutId)
       if (syncTimeoutId) clearTimeout(syncTimeoutId)
     }
   }, [flushPendingCloudWrites, isAuthenticated, loading, syncNow])

@@ -116,6 +116,7 @@ interface AppStore {
 
   // Actions
   setUser: (user: UserProfile | null) => void
+  restoreUserDataBackup: (userId: string) => void
   hydrateFromCloud: (userId: string) => Promise<void>
   syncNow: () => Promise<void>
   flushPendingCloudWrites: () => Promise<void>
@@ -1033,6 +1034,137 @@ const safePersistStorage: StateStorage = {
   },
 }
 
+type UserDataBackup = Pick<
+  AppStore,
+  | 'savedMeals'
+  | 'customRecipes'
+  | 'customWorkouts'
+  | 'notifications'
+  | 'notificationPreferences'
+  | 'supplements'
+  | 'calendarReminders'
+  | 'deletedSavedMealIds'
+  | 'deletedCustomWorkoutIds'
+  | 'socialPosts'
+  | 'socialFollows'
+  | 'socialSavedPostIds'
+  | 'socialLikedPostIds'
+  | 'socialPostComments'
+  | 'socialComposerPrefill'
+  | 'weightHistory'
+  | 'journalEntries'
+  | 'workoutLogs'
+  | 'mealEntries'
+  | 'waterLogs'
+  | 'waterUnit'
+  | 'weeklyMealPlan'
+  | 'groceryList'
+  | 'streak'
+  | 'lastSyncedAt'
+  | 'cloudHydratedUserId'
+>
+
+function userDataBackupKey(userId: string) {
+  return `rivora-user-backup:${userId}`
+}
+
+function buildUserDataBackup(state: AppStore): UserDataBackup {
+  return {
+    savedMeals: state.savedMeals,
+    customRecipes: state.customRecipes,
+    customWorkouts: state.customWorkouts,
+    notifications: state.notifications,
+    notificationPreferences: state.notificationPreferences,
+    supplements: state.supplements,
+    calendarReminders: state.calendarReminders,
+    deletedSavedMealIds: state.deletedSavedMealIds,
+    deletedCustomWorkoutIds: state.deletedCustomWorkoutIds,
+    socialPosts: state.socialPosts,
+    socialFollows: state.socialFollows,
+    socialSavedPostIds: state.socialSavedPostIds,
+    socialLikedPostIds: state.socialLikedPostIds,
+    socialPostComments: state.socialPostComments,
+    socialComposerPrefill: state.socialComposerPrefill,
+    weightHistory: state.weightHistory,
+    journalEntries: state.journalEntries,
+    workoutLogs: state.workoutLogs,
+    mealEntries: state.mealEntries,
+    waterLogs: state.waterLogs,
+    waterUnit: state.waterUnit,
+    weeklyMealPlan: state.weeklyMealPlan,
+    groceryList: state.groceryList,
+    streak: state.streak,
+    lastSyncedAt: state.lastSyncedAt,
+    cloudHydratedUserId: state.cloudHydratedUserId,
+  }
+}
+
+function readUserDataBackup(userId: string): Partial<UserDataBackup> | null {
+  if (typeof window === 'undefined') return null
+
+  try {
+    const raw = window.localStorage.getItem(userDataBackupKey(userId))
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    return parsed && typeof parsed === 'object' ? parsed as Partial<UserDataBackup> : null
+  } catch {
+    return null
+  }
+}
+
+function writeUserDataBackup(userId: string, state: AppStore) {
+  if (typeof window === 'undefined') return
+
+  try {
+    window.localStorage.setItem(userDataBackupKey(userId), JSON.stringify(buildUserDataBackup(state)))
+  } catch (error) {
+    if (isQuotaExceededError(error)) {
+      console.warn('Skipping user backup update because browser storage is full.')
+    }
+  }
+}
+
+function hasHydratedUserData(state: Pick<
+  AppStore,
+  | 'savedMeals'
+  | 'customRecipes'
+  | 'customWorkouts'
+  | 'supplements'
+  | 'calendarReminders'
+  | 'socialPosts'
+  | 'socialFollows'
+  | 'socialSavedPostIds'
+  | 'socialLikedPostIds'
+  | 'socialPostComments'
+  | 'weightHistory'
+  | 'journalEntries'
+  | 'workoutLogs'
+  | 'mealEntries'
+  | 'waterLogs'
+  | 'weeklyMealPlan'
+  | 'groceryList'
+>) {
+  return (
+    state.savedMeals.length > 0 ||
+    state.customRecipes.length > 0 ||
+    state.customWorkouts.length > 0 ||
+    state.supplements.length > 0 ||
+    state.calendarReminders.length > 0 ||
+    state.socialPosts.length > 0 ||
+    state.socialFollows.length > 0 ||
+    state.socialSavedPostIds.length > 0 ||
+    state.socialLikedPostIds.length > 0 ||
+    Object.keys(state.socialPostComments).length > 0 ||
+    state.weightHistory.length > 0 ||
+    state.journalEntries.length > 0 ||
+    state.workoutLogs.length > 0 ||
+    Object.keys(state.mealEntries).length > 0 ||
+    Object.keys(state.waterLogs).length > 0 ||
+    !!state.weeklyMealPlan ||
+    !!state.groceryList
+  )
+}
+
 export const useAppStore = create<AppStore>()(
   persist(
     (set, get) => ({
@@ -1074,6 +1206,12 @@ export const useAppStore = create<AppStore>()(
           const isUserSwitch = !!mergedUser && state.user?.id !== mergedUser.id
 
           if (isUserSwitch) {
+            if (state.user?.id && !state.isDemoMode) {
+              writeUserDataBackup(state.user.id, state)
+            }
+
+            const restoredBackup = mergedUser ? readUserDataBackup(mergedUser.id) : null
+
             return withRefreshedNotifications(state, {
               savedMeals: [],
               customRecipes: [],
@@ -1101,10 +1239,12 @@ export const useAppStore = create<AppStore>()(
       lastSyncedAt: null,
       pendingCloudWrites: 0,
               cloudHydratedUserId: null,
+              ...restoredBackup,
+              cloudHydratedUserId: restoredBackup?.cloudHydratedUserId ?? mergedUser?.id ?? null,
               user: mergedUser,
               isAuthenticated: !!mergedUser,
               isDemoMode: false,
-              notificationPreferences: mergedUser?.notification_preferences ?? DEFAULT_NOTIFICATION_PREFERENCES,
+              notificationPreferences: mergedUser?.notification_preferences ?? restoredBackup?.notificationPreferences ?? DEFAULT_NOTIFICATION_PREFERENCES,
             })
           }
 
@@ -1119,6 +1259,25 @@ export const useAppStore = create<AppStore>()(
         if (mergedUser) {
           void get().hydrateFromCloud(mergedUser.id)
         }
+      },
+
+      restoreUserDataBackup: (userId) => {
+        if (!userId) return
+
+        const restoredBackup = readUserDataBackup(userId)
+        if (!restoredBackup) return
+
+        set((state) => {
+          if (state.user?.id !== userId || hasHydratedUserData(state)) {
+            return state
+          }
+
+          return withRefreshedNotifications(state, {
+            ...restoredBackup,
+            notificationPreferences: restoredBackup.notificationPreferences ?? state.notificationPreferences,
+            cloudHydratedUserId: restoredBackup.cloudHydratedUserId ?? state.cloudHydratedUserId,
+          })
+        })
       },
 
       hydrateFromCloud: async (userId) => {
@@ -1316,6 +1475,11 @@ export const useAppStore = create<AppStore>()(
           }
         })
 
+        const latestState = get()
+        if (!latestState.isDemoMode && latestState.user?.id === userId) {
+          writeUserDataBackup(userId, latestState)
+        }
+
         } catch (err) {
           console.error('Cloud hydration failed:', err)
           set({ syncStatus: 'error' })
@@ -1443,6 +1607,10 @@ export const useAppStore = create<AppStore>()(
       }),
 
       logout: () => {
+        const currentState = get()
+        if (currentState.user?.id && !currentState.isDemoMode) {
+          writeUserDataBackup(currentState.user.id, currentState)
+        }
         pendingCloudWriteQueue.length = 0
         set({
           savedMeals: [],
@@ -2620,34 +2788,28 @@ export const useAppStore = create<AppStore>()(
     {
       name: 'rivora-store',
       storage: createJSONStorage(() => safePersistStorage),
-      version: 4,
-      migrate: () => ({}), // clear stale state on version mismatch
+      version: 5,
+      migrate: (persistedState) => {
+        const state = (persistedState ?? {}) as Partial<AppStore>
+        return {
+          user: state.user ?? null,
+          isAuthenticated: Boolean(state.isAuthenticated && state.user),
+          isDemoMode: Boolean(state.isDemoMode),
+          sidebarCollapsed: Boolean(state.sidebarCollapsed),
+          theme: state.theme === 'light' || state.theme === 'system' ? state.theme : 'dark',
+          notificationPreferences: state.notificationPreferences ?? DEFAULT_NOTIFICATION_PREFERENCES,
+          waterUnit: state.waterUnit === 'ml' || state.waterUnit === 'l' ? state.waterUnit : 'oz',
+          lastSyncedAt: typeof state.lastSyncedAt === 'string' ? state.lastSyncedAt : null,
+        }
+      },
       partialize: (state) => ({
-        savedMeals: state.savedMeals,
-        customWorkouts: state.customWorkouts,
-        notifications: state.notifications,
-        notificationPreferences: state.notificationPreferences,
-        supplements: state.supplements,
-        calendarReminders: state.calendarReminders,
-        socialPosts: state.socialPosts,
-        socialFollows: state.socialFollows,
-        socialSavedPostIds: state.socialSavedPostIds,
-        socialLikedPostIds: state.socialLikedPostIds,
-        socialPostComments: state.socialPostComments,
         user: state.user,
         isAuthenticated: state.isAuthenticated,
         isDemoMode: state.isDemoMode,
         sidebarCollapsed: state.sidebarCollapsed,
         theme: state.theme,
-        weightHistory: state.weightHistory,
-        journalEntries: state.journalEntries,
-        workoutLogs: state.workoutLogs,
-        mealEntries: state.mealEntries,
-        waterLogs: state.waterLogs,
+        notificationPreferences: state.notificationPreferences,
         waterUnit: state.waterUnit,
-        weeklyMealPlan: state.weeklyMealPlan,
-        groceryList: state.groceryList,
-        streak: state.streak,
         lastSyncedAt: state.lastSyncedAt,
       }),
     }

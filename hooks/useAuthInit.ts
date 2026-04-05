@@ -3,11 +3,23 @@ import { useAppStore } from '@/store/useAppStore'
 import { getCurrentUser } from '@/lib/auth'
 
 export function useAuthInit() {
-  const { setUser, isAuthenticated } = useAppStore()
-  const [loading, setLoading] = useState(true)
-  const [initialized, setInitialized] = useState(false)
+  const { setUser, restoreUserDataBackup, isAuthenticated, user } = useAppStore()
+  const hasAuthenticatedUser = isAuthenticated && !!user
+  const [loading, setLoading] = useState(() => !hasAuthenticatedUser)
+  const [initialized, setInitialized] = useState(() => hasAuthenticatedUser)
 
   useEffect(() => {
+    if (initialized) {
+      return
+    }
+
+    if (hasAuthenticatedUser) {
+      restoreUserDataBackup(user.id)
+      setLoading(false)
+      setInitialized(true)
+      return
+    }
+
     async function initAuth() {
       try {
         const user = await getCurrentUser()
@@ -22,10 +34,8 @@ export function useAuthInit() {
       }
     }
 
-    if (!initialized) {
-      initAuth()
-    }
-  }, [initialized, setUser])
+    void initAuth()
+  }, [hasAuthenticatedUser, initialized, restoreUserDataBackup, setUser, user])
 
   return { loading, isAuthenticated }
 }

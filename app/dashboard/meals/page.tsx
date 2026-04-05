@@ -3,6 +3,7 @@
 import React from 'react'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { format, startOfWeek, subDays } from 'date-fns'
@@ -11,8 +12,6 @@ import {
   CheckCircle, Circle, Plus, Zap, Pencil, Trash2, X, CalendarDays,
   Coffee, Soup, Moon, Cookie, GlassWater, Search, BookOpen, ChevronDown, MessageSquareText, Share2, ScanLine,
 } from 'lucide-react'
-import { ShareModal } from '@/components/sharing/ShareModal'
-import { CodeScannerDialog } from '@/components/meals/CodeScannerDialog'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -23,21 +22,22 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useAppStore, type SavedMealTemplate } from '@/store/useAppStore'
 import { getTodayISO } from '@/lib/utils'
-import { RECIPES } from '@/lib/content-library'
 import { buildSocialDraftFromRecipe, buildSocialDraftFromSavedMeal } from '@/lib/social-feed'
 import type { Recipe, PlannedSlot, CustomMealIngredient } from '@/types'
 import type { BarcodeFoodLookupResult } from '@/lib/barcode-food'
 import { generateGroceryItems, categorizeIngredient, estimatePrice } from '@/lib/grocery-generator'
 import type { MealLogEntry } from '@/lib/content-library'
-import {
-  type FoodCatalogItem,
-  getKnownFoodCatalog,
-  primeFoodSearchCache,
-  sumMacros,
-  getAvailableUnits,
-  parseFraction,
-} from '@/lib/food-search'
+import type { FoodCatalogItem } from '@/lib/food-search'
 import { toast } from 'sonner'
+
+const ShareModal = dynamic(
+  () => import('@/components/sharing/ShareModal').then((mod) => mod.ShareModal),
+  { ssr: false }
+)
+const CodeScannerDialog = dynamic(
+  () => import('@/components/meals/CodeScannerDialog').then((mod) => mod.CodeScannerDialog),
+  { ssr: false }
+)
 
 const MEAL_TYPES = ['breakfast', 'lunch', 'dinner', 'snack', 'drink'] as const
 type MealType = (typeof MEAL_TYPES)[number]
@@ -49,6 +49,14 @@ const DAY_FULL: Record<string, string> = { monday: 'Monday', tuesday: 'Tuesday',
 const PLAN_SLOTS = ['breakfast', 'lunch', 'dinner', 'snack'] as const
 const SLOT_ICONS: Record<string, React.ComponentType<{ className?: string }>> = { breakfast: Coffee, lunch: Soup, dinner: Moon, snack: Cookie }
 const SLOT_COLORS: Record<string, string> = { breakfast: 'text-amber-400', lunch: 'text-sky-400', dinner: 'text-violet-400', snack: 'text-emerald-400' }
+const FOOD_UNIT_OPTIONS = [
+  'serving', 'g', 'kg', 'oz', 'lb', 'cup', 'tbsp', 'tsp', 'ml', 'l',
+  'piece', 'slice', 'bowl', 'handful', 'pinch', 'dash', 'scoop',
+  'portion', 'pat', 'drop', 'hand',
+] as const
+
+let foodSearchModulePromise: Promise<typeof import('@/lib/food-search')> | null = null
+let contentLibraryModulePromise: Promise<typeof import('@/lib/content-library')> | null = null
 
 type ManualItemRow = {
   id: string
@@ -62,6 +70,113 @@ type ManualItemRow = {
     fat_g?: number
     fiber_g?: number
   }
+}
+
+function loadFoodSearchModule() {
+  if (!foodSearchModulePromise) {
+    foodSearchModulePromise = import('@/lib/food-search')
+  }
+  return foodSearchModulePromise
+}
+
+function loadContentLibraryModule() {
+  if (!contentLibraryModulePromise) {
+    contentLibraryModulePromise = import('@/lib/content-library')
+  }
+  return contentLibraryModulePromise
+}
+
+function parseFraction(input: string): number {
+  const trimmed = input.trim()
+  const mixedMatch = trimmed.match(/^(\d+)\s+(\d+)\/(\d+)$/)
+  if (mixedMatch) {
+    const whole = parseInt(mixedMatch[1], 10)
+    const numerator = parseInt(mixedMatch[2], 10)
+    const denominator = parseInt(mixedMatch[3], 10)
+    if (denominator !== 0) {
+      return whole + (numerator / denominator)
+    }
+  }
+
+  const fractionMatch = trimmed.match(/^(\d+)\/(\d+)$/)
+  if (fractionMatch) {
+    const numerator = parseInt(fractionMatch[1], 10)
+    const denominator = parseInt(fractionMatch[2], 10)
+    if (denominator !== 0) {
+      return numerator / denominator
+    }
+  }
+
+  const decimalMatch = trimmed.match(/^\d*\.?\d+$/)
+  if (decimalMatch) {
+    return parseFloat(trimmed)
+  }
+
+  const wholeMatch = trimmed.match(/^\d+$/)
+  if (wholeMatch) {
+    return parseInt(trimmed, 10)
+  }
+
+  return 0
+}
+
+function getAvailableUnits(_item?: FoodCatalogItem) {
+  return [...FOOD_UNIT_OPTIONS]
+}
+
+function sumMacros(entries: Array<{ macros: { calories: number; protein_g: number; carbs_g: number; fat_g: number; fiber_g?: number } }>) {
+  return entries.reduce(
+    (acc, entry) => ({
+      calories: acc.calories + entry.macros.calories,
+      protein_g: acc.protein_g + entry.macros.protein_g,
+      carbs_g: acc.carbs_g + entry.macros.carbs_g,
+      fat_g: acc.fat_g + entry.macros.fat_g,
+      fiber_g: (acc.fiber_g ?? 0) + (entry.macros.fiber_g ?? 0),
+    }),
+    { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0, fiber_g: 0 }
+  )
+}
+
+function useRecipeLibrary(enabled = true) {
+  const [recipeLibrary, setRecipeLibrary] = useState<Recipe[]>([])
+
+  useEffect(() => {
+    if (!enabled) return
+
+    let active = true
+    loadContentLibraryModule().then((mod) => {
+      if (active) {
+        setRecipeLibrary(mod.RECIPES)
+      }
+    })
+
+    return () => {
+      active = false
+    }
+  }, [enabled])
+
+  return recipeLibrary
+}
+
+function useKnownFoodCatalog(enabled = true) {
+  const [foodCatalog, setFoodCatalog] = useState<FoodCatalogItem[]>([])
+
+  useEffect(() => {
+    if (!enabled) return
+
+    let active = true
+    loadFoodSearchModule().then((mod) => {
+      if (active) {
+        setFoodCatalog(mod.getKnownFoodCatalog())
+      }
+    })
+
+    return () => {
+      active = false
+    }
+  }, [enabled])
+
+  return [foodCatalog, setFoodCatalog] as const
 }
 
 function normalizeFoodText(text: string) {
@@ -1037,7 +1152,9 @@ function MealEditorModal({
 }) {
   const { savedMeals, customRecipes, mealEntries } = useAppStore()
   const isMealTypeLocked = initialMealType !== null && !editingMeal && !editingSavedMeal
-  const allRecipes = useMemo(() => [...customRecipes, ...RECIPES], [customRecipes])
+  const recipeLibrary = useRecipeLibrary(open)
+  const [foodCatalog, setFoodCatalog] = useKnownFoodCatalog(open)
+  const allRecipes = useMemo(() => [...customRecipes, ...recipeLibrary], [customRecipes, recipeLibrary])
 
   const recentMeals = useMemo(() => {
     const cutoff = format(subDays(new Date(), 7), 'yyyy-MM-dd')
@@ -1122,7 +1239,6 @@ function MealEditorModal({
   const [savedMealIngName, setSavedMealIngName] = useState('')
   const [savedMealIngAmount, setSavedMealIngAmount] = useState('')
   const [savedMealIngUnit, setSavedMealIngUnit] = useState('g')
-  const [catalogSuggestions, setCatalogSuggestions] = useState<FoodCatalogItem[]>([])
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [searchLoading, setSearchLoading] = useState(false)
 
@@ -1140,11 +1256,6 @@ function MealEditorModal({
     () => selectedSavedMeal ? scaleSavedMealTemplate(selectedSavedMeal, savedMealMultiplierValue) : null,
     [selectedSavedMeal, savedMealMultiplierValue]
   )
-
-  // Initialize catalog with full catalog including user history
-  useEffect(() => {
-    setCatalogSuggestions(getKnownFoodCatalog())
-  }, [])
 
   // Build a catalog from the user's own meal history and saved meal ingredients
   // so previously logged foods (incl. branded items) are always searchable
@@ -1183,12 +1294,12 @@ function MealEditorModal({
 
   // Merge user history (deduplicated) with the catalog
   const allCatalogItems = useMemo((): FoodCatalogItem[] => {
-    const fullCatalog = getKnownFoodCatalog()
+    const fullCatalog = foodCatalog
     const userHistoryItems = userFoodCatalog.filter(i => 
       !fullCatalog.some(catalog => normalizeFoodText(catalog.name) === normalizeFoodText(i.name))
     )
     return [...userHistoryItems, ...fullCatalog]
-  }, [userFoodCatalog])
+  }, [foodCatalog, userFoodCatalog])
 
   const filteredSuggestions = useMemo(() => {
     const q = normalizeFoodText(foodQuery)
@@ -1537,7 +1648,7 @@ function MealEditorModal({
     const timer = setTimeout(async () => {
       // Run existing catalog search + API Ninjas nutrition in parallel
       const [inserted] = await Promise.all([
-        primeFoodSearchCache(query),
+        loadFoodSearchModule().then((mod) => mod.primeFoodSearchCache(query)),
         (async () => {
           try {
             const res = await fetch(`/api/nutrition?query=${encodeURIComponent(query)}`)
@@ -1572,7 +1683,7 @@ function MealEditorModal({
               },
             }))
 
-            setCatalogSuggestions((prev) => {
+            setFoodCatalog((prev) => {
               const existingIds = new Set(prev.map((i) => i.id))
               const newItems = ninjaItems.filter((i) => !existingIds.has(i.id))
               return newItems.length > 0 ? [...prev, ...newItems] : prev
@@ -1584,13 +1695,14 @@ function MealEditorModal({
       ])
 
       if (inserted > 0) {
-        setCatalogSuggestions(getKnownFoodCatalog())
+        const mod = await loadFoodSearchModule()
+        setFoodCatalog(mod.getKnownFoodCatalog())
       }
       setSearchLoading(false)
     }, 300)
 
     return () => clearTimeout(timer)
-  }, [foodQuery, source])
+  }, [foodQuery, setFoodCatalog, source])
 
   useEffect(() => {
     if (!open) return
@@ -3416,6 +3528,7 @@ function EditSavedMealModal({
   const [manualIngProtein, setManualIngProtein] = useState('')
   const [manualIngCarbs, setManualIngCarbs] = useState('')
   const [manualIngFat, setManualIngFat] = useState('')
+  const [foodCatalog] = useKnownFoodCatalog(open)
   const queryRef = useRef<HTMLInputElement>(null)
   const pendingAmountRef = useRef<HTMLInputElement>(null)
 
@@ -3456,8 +3569,7 @@ function EditSavedMealModal({
   useEffect(() => {
     const q = query.trim()
     if (!q) { setSuggestions([]); setShowSugg(false); return }
-    const catalog = getKnownFoodCatalog()
-    const scored = catalog
+    const scored = foodCatalog
       .map(item => ({ item, score: scoreSuggestion(item, q) }))
       .filter(x => x.score >= 10) // Lower threshold to show more results
       .sort((a, b) => b.score - a.score)
@@ -3465,7 +3577,7 @@ function EditSavedMealModal({
       .map(x => x.item)
     setSuggestions(scored)
     setShowSugg(scored.length > 0)
-  }, [query])
+  }, [foodCatalog, query])
 
   const selectFood = (food: FoodCatalogItem) => {
     setPendingFood(food)
@@ -3994,6 +4106,8 @@ export default function MealsPage() {
   const [plannerRecipeAmountMode, setPlannerRecipeAmountMode] = useState<RecipeAmountMode>('servings')
   const [plannerRecipeServings, setPlannerRecipeServings] = useState('1')
   const [plannerRecipeUnits, setPlannerRecipeUnits] = useState('1')
+  const recipeLibrary = useRecipeLibrary(activeTab === 'recipes' || activeTab === 'planner')
+  const [foodCatalog] = useKnownFoodCatalog(activeTab === 'grocery')
 
   const openPublishComposerForSavedMeal = (meal: SavedMealTemplate) => {
     setSocialComposerPrefill(buildSocialDraftFromSavedMeal(meal))
@@ -4036,7 +4150,7 @@ export default function MealsPage() {
     : 0
 
   const filteredRecipes = useMemo(() => {
-    let list = RECIPES
+    let list = recipeLibrary
     if (recipeFilterType !== 'all') list = list.filter(r => r.meal_type === recipeFilterType)
     if (recipeFilterTag === 'high-protein') list = list.filter(r => r.macros.protein_g >= 25)
     else if (recipeFilterTag === 'low-calorie') list = list.filter(r => r.macros.calories <= 400)
@@ -4050,12 +4164,12 @@ export default function MealsPage() {
       list = list.filter(r => r.name.toLowerCase().includes(q) || r.description.toLowerCase().includes(q))
     }
     return list
-  }, [recipeFilterType, recipeFilterTag, recipeSearchText])
+  }, [recipeFilterType, recipeFilterTag, recipeLibrary, recipeSearchText])
 
   const grocerySuggestions = useMemo(() => {
     const q = grocerySearchQuery.toLowerCase().trim()
     if (!q) return []
-    return getKnownFoodCatalog()
+    return foodCatalog
       .filter(item => {
         const name = item.name.toLowerCase()
         const alias = item.aliases.some(a => a.toLowerCase().includes(q))
@@ -4068,7 +4182,7 @@ export default function MealsPage() {
         return aStarts - bStarts || an.localeCompare(bn)
       })
       .slice(0, 12)
-  }, [grocerySearchQuery])
+  }, [foodCatalog, grocerySearchQuery])
 
   function openAddItemDialog() {
     setNewItemName('')
@@ -4127,7 +4241,7 @@ export default function MealsPage() {
 
   // ─── Meal planner constants & helpers ───────────────────────────────────────
   const filteredPlanRecipes = useMemo(() => {
-    let list = RECIPES
+    let list = recipeLibrary
     if (recipeSearchQuery.trim()) {
       const q = recipeSearchQuery.toLowerCase()
       list = list.filter(r => r.name.toLowerCase().includes(q) || r.tags.some((t: string) => t.toLowerCase().includes(q)))
@@ -4140,7 +4254,7 @@ export default function MealsPage() {
     if (plannerNutritionFilters.includes('low_fat')) list = list.filter(r => r.macros.fat_g <= 10)
     if (plannerNutritionFilters.includes('high_carb')) list = list.filter(r => r.macros.carbs_g >= 50)
     return list
-  }, [recipeSearchQuery, plannerMealTypeFilter, plannerNutritionFilters])
+  }, [plannerMealTypeFilter, plannerNutritionFilters, recipeLibrary, recipeSearchQuery])
 
   const filteredPlanSavedMeals = useMemo(() => {
     let list = savedMeals
@@ -4813,7 +4927,7 @@ export default function MealsPage() {
 
           {/* Count line */}
           <p className="text-xs text-muted-foreground">
-            <span className="font-data text-foreground font-semibold">{filteredRecipes.length}</span> of {RECIPES.length} library recipes
+            <span className="font-data text-foreground font-semibold">{filteredRecipes.length}</span> of {recipeLibrary.length} library recipes
           </p>
 
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">

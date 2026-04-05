@@ -3,6 +3,7 @@
 import React from 'react'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import dynamic from 'next/dynamic'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -11,7 +12,6 @@ import {
 } from 'lucide-react'
 import { WorkoutTimerBar } from '@/components/workout/WorkoutTimerBar'
 import { WorkoutTimerStrip } from '@/components/workout/WorkoutTimerStrip'
-import { ShareModal } from '@/components/sharing/ShareModal'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -32,6 +32,11 @@ import { buildDefaultSchedule, getTodayWeekDay, getWorkoutsForDayType, SPLIT_DAY
 import { createUserWorkoutTemplate, fetchUserWorkoutTemplates, updateUserWorkoutTemplate } from '@/lib/workout-templates'
 import { toast } from 'sonner'
 import type { UnitSystem } from '@/types'
+
+const ShareModal = dynamic(
+  () => import('@/components/sharing/ShareModal').then((mod) => mod.ShareModal),
+  { ssr: false }
+)
 
 type Difficulty = Workout['difficulty']
 
