@@ -2,6 +2,7 @@
 'use client'
 
 import type { JournalEntry, MuscleGroup, WorkoutLog } from '@/types'
+import type { SuggestionType } from '@/lib/progression-suggestions'
 import { useProgressionSuggestion } from '@/hooks/useProgressionSuggestion'
 
 interface Props {
@@ -14,7 +15,7 @@ interface Props {
   onApply: (weight_kg: number) => void
 }
 
-const HAS_APPLY_BUTTON: Array<string> = ['increase', 'streak', 'decrease', 'absence']
+const HAS_APPLY_BUTTON: ReadonlyArray<SuggestionType> = ['increase', 'streak', 'decrease', 'absence']
 
 export function ProgressionSuggestion({
   exerciseId,
@@ -41,8 +42,10 @@ export function ProgressionSuggestion({
 
   function handleApply() {
     const kg = apply()
-    if (kg !== null) onApply(kg)
-    dismiss()
+    if (kg !== null) {
+      onApply(kg)
+      dismiss()
+    }
   }
 
   return (
