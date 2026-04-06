@@ -29,21 +29,32 @@ const UPPER_BODY: MuscleGroup[] = ['chest', 'back', 'shoulders', 'biceps', 'tric
 const LOWER_BODY: MuscleGroup[] = ['quads', 'hamstrings', 'glutes', 'calves']
 const COMPOUND_MUSCLE_GROUPS: MuscleGroup[] = ['chest', 'back', 'shoulders', 'quads', 'hamstrings']
 
-/** Returns weight increment in kg for the given muscle groups. */
-export function getWeightIncrement(muscleGroups: MuscleGroup[]): number {
+/**
+ * Returns weight increment in kg for the given muscle groups.
+ * In imperial mode uses real gym lb increments (5 lb upper, 10 lb lower).
+ */
+export function getWeightIncrement(muscleGroups: MuscleGroup[], unitSystem?: 'imperial' | 'metric'): number {
+  if (unitSystem === 'imperial') {
+    const lbIncrement = muscleGroups.some((mg) => UPPER_BODY.includes(mg)) ? 5 : 10
+    return lbIncrement / 2.20462
+  }
   if (muscleGroups.some((mg) => UPPER_BODY.includes(mg))) return 2.5
   if (muscleGroups.some((mg) => LOWER_BODY.includes(mg))) return 5
   return 5
 }
 
-/** Rounds a weight to the nearest 2.5 kg. */
-function roundTo2_5(kg: number): number {
+/** Rounds to nearest real gym weight: 5 lb increments in imperial, 2.5 kg in metric. */
+function roundToGymWeight(kg: number, unitSystem?: 'imperial' | 'metric'): number {
+  if (unitSystem === 'imperial') {
+    const lb = kg * 2.20462
+    return (Math.round(lb / 5) * 5) / 2.20462
+  }
   return Math.round(kg / 2.5) * 2.5
 }
 
 /** Formats a weight value in the user's preferred unit system. */
 function formatWeight(kg: number, unitSystem?: 'imperial' | 'metric'): string {
-  if (unitSystem === 'imperial') return `${Math.round(kg * 2.20462)} lb`
+  if (unitSystem === 'imperial') return `${Math.round(kg * 2.20462 / 5) * 5} lb`
   return `${kg} kg`
 }
 
@@ -86,7 +97,7 @@ function getExerciseLogs(exerciseId: string, workoutLogs: WorkoutLog[]) {
 export function getProgressionSuggestion(input: SuggestionInput): ProgressionSuggestion | null {
   const { exerciseId, muscleGroups, workoutLogs, journalEntries, completedSetsThisSession, unitSystem } = input
   const logs = getExerciseLogs(exerciseId, workoutLogs)
-  const increment = getWeightIncrement(muscleGroups)
+  const increment = getWeightIncrement(muscleGroups, unitSystem)
 
   // ── Priority 1: Personal Record (fires mid-session after a set is completed)
   if (completedSetsThisSession && completedSetsThisSession.length > 0) {
@@ -117,7 +128,7 @@ export function getProgressionSuggestion(input: SuggestionInput): ProgressionSug
   if (logs.length >= 2) {
     const prevBest = getBestSet(logs[1].sets)
     if (lastBest.actual_reps >= 10 && prevBest && prevBest.actual_reps >= 10) {
-      const suggested = roundTo2_5(lastWeight + increment)
+      const suggested = roundToGymWeight(lastWeight + increment, unitSystem)
       return {
         type: 'streak',
         text: `10+ reps two sessions running — ready for ${formatWeight(suggested, unitSystem)}`,
@@ -128,7 +139,7 @@ export function getProgressionSuggestion(input: SuggestionInput): ProgressionSug
 
   // ── Priority 3: Increase Weight (≥10 reps last session)
   if (lastBest.actual_reps >= 10) {
-    const suggested = roundTo2_5(lastWeight + increment)
+    const suggested = roundToGymWeight(lastWeight + increment, unitSystem)
     return {
       type: 'increase',
       text: `Hit ${lastBest.actual_reps} reps last time — try ${formatWeight(suggested, unitSystem)} × 8`,
@@ -141,7 +152,7 @@ export function getProgressionSuggestion(input: SuggestionInput): ProgressionSug
   const lastDate = new Date(lastLog.date)
   const daysSince = Math.floor((today.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24))
   if (daysSince >= 21) {
-    const suggested = roundTo2_5(lastWeight * 0.9)
+    const suggested = roundToGymWeight(lastWeight * 0.9, unitSystem)
     const weeks = Math.floor(daysSince / 7)
     return {
       type: 'absence',
@@ -165,7 +176,7 @@ export function getProgressionSuggestion(input: SuggestionInput): ProgressionSug
 
   // ── Priority 6: Decrease Weight (≤5 reps last session)
   if (lastBest.actual_reps <= 5) {
-    const suggested = roundTo2_5(Math.max(0, lastWeight - increment))
+    const suggested = roundToGymWeight(Math.max(0, lastWeight - increment), unitSystem)
     return {
       type: 'decrease',
       text: `Only hit ${lastBest.actual_reps} reps last time — try ${formatWeight(suggested, unitSystem)} to reach 8`,

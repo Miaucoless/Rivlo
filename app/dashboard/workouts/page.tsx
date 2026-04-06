@@ -1940,11 +1940,29 @@ function ActiveWorkoutModal({
     }
     return map
   }, [workoutLogs, workout.id])
-  const [exercises, setExercises] = useState<ActiveExercise[]>(
-    initialExercises && initialExercises.length > 0
-      ? initialExercises
-      : createActiveExercisesFromWorkout(workout)
-  )
+  const [exercises, setExercises] = useState<ActiveExercise[]>(() => {
+    if (initialExercises && initialExercises.length > 0) return initialExercises
+    const base = createActiveExercisesFromWorkout(workout)
+    // Pre-fill actual_weight from the most recent log of this same workout
+    const lastLog = [...workoutLogs]
+      .filter((l) => l.workout_id === workout.id)
+      .sort((a, b) => b.date.localeCompare(a.date))[0]
+    if (!lastLog) return base
+    return base.map((exercise) => {
+      const loggedEx =
+        lastLog.exercises.find((e) => e.exercise_id === exercise.exercise.id) ??
+        lastLog.exercises.find((e) => e.exercise_name.toLowerCase() === exercise.exercise.name.toLowerCase())
+      if (!loggedEx) return exercise
+      return {
+        ...exercise,
+        sets: exercise.sets.map((set, i) => {
+          const loggedSet = loggedEx.sets[i]
+          if (!loggedSet || loggedSet.weight_kg <= 0) return set
+          return { ...set, actual_weight: loggedSet.weight_kg }
+        }),
+      }
+    })
+  })
   const [exerciseSearch, setExerciseSearch] = useState('')
   const [isCompleting, setIsCompleting] = useState(false)
   const [apiLiveSuggestions, setApiLiveSuggestions] = useState<ExerciseLibraryItem[]>([])
