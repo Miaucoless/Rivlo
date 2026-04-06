@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { forwardRef, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useRouter } from 'next/navigation'
 import { Bookmark, ChevronLeft, ChevronRight, Heart, MessageCircle, Send } from 'lucide-react'
@@ -18,15 +18,7 @@ const slideVariants = {
   exit: (dir: number) => ({ x: dir >= 0 ? '-100%' : '100%' }),
 }
 
-export function SocialPostCard({
-  post,
-  saved,
-  liked,
-  onOpen,
-  onToggleSave,
-  onToggleLike,
-  onAddComment,
-}: {
+export const SocialPostCard = forwardRef<HTMLDivElement, {
   post: SocialPost
   saved: boolean
   liked: boolean
@@ -34,7 +26,15 @@ export function SocialPostCard({
   onToggleSave: (post: SocialPost) => void
   onToggleLike: (post: SocialPost) => void
   onAddComment?: (post: SocialPost, body: string) => void
-}) {
+}>(function SocialPostCard({
+  post,
+  saved,
+  liked,
+  onOpen,
+  onToggleSave,
+  onToggleLike,
+  onAddComment,
+}, ref) {
   const router = useRouter()
   const badge = getSocialPostBadge(post)
   const preview = getSocialPostPreview(post)
@@ -130,6 +130,7 @@ export function SocialPostCard({
 
   return (
     <motion.div
+      ref={ref}
       layout
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
@@ -352,7 +353,7 @@ export function SocialPostCard({
       </div>
     </motion.div>
   )
-}
+})
 
 function getNoMediaHighlights(post: SocialPost): string[] {
   if (post.type === 'meal' && post.mealData) {

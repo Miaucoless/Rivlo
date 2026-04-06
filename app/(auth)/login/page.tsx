@@ -121,10 +121,6 @@ export default function LoginPage() {
     }
   }, [])
 
-  useEffect(() => {
-    void refreshClientNavigationState()
-  }, [router])
-
   const navigateAfterLogin = async (destination: string) => {
     await refreshClientNavigationStateWithTimeout()
 

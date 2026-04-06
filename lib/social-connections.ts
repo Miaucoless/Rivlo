@@ -35,11 +35,18 @@ export function mergeSocialProfiles(
 
   posts.forEach((post) => {
     const existing = map.get(post.user.id)
-    map.set(post.user.id, existing ? { ...existing, ...post.user } : post.user)
+    map.set(post.user.id, existing ? {
+      ...existing,
+      ...post.user,
+      xp_total: post.user.xp_total ?? existing.xp_total,
+      has_crown: post.user.has_crown ?? existing.has_crown,
+    } : post.user)
   })
 
   if (currentUser) {
+    const existing = map.get(currentUser.id)
     map.set(currentUser.id, {
+      ...existing,
       id: currentUser.id,
       name: currentUser.name,
       username: currentUser.username || currentUser.name.toLowerCase().replace(/[^a-z0-9]+/g, ''),
@@ -47,6 +54,8 @@ export function mergeSocialProfiles(
       banner_url: currentUser.banner_url,
       bio: currentUser.bio,
       profile_visibility: currentUser.profile_visibility ?? 'public',
+      xp_total: (currentUser as { xp_total?: number }).xp_total ?? existing?.xp_total,
+      has_crown: (currentUser as { has_crown?: boolean }).has_crown ?? existing?.has_crown,
     })
   }
 

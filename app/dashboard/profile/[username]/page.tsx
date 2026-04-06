@@ -418,7 +418,7 @@ export default function PublicProfilePage() {
                   <h1 className="mt-1 text-2xl font-semibold tracking-tight">{profileUser.name}</h1>
                   <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                     <span>@{profileUser.username}</span>
-                    {profileUser.xp_total != null ? <XpBadge totalXp={profileUser.xp_total} size="sm" /> : null}
+                    <XpBadge totalXp={profileUser.xp_total ?? 0} size="sm" />
                     {profileUser.profile_visibility === 'private' ? (
                       <span className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-muted/30 px-2.5 py-1 text-xs">
                         <Lock className="h-3 w-3" />

@@ -1,7 +1,7 @@
 // components/workout/ProgressionSuggestion.tsx
 'use client'
 
-import type { JournalEntry, MuscleGroup, WorkoutLog } from '@/types'
+import type { JournalEntry, MuscleGroup, WorkoutLog, ExercisePrimaryType, ExerciseModifier } from '@/types'
 import type { SuggestionType } from '@/lib/progression-suggestions'
 import { useProgressionSuggestion } from '@/hooks/useProgressionSuggestion'
 
@@ -9,6 +9,9 @@ interface Props {
   exerciseId: string
   exerciseName: string
   muscleGroups: MuscleGroup[]
+  equipment?: string
+  primaryType?: ExercisePrimaryType
+  modifiers?: ExerciseModifier[]
   workoutLogs: WorkoutLog[]
   journalEntries?: JournalEntry[]
   completedSetsThisSession?: Array<{ actual_reps: number; weight_kg: number }>
@@ -16,12 +19,25 @@ interface Props {
   onApply: (weight_kg: number) => void
 }
 
-const HAS_APPLY_BUTTON: ReadonlyArray<SuggestionType> = ['increase', 'streak', 'decrease', 'absence']
+/** Suggestion types that carry a specific weight the user can apply to all sets. */
+const HAS_APPLY_BUTTON: ReadonlyArray<SuggestionType> = [
+  'increase_load',
+  'top_set_only_increase',
+  'reduce_and_rebuild',
+  'absence',
+  'reduce_assistance',
+]
+
+/** Suggestion types rendered with brighter emphasis (most actionable). */
+const HIGH_PRIORITY: ReadonlyArray<SuggestionType> = ['increase_load', 'reduce_and_rebuild']
 
 export function ProgressionSuggestion({
   exerciseId,
   exerciseName,
   muscleGroups,
+  equipment,
+  primaryType,
+  modifiers,
   workoutLogs,
   journalEntries,
   completedSetsThisSession,
@@ -32,6 +48,9 @@ export function ProgressionSuggestion({
     exerciseId,
     exerciseName,
     muscleGroups,
+    equipment,
+    primaryType,
+    modifiers,
     workoutLogs,
     journalEntries,
     completedSetsThisSession,
@@ -40,7 +59,7 @@ export function ProgressionSuggestion({
 
   if (!shouldShow || !suggestion) return null
 
-  const isStreak = suggestion.type === 'streak'
+  const isHighPriority = HIGH_PRIORITY.includes(suggestion.type)
   const showApply = HAS_APPLY_BUTTON.includes(suggestion.type)
 
   function handleApply() {
@@ -55,7 +74,7 @@ export function ProgressionSuggestion({
     <div className="mt-2.5 flex items-center gap-2 border-t border-border/60 pt-2.5">
       <span
         className={`flex-1 text-xs leading-snug ${
-          isStreak ? 'text-emerald-400/85' : 'text-emerald-400/60'
+          isHighPriority ? 'text-emerald-400/85' : 'text-emerald-400/60'
         }`}
       >
         {suggestion.text}

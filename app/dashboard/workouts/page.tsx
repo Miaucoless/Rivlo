@@ -2,12 +2,12 @@
 
 import React from 'react'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  BookOpen, CheckCircle, ChevronDown, ChevronUp, Circle, Copy, Dumbbell, Eye, Loader2, Pencil, Play, PlayCircle, Plus, Search,
+  ArrowLeft, BookOpen, Check, CheckCircle, ChevronDown, ChevronUp, Circle, Copy, Dumbbell, Eye, Loader2, Pause, Pencil, Play, PlayCircle, Plus, Search,
   SlidersHorizontal, Sparkles, Trash2, Trophy, X, MessageSquareText, Zap,
 } from 'lucide-react'
 import { WorkoutTimerBar } from '@/components/workout/WorkoutTimerBar'
@@ -131,6 +131,47 @@ function formatWorkoutDuration(startedAt?: string, completedAt?: string, duratio
   const minutes = diffMin % 60
   if (hours > 0) return `${hours}h ${minutes}m`
   return `${minutes} min`
+}
+
+const SPLIT_DAY_MUSCLES: Partial<Record<string, string[]>> = {
+  push: ['chest', 'shoulders', 'triceps'],
+  pull: ['back', 'biceps', 'forearms'],
+  legs: ['quads', 'hamstrings', 'glutes', 'calves'],
+  upper: ['chest', 'back', 'shoulders', 'biceps', 'triceps'],
+  lower: ['quads', 'hamstrings', 'glutes', 'calves'],
+  full_body: ['chest', 'back', 'shoulders', 'quads', 'hamstrings', 'core'],
+  chest: ['chest'],
+  back: ['back'],
+  shoulders: ['shoulders'],
+  arms: ['biceps', 'triceps'],
+  cardio: ['cardio'],
+}
+
+function formatElapsed(startMs: number, nowMs: number): string {
+  const elapsed = Math.max(0, Math.floor((nowMs - startMs) / 1000))
+  const m = Math.floor(elapsed / 60).toString().padStart(2, '0')
+  const s = (elapsed % 60).toString().padStart(2, '0')
+  return `${m}:${s}`
+}
+
+function getLastLoggedSummary(exerciseId: string, logs: WorkoutLog[], unitSystem: UnitSystem): string | null {
+  const sorted = [...logs].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+  for (const log of sorted) {
+    const ex = log.exercises.find((e) => e.exercise_id === exerciseId)
+    if (!ex || ex.sets.length === 0) continue
+    const firstSet = ex.sets[0]
+    const reps = firstSet.actual_reps
+    const weightKg = firstSet.weight_kg
+    if (weightKg && weightKg > 0) {
+      const displayWeight = unitSystem === 'imperial' ? Math.round(weightKg * 2.205) : weightKg
+      const unit = unitSystem === 'imperial' ? 'lb' : 'kg'
+      const allSameReps = ex.sets.every((s) => s.actual_reps === reps)
+      if (allSameReps && ex.sets.length > 1) return `${ex.sets.length}×${reps} @ ${displayWeight} ${unit}`
+      return `${reps} reps @ ${displayWeight} ${unit}`
+    }
+    return `${reps} reps`
+  }
+  return null
 }
 
 function formatAverageWorkoutTime(durationMin?: number) {
@@ -557,22 +598,28 @@ function createActiveExercisesFromWorkout(workout: Workout): ActiveExercise[] {
 
 function createActiveExercisesFromWorkoutLog(log: WorkoutLog): ActiveExercise[] {
   const templateByKey = new Map<string, WorkoutExercise>()
+  const workoutExercises = Array.isArray(log.workout?.exercises) ? log.workout.exercises : []
 
-  log.workout.exercises.forEach((exercise) => {
+  workoutExercises.forEach((exercise) => {
     templateByKey.set(`id:${exercise.exercise.id}`, exercise)
     templateByKey.set(`name:${exercise.exercise.name.toLowerCase()}`, exercise)
   })
 
-  return log.exercises.map((loggedExercise) => {
+  const loggedExercises = Array.isArray(log.exercises) ? log.exercises : []
+
+  return loggedExercises.map((loggedExercise) => {
+    const exerciseName = typeof loggedExercise.exercise_name === 'string' && loggedExercise.exercise_name.trim()
+      ? loggedExercise.exercise_name.trim()
+      : 'Custom Exercise'
     const templateExercise =
       templateByKey.get(`id:${loggedExercise.exercise_id}`) ??
-      templateByKey.get(`name:${loggedExercise.exercise_name.toLowerCase()}`)
+      templateByKey.get(`name:${exerciseName.toLowerCase()}`)
 
     const exercise =
       templateExercise?.exercise ??
       EXERCISE_LIBRARY.find((item) => item.id === loggedExercise.exercise_id) ??
-      EXERCISE_LIBRARY.find((item) => item.name.toLowerCase() === loggedExercise.exercise_name.toLowerCase()) ??
-      createCustomExercise(loggedExercise.exercise_name).exercise
+      EXERCISE_LIBRARY.find((item) => item.name.toLowerCase() === exerciseName.toLowerCase()) ??
+      createCustomExercise(exerciseName).exercise
 
     return {
       exercise: {
@@ -580,7 +627,7 @@ function createActiveExercisesFromWorkoutLog(log: WorkoutLog): ActiveExercise[] 
         set_metric: exercise.set_metric ?? templateExercise?.exercise.set_metric ?? inferExerciseSetMetric(exercise),
       },
       sets: normalizeSetNumbers(
-        loggedExercise.sets.map((set, setIndex) => {
+        (Array.isArray(loggedExercise.sets) ? loggedExercise.sets : []).map((set, setIndex) => {
           const templateSet =
             templateExercise?.sets.find((candidate) =>
               candidate.set_number === set.set_number &&
@@ -641,6 +688,88 @@ function normalizeActiveExercisesForWorkout(exercises: ActiveExercise[]): Workou
       rest_seconds: Math.max(0, Number(set.rest_seconds) || 0),
     })),
   }))
+}
+
+function buildReplayWorkoutFromLog(log: WorkoutLog): Workout {
+  const replayExercises = normalizeActiveExercisesForWorkout(createActiveExercisesFromWorkoutLog(log))
+  const replayMuscleGroups = Array.from(
+    new Set(replayExercises.flatMap((exercise) => exercise.exercise.muscle_groups))
+  )
+
+  return {
+    ...log.workout,
+    exercises: replayExercises,
+    muscle_groups: (replayMuscleGroups.length > 0 ? replayMuscleGroups : log.workout.muscle_groups) as Workout['muscle_groups'],
+  }
+}
+
+function buildReplaySessionExercisesFromLog(log: WorkoutLog): ActiveExercise[] {
+  return createActiveExercisesFromWorkoutLog(log).map((exercise) => ({
+    ...exercise,
+    sets: exercise.sets.map((set) => ({
+      ...set,
+      completed: false,
+    })),
+  }))
+}
+
+function formatLoggedWorkoutSetSummary(
+  set: WorkoutSet,
+  exercise: WorkoutExercise['exercise'],
+  unitSystem: UnitSystem,
+) {
+  const mode = getExerciseInputMode(exercise)
+  const value = Math.max(0, Number(set.reps ?? 0))
+
+  if (mode === 'treadmill') {
+    const parts = [`${value} min`]
+    if (typeof set.speed_mph === 'number' && set.speed_mph > 0) parts.push(`${set.speed_mph} mph`)
+    if (typeof set.incline_pct === 'number' && set.incline_pct > 0) parts.push(`${set.incline_pct}%`)
+    return parts.join(' • ')
+  }
+
+  if (mode === 'run_walk') {
+    const parts = [`${value} min`]
+    if (typeof set.speed_mph === 'number' && set.speed_mph > 0) parts.push(`${set.speed_mph} mph`)
+    return parts.join(' • ')
+  }
+
+  if (mode === 'bike' || mode === 'rower') {
+    const parts = [`${value} min`]
+    if (typeof set.watts === 'number' && set.watts > 0) parts.push(`${set.watts} W`)
+    return parts.join(' • ')
+  }
+
+  if (mode === 'level_cardio' || mode === 'basic_cardio') {
+    const parts = [`${value} min`]
+    if (typeof set.machine_level === 'number' && set.machine_level > 0) parts.push(`Level ${set.machine_level}`)
+    if (typeof set.resistance_level === 'number' && set.resistance_level > 0) parts.push(`Resistance ${set.resistance_level}`)
+    return parts.join(' • ')
+  }
+
+  if (mode === 'interval') {
+    const parts = [`${value} intervals`]
+    if (typeof set.interval_duration_sec === 'number' && set.interval_duration_sec > 0) parts.push(`${set.interval_duration_sec}s work`)
+    if (typeof set.rest_seconds === 'number' && set.rest_seconds > 0) parts.push(`${set.rest_seconds}s rest`)
+    return parts.join(' • ')
+  }
+
+  const metric = getExerciseSetMetric(exercise)
+  const metricLabel =
+    metric === 'seconds'
+      ? 'sec'
+      : metric === 'minutes'
+        ? 'min'
+        : metric === 'intervals'
+          ? 'intervals'
+          : 'reps'
+
+  const weightLabel =
+    set.weight_kg && set.weight_kg > 0
+      ? `${unitSystem === 'imperial' ? Math.round(kgToLbs(set.weight_kg)) : Math.round(set.weight_kg)} ${getWeightUnitLabel(unitSystem)}`
+      : 'BW'
+
+  return `${value} ${metricLabel} @ ${weightLabel}`
 }
 
 function formatNumericInput(value: number | undefined) {
@@ -1923,6 +2052,10 @@ function ActiveWorkoutModal({
   }
 }) {
   const isEditMode = mode === 'edit-log'
+  const lastSessionSyncRef = useRef<{ exercises: ActiveExercise[]; startedAt: string | null }>({
+    exercises: initialExercises ?? [],
+    startedAt: isEditMode ? (lockedTiming?.startedAt ?? null) : (initialStartedAt ?? null),
+  })
   // Build a lookup of most recent performance per exercise id
   const lastPerformance = useMemo(() => {
     const map: Record<string, { date: string; sets: Array<{ actual_reps: number; weight_kg: number }> }> = {}
@@ -2055,6 +2188,9 @@ function ActiveWorkoutModal({
   }, [nowMs, restEndsAtMs])
 
   useEffect(() => {
+    const previous = lastSessionSyncRef.current
+    if (previous.exercises === exercises && previous.startedAt === startedAt) return
+    lastSessionSyncRef.current = { exercises, startedAt }
     onSessionChange(exercises, startedAt)
   }, [exercises, startedAt, onSessionChange])
 
@@ -2321,25 +2457,41 @@ function ActiveWorkoutModal({
     }
   }
 
-  const addExerciseToLiveWorkout = (item: ExerciseLibraryItem) => {
-    const created = createWorkoutExerciseFromLibrary(item)
-    setExercises((current) => [
-      ...current,
-      {
-        exercise: created.exercise,
-        sets: created.sets.map((set) => ({
+  const createLiveExerciseFromTemplate = (template: EditableWorkoutExercise): ActiveExercise => {
+    const historyKeyById = template.exercise.id
+    const historyKeyByName = `name:${template.exercise.name}`
+    const previousSets =
+      lastPerformance[historyKeyById]?.sets ??
+      lastPerformance[historyKeyByName]?.sets
+
+    return {
+      exercise: template.exercise,
+      sets: template.sets.map((set, setIndex) => {
+        const previousSet = previousSets?.[setIndex] ?? previousSets?.[previousSets.length - 1]
+        const actualReps = previousSet?.actual_reps ?? set.reps
+        const actualWeight = previousSet?.weight_kg ?? set.weight_kg ?? 0
+
+        return {
           ...set,
           completed: false,
-          actual_reps: set.reps,
-          actual_weight: set.weight_kg || 0,
+          actual_reps: actualReps,
+          actual_weight: actualWeight,
           actual_speed_mph: set.speed_mph,
           actual_incline_pct: set.incline_pct,
           actual_machine_level: set.machine_level,
           actual_resistance_level: set.resistance_level,
           actual_watts: set.watts,
           actual_cadence_rpm: set.cadence_rpm,
-        })),
-      },
+        }
+      }),
+    }
+  }
+
+  const addExerciseToLiveWorkout = (item: ExerciseLibraryItem) => {
+    const created = createWorkoutExerciseFromLibrary(item)
+    setExercises((current) => [
+      ...current,
+      createLiveExerciseFromTemplate(created),
     ])
     setExerciseSearch('')
     toast.success(`${item.name} added to this workout.`)
@@ -2351,21 +2503,7 @@ function ActiveWorkoutModal({
     const created = createCustomExercise(trimmed)
     setExercises((current) => [
       ...current,
-      {
-        exercise: created.exercise,
-        sets: created.sets.map((set) => ({
-          ...set,
-          completed: false,
-          actual_reps: set.reps,
-          actual_weight: set.weight_kg || 0,
-          actual_speed_mph: set.speed_mph,
-          actual_incline_pct: set.incline_pct,
-          actual_machine_level: set.machine_level,
-          actual_resistance_level: set.resistance_level,
-          actual_watts: set.watts,
-          actual_cadence_rpm: set.cadence_rpm,
-        })),
-      },
+      createLiveExerciseFromTemplate(created),
     ])
     setExerciseSearch('')
     toast.success('Custom exercise added to this workout.')
@@ -2878,6 +3016,11 @@ function ActiveWorkoutModal({
                   exerciseId={exercise.exercise.id}
                   exerciseName={exercise.exercise.name}
                   muscleGroups={exercise.exercise.muscle_groups}
+                  equipment={exercise.exercise.equipment}
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  primaryType={(exercise.exercise as any).primary_type}
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  modifiers={(exercise.exercise as any).modifiers}
                   workoutLogs={workoutLogs}
                   journalEntries={journalEntries}
                   completedSetsThisSession={exercise.sets
@@ -2895,35 +3038,15 @@ function ActiveWorkoutModal({
 
         {!isEditMode && (
           <>
-            <div className="rounded-2xl border border-border/60 bg-muted/10 p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold">Saved workout name</p>
-                  <p className="text-xs text-muted-foreground">Default keeps today&apos;s date, but you can rename it before saving.</p>
-                </div>
-                <Button type="button" variant="ghost" size="sm" onClick={() => setShowSaveRoutineName((current) => !current)}>
-                  {showSaveRoutineName ? 'Hide' : 'Rename'}
-                </Button>
-              </div>
-              {showSaveRoutineName && (
-                <Input
-                  className="mt-3"
-                  value={saveRoutineName}
-                  onChange={(e) => setSaveRoutineName(e.target.value)}
-                  placeholder={`${workout.name} (${getTodayISO()})`}
-                />
-              )}
-            </div>
-
             <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
               <Button variant="outline" className="w-full sm:min-w-[80px] sm:flex-1" onClick={onPause}>Pause</Button>
               <Button
                 variant="outline"
                 className="w-full gap-2 sm:flex-1"
-                onClick={() => handleCompleteWorkout({ saveAsTemplate: true, templateName: saveRoutineName.trim() || `${workout.name} (${getTodayISO()})` })}
+                onClick={() => setShowSaveRoutineName((current) => !current)}
                 disabled={isCompleting}
               >
-                {isCompleting ? <><span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" /> Saving…</> : <><Copy className="h-4 w-4" /> Complete & Save Routine</>}
+                <Copy className="h-4 w-4" /> Save and Complete Workout
               </Button>
               <Button
                 variant="brand"
@@ -2934,6 +3057,27 @@ function ActiveWorkoutModal({
                 {isCompleting ? <><span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" /> Saving…</> : <><Trophy className="h-4 w-4" /> Complete Workout</>}
               </Button>
             </div>
+
+            {showSaveRoutineName && (
+              <div className="rounded-2xl border border-border/60 bg-muted/10 p-4">
+                <p className="text-sm font-semibold mb-1">Name this workout</p>
+                <p className="text-xs text-muted-foreground mb-3">Give it a name before saving, or keep the default.</p>
+                <Input
+                  value={saveRoutineName}
+                  onChange={(e) => setSaveRoutineName(e.target.value)}
+                  placeholder={`${workout.name} (${getTodayISO()})`}
+                  className="mb-3"
+                />
+                <Button
+                  variant="brand"
+                  className="w-full gap-2"
+                  onClick={() => handleCompleteWorkout({ saveAsTemplate: true, templateName: saveRoutineName.trim() || `${workout.name} (${getTodayISO()})` })}
+                  disabled={isCompleting}
+                >
+                  {isCompleting ? <><span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" /> Saving…</> : <><Trophy className="h-4 w-4" /> Confirm Save and Complete</>}
+                </Button>
+              </div>
+            )}
           </>
         )}
         {isEditMode && (
@@ -3133,6 +3277,12 @@ export default function WorkoutsPage() {
   const [manualSearch, setManualSearch] = useState('')
   const [loadingOlderHistory, setLoadingOlderHistory] = useState(false)
   const [manualAction, setManualAction] = useState<'log' | 'save'>('log')
+  const [showAddExerciseModal, setShowAddExerciseModal] = useState(false)
+  const [workoutStarted, setWorkoutStarted] = useState(false)
+  const [sessionStartedAt, setSessionStartedAt] = useState<number | null>(null)
+  const [sessionNowMs, setSessionNowMs] = useState(Date.now())
+  const [sessionPausedAt, setSessionPausedAt] = useState<number | null>(null)
+  const [restTimer, setRestTimer] = useState<{ instanceId: string; setIndex: number; secondsLeft: number } | null>(null)
   const [manualWorkoutName, setManualWorkoutName] = useState('')
   const [manualWorkoutDate, setManualWorkoutDate] = useState(getTodayISO())
   const [manualExercises, setManualExercises] = useState<EditableWorkoutExercise[]>([])
@@ -3321,6 +3471,17 @@ export default function WorkoutsPage() {
 
   const totalCaloriesBurned = workoutLogs.reduce((sum, log) => sum + (log.calories_burned_kcal || 0), 0)
   const todayLoggedWorkouts = workoutLogs.filter((log) => log.date === getTodayISO())
+  const isActiveWorkout = manualExercises.length > 0 || workoutStarted
+  const totalManualSets = manualExercises.reduce((s, e) => s + e.sets.length, 0)
+  const completedSetsCount = manualExercises.reduce((s, e) => s + e.sets.filter((set) => set.completed).length, 0)
+
+  const todaySplitExercises = useMemo(() => {
+    if (!todaySplitDayType || todaySplitDayType === 'rest') return []
+    const muscles = SPLIT_DAY_MUSCLES[todaySplitDayType] ?? []
+    return [...EXERCISE_LIBRARY]
+      .filter((ex) => muscles.some((m) => ex.muscle_groups.includes(m as never)))
+      .slice(0, 8)
+  }, [todaySplitDayType])
 
   const loadOlderWorkoutHistory = async () => {
     setLoadingOlderHistory(true)
@@ -3398,6 +3559,18 @@ export default function WorkoutsPage() {
     setRunningWorkout(workout)
   }
 
+  const startWorkoutFromLog = (log: WorkoutLog) => {
+    const replayWorkout = buildReplayWorkoutFromLog(log)
+    const session: PersistedActiveWorkoutSession = {
+      workout: replayWorkout,
+      exercises: buildReplaySessionExercisesFromLog(log),
+      startedAt: null,
+    }
+
+    setActiveWorkoutSession(session)
+    setRunningWorkout(replayWorkout)
+  }
+
   const pauseRunningWorkout = () => {
     if (runningWorkout) {
       toast.success('Workout paused. You can continue anytime.')
@@ -3419,10 +3592,12 @@ export default function WorkoutsPage() {
   const handleActiveSessionExercisesChange = useCallback((exercises: ActiveExercise[], startedAt?: string | null) => {
     setActiveWorkoutSession((current) => {
       if (!current || !runningWorkout || current.workout.id !== runningWorkout.id) return current
+      const nextStartedAt = startedAt === undefined ? current.startedAt : startedAt
+      if (current.exercises === exercises && current.startedAt === nextStartedAt) return current
       return {
         ...current,
         exercises,
-        startedAt: startedAt === undefined ? current.startedAt : startedAt,
+        startedAt: nextStartedAt,
       }
     })
   }, [runningWorkout])
@@ -3483,6 +3658,19 @@ export default function WorkoutsPage() {
   useEffect(() => {
     setManualSuggestionIndex(0)
   }, [manualSearch, exerciseMuscleFilter, exerciseEquipmentFilter])
+
+  useEffect(() => {
+    if (!sessionStartedAt || sessionPausedAt) return
+    const t = setInterval(() => setSessionNowMs(Date.now()), 1000)
+    return () => clearInterval(t)
+  }, [sessionStartedAt, sessionPausedAt])
+
+  useEffect(() => {
+    if (!restTimer) return
+    if (restTimer.secondsLeft <= 0) { setRestTimer(null); return }
+    const t = setTimeout(() => setRestTimer((prev) => prev ? { ...prev, secondsLeft: prev.secondsLeft - 1 } : null), 1000)
+    return () => clearTimeout(t)
+  }, [restTimer])
 
   const [apiManualSuggestions, setApiManualSuggestions] = useState<ExerciseLibraryItem[]>([])
 
@@ -3621,6 +3809,14 @@ export default function WorkoutsPage() {
     toast.success(`${pendingExercise.exercise.name} added to today's workout.`)
   }
 
+  const addExerciseDirectly = (item: ExerciseLibraryItem) => {
+    const newExercise = createWorkoutExerciseFromLibrary(item)
+    setManualExercises((current) => [...current, newExercise])
+    setManualSearch('')
+    setShowAddExerciseModal(false)
+    toast.success(`${item.name} added.`)
+  }
+
   const handleManualSearchKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (manualSuggestions.length === 0) {
       if (event.key === 'Enter' && manualSearch.trim().length > 0) {
@@ -3671,6 +3867,30 @@ export default function WorkoutsPage() {
           : exercise
       )
     )
+  }
+
+  const toggleManualSetComplete = (instanceId: string, setIndex: number) => {
+    setManualExercises((current) =>
+      current.map((exercise) =>
+        exercise.instanceId === instanceId
+          ? {
+              ...exercise,
+              sets: exercise.sets.map((set, i) =>
+                i === setIndex ? { ...set, completed: !set.completed } : set
+              ),
+            }
+          : exercise
+      )
+    )
+  }
+
+  const loadWorkoutIntoManual = (workout: Workout) => {
+    const exercises: EditableWorkoutExercise[] = workout.exercises.map((we) => ({
+      ...we,
+      instanceId: crypto.randomUUID(),
+    }))
+    setManualExercises(exercises)
+    if (!sessionStartedAt) setSessionStartedAt(Date.now())
   }
 
   const updateManualExerciseSetMetric = (instanceId: string, metric: ExerciseSetMetric) => {
@@ -3911,6 +4131,9 @@ export default function WorkoutsPage() {
       setManualExercises([])
       setEditingLoggedWorkoutId(null)
       setPendingExercise(null)
+      setWorkoutStarted(false)
+      setSessionStartedAt(null)
+      setSessionPausedAt(null)
     })
   }
 
@@ -3923,6 +4146,9 @@ export default function WorkoutsPage() {
     setManualExercises([])
     setPendingExercise(null)
     setManualSearch('')
+    setWorkoutStarted(false)
+    setSessionStartedAt(null)
+    setSessionPausedAt(null)
     if (!options?.silent) {
       toast.success('Closed workout editor.')
     }
@@ -3932,6 +4158,10 @@ export default function WorkoutsPage() {
     const target = workoutLogs.find((log) => log.id === logId)
     if (!target) return
 
+    setManualAction('log')
+    setManualWorkoutName(target.workout?.name ?? '')
+    setManualWorkoutDate(target.date ?? getTodayISO())
+    setWorkoutStarted(false)
     setEditingLoggedWorkoutId(logId)
     setEditingLoggedWorkoutSession({
       log: target,
@@ -4005,27 +4235,28 @@ export default function WorkoutsPage() {
   return (
     <div className="space-y-8">
       <div className="space-y-5">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="font-display text-xl sm:text-3xl font-bold tracking-tight">Workouts</h2>
-            <p className="text-sm text-muted-foreground">Log what you did today, then save it as a workout if you want to reuse it later.</p>
+        {!isActiveWorkout && (
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="font-display text-xl sm:text-3xl font-bold tracking-tight">Workouts</h2>
+            </div>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="h-11 rounded-full border-emerald-500/35 bg-emerald-500/8 px-4 text-sm font-semibold text-emerald-300 hover:border-emerald-400/45 hover:bg-emerald-500/12 hover:text-emerald-200"
+                onClick={openSplitDialog}
+              >
+                <Zap className="mr-2 h-4 w-4" />
+                <span className="truncate">{splitPillLabel}</span>
+              </Button>
+              <Button variant="outline" className="h-11 gap-2 rounded-full px-4" onClick={() => { setEditingWorkout(null); setBuilderOpen(true) }}>
+                <Plus className="h-4 w-4" />
+                Create Saved Workout
+              </Button>
+            </div>
           </div>
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              className="h-11 rounded-full border-emerald-500/35 bg-emerald-500/8 px-4 text-sm font-semibold text-emerald-300 hover:border-emerald-400/45 hover:bg-emerald-500/12 hover:text-emerald-200"
-              onClick={openSplitDialog}
-            >
-              <Zap className="mr-2 h-4 w-4" />
-              <span className="truncate">{splitPillLabel}</span>
-            </Button>
-            <Button variant="outline" className="h-11 gap-2 rounded-full px-4" onClick={() => { setEditingWorkout(null); setBuilderOpen(true) }}>
-              <Sparkles className="h-4 w-4" />
-              Build Workout
-            </Button>
-          </div>
-        </div>
+        )}
 
           {activeWorkoutSession && !runningWorkout && (
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3">
@@ -4040,47 +4271,7 @@ export default function WorkoutsPage() {
             </div>
           )}
 
-        {todayRecommendedWorkouts.length > 0 && (
-          <div className="hidden space-y-1.5 md:block">
-            <p className="text-xs text-muted-foreground">
-              {WEEK_DAY_LABELS[todayWeekDay]} · <span className="font-medium text-foreground">{todaySplitDayType ? SPLIT_DAY_LABELS[todaySplitDayType] : ''} Day</span>
-            </p>
-            <TodayWorkoutBanner
-              workouts={todayRecommendedWorkouts}
-              onStart={startWorkout}
-              onPreview={setPreviewWorkout}
-            />
-          </div>
-        )}
 
-        <div className="md:hidden">
-          <div className="space-y-1.5">
-            <p className="text-xs text-muted-foreground">
-              {WEEK_DAY_LABELS[todayWeekDay]} · <span className="font-medium text-foreground">{todaySplitDayType ? SPLIT_DAY_LABELS[todaySplitDayType] : 'No split set'}</span>
-            </p>
-            {todayRecommendedWorkouts.length > 0 ? (
-              <TodayWorkoutBanner
-                workouts={todayRecommendedWorkouts}
-                onStart={startWorkout}
-                onPreview={setPreviewWorkout}
-              />
-            ) : (
-              <div className="rounded-2xl border border-border/60 bg-card p-4">
-                <div className="flex items-center gap-2">
-                  <Dumbbell className="h-4 w-4 text-muted-foreground" />
-                  <p className="text-sm font-semibold">Recommended for today</p>
-                </div>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  {todaySplitDayType === 'rest'
-                    ? 'Today is marked as a rest day in your split.'
-                    : todaySplitDayType
-                      ? `No workouts match your ${SPLIT_DAY_LABELS[todaySplitDayType].toLowerCase()} day yet. Save one, build one, or adjust your split.`
-                      : 'Set your training split to get workout recommendations here.'}
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
 
         {linkedWorkoutRecoveryHeadsUp && (
           <div className={cn(
@@ -4185,27 +4376,10 @@ export default function WorkoutsPage() {
           </DialogContent>
         </Dialog>
 
-        <div className="hidden gap-3 md:grid md:grid-cols-4">
-          <div className="rounded-2xl border border-border/60 bg-card px-4 py-4">
-            <p className="font-data text-xl sm:text-2xl font-semibold">{todayLoggedWorkouts.reduce((sum, log) => sum + (log.calories_burned_kcal || 0), 0)}</p>
-            <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Today&apos;s kcal burned</p>
-          </div>
-          <div className="rounded-2xl border border-border/60 bg-card px-4 py-4">
-            <p className="font-data text-xl sm:text-2xl font-semibold">{todayLoggedWorkouts.length}</p>
-            <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Workouts today</p>
-          </div>
-          <div className="rounded-2xl border border-border/60 bg-card px-4 py-4">
-            <p className="font-data text-xl sm:text-2xl font-semibold">{accountCustomWorkouts.length}</p>
-            <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Saved workouts</p>
-          </div>
-          <div className="rounded-2xl border border-border/60 bg-card px-4 py-4">
-            <p className="font-data text-xl sm:text-2xl font-semibold">{totalCaloriesBurned}</p>
-            <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Total kcal logged</p>
-          </div>
-        </div>
       </div>
 
       <Tabs value={tab} onValueChange={(value) => setTab(value as 'log' | 'saved' | 'premade')}>
+        {!isActiveWorkout && (
         <div className="overflow-x-auto border-b border-border/60 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <TabsList className="inline-flex h-auto min-w-max items-center gap-0 bg-transparent p-0">
             <TabsTrigger value="log" className="relative rounded-none border-0 bg-transparent px-4 py-2.5 text-sm font-medium text-muted-foreground shadow-none transition-none data-[state=active]:text-foreground data-[state=active]:after:absolute data-[state=active]:after:bottom-0 data-[state=active]:after:left-0 data-[state=active]:after:right-0 data-[state=active]:after:h-0.5 data-[state=active]:after:bg-primary">
@@ -4219,943 +4393,870 @@ export default function WorkoutsPage() {
             </TabsTrigger>
           </TabsList>
         </div>
+        )}
 
-        <TabsContent value="log" className="mt-6 space-y-5">
-          <div className="rounded-2xl border border-border/60 bg-card p-5">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-lg font-semibold">Search an exercise</p>
+        <TabsContent value="log" className="mt-6">
+          {/* Shared exercise filter panel — rendered once, used in both modes and the modal */}
+
+          {!isActiveWorkout ? (
+            /* ── PRE-WORKOUT MODE ── */
+            <div className="space-y-6 pt-1">
+              {/* Split selector pill */}
+              <div className="flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={openSplitDialog}
+                  className="flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/8 px-3 py-1.5 text-xs font-semibold text-emerald-300 transition-colors hover:border-emerald-400/45 hover:bg-emerald-500/12 hover:text-emerald-200"
+                >
+                  <Zap className="h-3 w-3" />
+                  {splitPillLabel}
+                </button>
               </div>
-            </div>
 
-            <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-              <div className="space-y-4">
-                <div className="space-y-3">
-                  <Label>Exercise search</Label>
+              {/* Primary CTA */}
+              <Button
+                variant="brand"
+                className="w-full h-14 text-base rounded-2xl gap-2 font-semibold"
+                onClick={() => { setWorkoutStarted(true); setSessionStartedAt(Date.now()) }}
+              >
+                <Plus className="h-5 w-5" />
+                Start New Workout
+              </Button>
 
-                  {/* Filter dropdown + search row */}
-                  <div className="flex gap-2">
-                    {/* Filters button */}
-                    <div className="relative">
-                      <button
-                        onClick={() => setExerciseFilterOpen((o) => !o)}
-                        className={`flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${exerciseMuscleFilter !== 'all' || exerciseEquipmentFilter !== 'all' ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-background text-muted-foreground hover:text-foreground hover:border-primary/40'}`}
-                      >
-                        <SlidersHorizontal className="h-3.5 w-3.5" />
-                        Filters
-                        {(exerciseMuscleFilter !== 'all' || exerciseEquipmentFilter !== 'all') && (
-                          <span className="flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
-                            {(exerciseMuscleFilter !== 'all' ? 1 : 0) + (exerciseEquipmentFilter !== 'all' ? 1 : 0)}
-                          </span>
-                        )}
-                        <ChevronDown className={`h-3.5 w-3.5 transition-transform ${exerciseFilterOpen ? 'rotate-180' : ''}`} />
-                      </button>
-
-                      {exerciseFilterOpen && (
-                        <>
-                          {/* backdrop */}
-                          <div className="fixed inset-0 z-10" onClick={() => setExerciseFilterOpen(false)} />
-                          {/* panel */}
-                          <div className="absolute left-0 top-full z-20 mt-1.5 w-72 max-w-[calc(100vw-2rem)] rounded-xl border border-border bg-background p-4 shadow-lg">
-                            <div className="space-y-4">
-                              <div>
-                                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Muscle group</p>
-                                <div className="flex flex-wrap gap-1.5">
-                                  {([['all', 'All'], ['chest', 'Chest'], ['back', 'Back'], ['shoulders', 'Shoulders'], ['biceps', 'Biceps'], ['triceps', 'Triceps'], ['forearms', 'Forearms'], ['quads', 'Quads'], ['hamstrings', 'Hamstrings'], ['glutes', 'Glutes'], ['calves', 'Calves'], ['core', 'Core'], ['full_body', 'Full body'], ['cardio', 'Cardio']] as const).map(([val, label]) => (
-                                    <button
-                                      key={val}
-                                      onClick={() => setExerciseMuscleFilter(val)}
-                                      className={`rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors ${exerciseMuscleFilter === val ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-muted/30 text-muted-foreground hover:border-primary/50 hover:text-foreground'}`}
-                                    >
-                                      {label}
-                                    </button>
-                                  ))}
-                                </div>
-                              </div>
-                              <div>
-                                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Equipment</p>
-                                <div className="flex flex-wrap gap-1.5">
-                                  {([['all', 'Any'], ['barbell', 'Barbell'], ['dumbbell', 'Dumbbell'], ['bodyweight', 'Bodyweight'], ['cable', 'Cable'], ['machine', 'Machine'], ['kettlebell', 'Kettlebell'], ['resistance band', 'Bands'], ['treadmill', 'Treadmill']] as const).map(([val, label]) => (
-                                    <button
-                                      key={val}
-                                      onClick={() => setExerciseEquipmentFilter(val)}
-                                      className={`rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors ${exerciseEquipmentFilter === val ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-muted/30 text-muted-foreground hover:border-primary/50 hover:text-foreground'}`}
-                                    >
-                                      {label}
-                                    </button>
-                                  ))}
-                                </div>
-                              </div>
-                              {(exerciseMuscleFilter !== 'all' || exerciseEquipmentFilter !== 'all') && (
-                                <button
-                                  className="text-xs text-muted-foreground underline-offset-2 hover:underline"
-                                  onClick={() => { setExerciseMuscleFilter('all'); setExerciseEquipmentFilter('all') }}
-                                >
-                                  Clear all filters
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        </>
-                      )}
-                    </div>
-
-                  <div className="relative flex-1">
-                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      value={manualSearch}
-                      onChange={(e) => setManualSearch(e.target.value)}
-                      onKeyDown={handleManualSearchKeyDown}
-                      placeholder="Search all exercises…"
-                      type="search"
-                      inputMode="search"
-                      enterKeyHint="search"
-                      autoCapitalize="none"
-                      autoCorrect="off"
-                      className="pl-9"
-                    />
-                    {manualSearch && (
-                      <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => setManualSearch('')}>
-                        <X className="h-4 w-4" />
-                      </button>
-                    )}
-                  </div>
-                  </div>{/* end flex gap-2 */}
-                  {manualSearch.trim().length === 0 && exerciseMuscleFilter === 'all' && exerciseEquipmentFilter === 'all' && (
-                    <div className="rounded-2xl border border-border/60 bg-background overflow-hidden">
-                      {workoutLogs.length > 0 ? (
-                        <>
-                          <div className="bg-muted/20 px-4 py-2.5 flex items-center justify-between">
-                            <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground font-medium">Recent Workouts</p>
-                            <div className="flex items-center gap-2">
-                              <p className="text-[10px] text-muted-foreground">{workoutLogs.length} loaded</p>
-                              <button
-                                type="button"
-                                onClick={() => void loadOlderWorkoutHistory()}
-                                className="text-[10px] font-medium text-emerald-400 transition-colors hover:text-emerald-300 disabled:opacity-50"
-                                disabled={loadingOlderHistory}
-                              >
-                                {loadingOlderHistory ? 'Loading…' : 'Load older'}
-                              </button>
-                            </div>
-                          </div>
-                          {workoutLogs.slice().sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 5).map((log) => {
-                            const totalSets = log.exercises.reduce((s, e) => s + e.sets.length, 0)
-                            const isLogToday = log.date === getTodayISO()
-                            const isExpanded = expandedLogId === log.id
-                            const startedTime = formatWorkoutTime(log.started_at)
-                            const finishedTime = formatWorkoutTime(log.completed_at)
-                            const durationLabel = formatWorkoutDuration(log.started_at, log.completed_at, log.duration_min)
-                            return (
-                              <div key={log.id} className="border-b border-border/30 last:border-b-0">
-                                {/* Header row */}
-                                <div className="flex items-center gap-2 px-4 py-3">
-                                  {/* Left: info — clickable to expand */}
-                                  <button
-                                    type="button"
-                                    onClick={() => setExpandedLogId(isExpanded ? null : log.id)}
-                                    className="min-w-0 flex-1 text-left hover:opacity-80 transition-opacity"
-                                  >
-                                    <div className="flex items-center gap-2">
-                                      <p className="text-sm font-medium truncate">{log.workout.name}</p>
-                                      {isLogToday && <span className="shrink-0 rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-400 uppercase tracking-wide">Today</span>}
-                                    </div>
-                                    <p className="text-xs text-muted-foreground mt-0.5">
-                                      {log.exercises.length} exercise{log.exercises.length !== 1 ? 's' : ''} · {totalSets} sets · {durationLabel}
-                                    </p>
-                                  </button>
-
-                                  {/* Right: Start Again + chevron */}
-                                  <div className="flex items-center gap-2 shrink-0">
-                                    <Button
-                                      size="sm"
-                                      variant="brand"
-                                      className="gap-1.5 h-7 px-3 text-xs"
-                                      onClick={() => startWorkout(log.workout)}
-                                    >
-                                      <Play className="w-3 h-3" />
-                                      Start Again
-                                    </Button>
-                                    <button
-                                      type="button"
-                                      onClick={() => setExpandedLogId(isExpanded ? null : log.id)}
-                                      className="p-1 rounded-md hover:bg-muted/40 transition-colors"
-                                    >
-                                      {isExpanded ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" /> : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />}
-                                    </button>
-                                  </div>
-                                </div>
-
-                                {/* Expanded detail */}
-                                <AnimatePresence>
-                                  {isExpanded && (
-                                    <motion.div
-                                      initial={{ height: 0, opacity: 0 }}
-                                      animate={{ height: 'auto', opacity: 1 }}
-                                      exit={{ height: 0, opacity: 0 }}
-                                      transition={{ duration: 0.2 }}
-                                      className="overflow-hidden"
-                                    >
-                                      <div className="px-4 pb-4 space-y-3 border-t border-border/30 pt-3 bg-muted/5">
-                                        {/* Stats row */}
-                                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                                          {[
-                                            { label: 'Started', value: startedTime },
-                                            { label: 'Finished', value: finishedTime },
-                                            { label: 'Duration', value: durationLabel },
-                                            { label: 'Calories', value: log.calories_burned_kcal ? `${log.calories_burned_kcal} kcal` : '—' },
-                                          ].map(({ label, value }) => (
-                                            <div key={label} className="rounded-lg bg-muted/30 border border-border/40 px-2.5 py-2 text-center">
-                                              <p className="font-data text-xs font-semibold tabular-nums">{value}</p>
-                                              <p className="text-[10px] text-muted-foreground mt-0.5">{label}</p>
-                                            </div>
-                                          ))}
-                                        </div>
-
-                                        {/* Exercises */}
-                                        <div className="space-y-2">
-                                          {log.exercises.map((exercise, exIdx) => {
-                                            return (
-                                              <div key={`${log.id}-${exercise.exercise_id}-${exIdx}`} className="rounded-xl border border-border/50 overflow-hidden">
-                                                {/* Exercise name bar */}
-                                                <div className="px-3 py-2 bg-muted/20 border-b border-border/40">
-                                                  <p className="text-xs font-semibold">{exercise.exercise_name}</p>
-                                                </div>
-                                                {/* Sets table */}
-                                                <div className="px-3 py-2">
-                                                  <div className="grid grid-cols-3 text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5 px-1">
-                                                    <span>Set</span>
-                                                    <span className="text-center">Reps</span>
-                                                    <span className="text-right">Weight</span>
-                                                  </div>
-                                                  <div className="space-y-1">
-                                                    {exercise.sets.map((set) => {
-                                                      const displayWeight = (set.weight_kg || 0) > 0
-                                                        ? unitSystem === 'imperial'
-                                                          ? `${Math.round((set.weight_kg || 0) * 2.205)} lb`
-                                                          : `${set.weight_kg} kg`
-                                                        : null
-                                                      return (
-                                                        <div
-                                                          key={set.set_number}
-                                                          className={getDropSetRowClass(
-                                                            'grid grid-cols-3 items-center text-xs rounded-lg border border-transparent px-2 py-1.5 bg-background/60',
-                                                            set,
-                                                          )}
-                                                        >
-                                                          <span className={cn('font-medium', getDropSetLabelClass(set))}>{getSetDisplayName(set)}</span>
-                                                          <span className="text-center font-data font-semibold tabular-nums">
-                                                            {set.actual_reps ?? set.target_reps}
-                                                          </span>
-                                                          <span className="text-right font-data tabular-nums text-muted-foreground">
-                                                            {displayWeight ?? <span className="opacity-40">BW</span>}
-                                                          </span>
-                                                        </div>
-                                                      )
-                                                    })}
-                                                  </div>
-                                                </div>
-                                              </div>
-                                            )
-                                          })}
-                                        </div>
-
-                                        {/* Actions */}
-                                        <div className="flex gap-2 pt-1">
-                                          <Button
-                                            size="sm"
-                                            variant="outline"
-                                            className="gap-1.5"
-                                            onClick={() => loadLoggedWorkoutForEdit(log.id)}
-                                          >
-                                            <Pencil className="w-3.5 h-3.5" />
-                                            Edit Log
-                                          </Button>
-                                        </div>
-                                      </div>
-                                    </motion.div>
-                                  )}
-                                </AnimatePresence>
-                              </div>
-                            )
-                          })}
-                        </>
-                      ) : (
-                        <>
-                          <div className="bg-muted/20 px-4 py-2.5 flex items-center justify-between">
-                            <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground font-medium">Suggested Workouts</p>
-                            <p className="text-[10px] text-muted-foreground">No history yet</p>
-                          </div>
-                          {WORKOUTS.slice(0, 5).map((w) => (
-                            <div key={w.id} className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border/30 last:border-b-0 hover:bg-muted/10 transition-colors">
-                              <div className="min-w-0">
-                                <p className="text-sm font-medium truncate">{w.name}</p>
-                                <p className="text-xs text-muted-foreground mt-0.5">
-                                  {w.exercises.length} exercise{w.exercises.length !== 1 ? 's' : ''} · {averageDurationByWorkoutId.has(w.id) ? formatAverageWorkoutTime(averageDurationByWorkoutId.get(w.id)) : 'Complete once to see time'} · <span className="capitalize">{w.difficulty}</span>
-                                </p>
-                              </div>
-                              <div className="flex flex-wrap gap-1 justify-end max-w-[120px]">
-                                {w.muscle_groups.slice(0, 2).map((g) => (
-                                  <span key={g} className="rounded-full bg-muted px-2 py-0.5 text-[10px] capitalize text-muted-foreground">{g.replace('_', ' ')}</span>
-                                ))}
-                              </div>
-                            </div>
-                          ))}
-                        </>
-                      )}
-                    </div>
-                  )}
-                  {(manualSearch.trim().length >= 1 || exerciseMuscleFilter !== 'all' || exerciseEquipmentFilter !== 'all') && (
-                    <div className="max-h-80 overflow-y-auto rounded-2xl border border-border/60 bg-background">
-                      {manualSuggestions.length > 0 ? (
-                        <>
-                          {Object.entries(groupedManualSuggestions).map(([category, items]) => (
-                            <div key={category} className="border-b border-border/40 last:border-b-0">
-                              <div className="bg-muted/20 px-4 py-2 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-                                {category}
-                              </div>
-                              {items.map((item) => {
-                                const globalIndex = manualSuggestions.findIndex((suggestion) => suggestion.id === item.id)
-                                const isActive = globalIndex === manualSuggestionIndex
-
-                                return (
-                                  <button
-                                    key={item.id}
-                                    type="button"
-                                    onClick={() => addManualExerciseFromLibrary(item)}
-                                    onMouseEnter={() => setManualSuggestionIndex(globalIndex)}
-                                    className={`flex w-full items-center gap-3 px-4 py-3 text-left transition-colors ${isActive ? 'bg-muted/30' : 'hover:bg-muted/20'}`}
-                                  >
-  
-                                    <div className="flex-1 min-w-0">
-                                      <p className="text-sm font-medium">{item.name}</p>
-                                      <p className="mt-1 text-xs text-muted-foreground">{item.equipment}</p>
-                                      <div className="mt-1.5 flex flex-wrap gap-1">
-                                        {item.muscle_groups.map((group) => (
-                                          <span key={group} className="rounded-full bg-muted px-2 py-0.5 text-[10px] capitalize text-muted-foreground">
-                                            {group.replace('_', ' ')}
-                                          </span>
-                                        ))}
-                                      </div>
-                                    </div>
-                                    <span className="flex-shrink-0 text-[10px] text-muted-foreground">{item.default_sets} x {item.default_reps}</span>
-                                  </button>
-                                )
-                              })}
-                            </div>
-                          ))}
-                          {apiManualSuggestions.length > 0 && (
-                            <div className="border-t border-border/40">
-                              <div className="bg-muted/20 px-4 py-2 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">More exercises</div>
-                              {apiManualSuggestions.map((item) => (
-                                <button
-                                  key={item.id}
-                                  type="button"
-                                  onClick={() => addManualExerciseFromLibrary(item)}
-                                  className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/20"
-                                >
-
+              {/* Search results (kept for keyboard shortcut / other callers) */}
+                {(manualSearch.trim().length >= 1 || exerciseMuscleFilter !== 'all' || exerciseEquipmentFilter !== 'all') && (
+                  <div className="max-h-80 overflow-y-auto rounded-xl border border-border/60 bg-background">
+                    {manualSuggestions.length > 0 ? (
+                      <>
+                        {Object.entries(groupedManualSuggestions).map(([category, items]) => (
+                          <div key={category} className="border-b border-border/40 last:border-b-0">
+                            <div className="bg-muted/20 px-4 py-2 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">{category}</div>
+                            {items.map((item) => {
+                              const globalIndex = manualSuggestions.findIndex((suggestion) => suggestion.id === item.id)
+                              const isActive = globalIndex === manualSuggestionIndex
+                              return (
+                                <button key={item.id} type="button" onClick={() => addManualExerciseFromLibrary(item)} onMouseEnter={() => setManualSuggestionIndex(globalIndex)} className={`flex w-full items-center gap-3 px-4 py-3 text-left transition-colors ${isActive ? 'bg-muted/30' : 'hover:bg-muted/20'}`}>
                                   <div className="flex-1 min-w-0">
                                     <p className="text-sm font-medium">{item.name}</p>
                                     <p className="mt-1 text-xs text-muted-foreground">{item.equipment}</p>
                                     <div className="mt-1.5 flex flex-wrap gap-1">
                                       {item.muscle_groups.map((group) => (
-                                        <span key={group} className="rounded-full bg-muted px-2 py-0.5 text-[10px] capitalize text-muted-foreground">
-                                          {group.replace('_', ' ')}
-                                        </span>
+                                        <span key={group} className="rounded-full bg-muted px-2 py-0.5 text-[10px] capitalize text-muted-foreground">{group.replace('_', ' ')}</span>
                                       ))}
                                     </div>
                                   </div>
                                   <span className="flex-shrink-0 text-[10px] text-muted-foreground">{item.default_sets} x {item.default_reps}</span>
                                 </button>
-                              ))}
-                            </div>
-                          )}
-                        </>
-                      ) : apiManualSuggestions.length > 0 ? (
-                        <div>
-                          <div className="bg-muted/20 px-4 py-2 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Results</div>
-                          {apiManualSuggestions.map((item) => (
-                            <button
-                              key={item.id}
-                              type="button"
-                              onClick={() => addManualExerciseFromLibrary(item)}
-                              className="flex w-full items-center gap-3 border-b border-border/40 px-4 py-3 text-left transition-colors last:border-b-0 hover:bg-muted/20"
-                            >
-                              {item.gif_url && <img src={item.gif_url} alt="" className="h-12 w-12 flex-shrink-0 rounded-lg object-cover" />}
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium">{item.name}</p>
-                                <p className="mt-1 text-xs text-muted-foreground">{item.equipment}</p>
-                                <div className="mt-1.5 flex flex-wrap gap-1">
-                                  {item.muscle_groups.map((group) => (
-                                    <span key={group} className="rounded-full bg-muted px-2 py-0.5 text-[10px] capitalize text-muted-foreground">
-                                      {group.replace('_', ' ')}
-                                    </span>
-                                  ))}
+                              )
+                            })}
+                          </div>
+                        ))}
+                        {apiManualSuggestions.length > 0 && (
+                          <div className="border-t border-border/40">
+                            <div className="bg-muted/20 px-4 py-2 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">More exercises</div>
+                            {apiManualSuggestions.map((item) => (
+                              <button key={item.id} type="button" onClick={() => addManualExerciseFromLibrary(item)} className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/20">
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium">{item.name}</p>
+                                  <p className="mt-1 text-xs text-muted-foreground">{item.equipment}</p>
+                                  <div className="mt-1.5 flex flex-wrap gap-1">
+                                    {item.muscle_groups.map((group) => (
+                                      <span key={group} className="rounded-full bg-muted px-2 py-0.5 text-[10px] capitalize text-muted-foreground">{group.replace('_', ' ')}</span>
+                                    ))}
+                                  </div>
                                 </div>
-                              </div>
-                              <span className="flex-shrink-0 text-[10px] text-muted-foreground">{item.default_sets} x {item.default_reps}</span>
-                            </button>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="px-4 py-6 text-center">
-                          <p className="text-sm text-muted-foreground">No exercises match your filters</p>
-                          {manualSearch.trim() && (
-                            <Button variant="outline" size="sm" className="mt-3" onClick={addCustomManualExercise}>
-                              Add &quot;{manualSearch}&quot; as custom exercise
-                            </Button>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {pendingExercise && (
-                  <div className="rounded-2xl border border-border/60 bg-muted/10 p-4">
-                    <div className="mb-3 flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold">Adjust before adding</p>
-                        <p className="mt-1 text-sm">{pendingExercise.exercise.name}</p>
-                        <p className="text-xs text-muted-foreground">{pendingExercise.exercise.equipment}</p>
-                        <button
-                          type="button"
-                          onClick={() => setPreviewExercise(pendingExercise.exercise)}
-                          className="mt-1 flex items-center gap-1 text-[11px] text-primary/70 hover:text-primary transition-colors"
-                        >
-                          <PlayCircle className="h-3 w-3" />
-                          How to do this
-                        </button>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Select
-                          value={getExerciseSetMetric(pendingExercise.exercise)}
-                          onValueChange={(value) => updatePendingExerciseSetMetric(value as ExerciseSetMetric)}
-                        >
-                          <SelectTrigger className="h-8 w-[110px] text-xs">
-                            <SelectValue placeholder="Metric" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {SET_METRIC_OPTIONS.map((option) => (
-                              <SelectItem key={option.value} value={option.value}>
-                                {option.label}
-                              </SelectItem>
+                                <span className="flex-shrink-0 text-[10px] text-muted-foreground">{item.default_sets} x {item.default_reps}</span>
+                              </button>
                             ))}
-                          </SelectContent>
-                        </Select>
-                        <Button variant="ghost" size="icon-sm" onClick={() => setPendingExercise(null)}>
-                          <X className="h-3.5 w-3.5" />
-                        </Button>
+                          </div>
+                        )}
+                      </>
+                    ) : apiManualSuggestions.length > 0 ? (
+                      <div>
+                        <div className="bg-muted/20 px-4 py-2 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Results</div>
+                        {apiManualSuggestions.map((item) => (
+                          <button key={item.id} type="button" onClick={() => addManualExerciseFromLibrary(item)} className="flex w-full items-center gap-3 border-b border-border/40 px-4 py-3 text-left transition-colors last:border-b-0 hover:bg-muted/20">
+                            {item.gif_url && <img src={item.gif_url} alt="" className="h-12 w-12 flex-shrink-0 rounded-lg object-cover" />}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium">{item.name}</p>
+                              <p className="mt-1 text-xs text-muted-foreground">{item.equipment}</p>
+                              <div className="mt-1.5 flex flex-wrap gap-1">
+                                {item.muscle_groups.map((group) => (
+                                  <span key={group} className="rounded-full bg-muted px-2 py-0.5 text-[10px] capitalize text-muted-foreground">{group.replace('_', ' ')}</span>
+                                ))}
+                              </div>
+                            </div>
+                            <span className="flex-shrink-0 text-[10px] text-muted-foreground">{item.default_sets} x {item.default_reps}</span>
+                          </button>
+                        ))}
                       </div>
-                    </div>
-
-                    {(() => {
-                      const pendingMode = getExerciseInputMode(pendingExercise.exercise)
-                      return (
-                      <div className="space-y-2">
-                      {pendingMode === 'interval' ? (
-                        <div className="grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2 px-1 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
-                          <span>Round</span>
-                          <span>Intervals</span>
-                          <span>Work (sec)</span>
-                          <span>Rest (sec)</span>
-                          <span />
-                        </div>
-                      ) : pendingMode === 'treadmill' ? (
-                        <div className="grid grid-cols-[80px_1fr_1fr_1fr_1fr_auto] gap-2 px-1 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
-                          <span>Set</span>
-                          <span>Minutes</span>
-                          <span>Speed MPH</span>
-                          <span>Incline %</span>
-                          <span>Rest Sec</span>
-                          <span />
-                        </div>
-                      ) : pendingMode === 'run_walk' ? (
-                        <div className="grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2 px-1 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
-                          <span>Set</span>
-                          <span>Minutes</span>
-                          <span>Speed MPH</span>
-                          <span>Rest Sec</span>
-                          <span />
-                        </div>
-                      ) : pendingMode === 'bike' || pendingMode === 'rower' ? (
-                        <div className="grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2 px-1 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
-                          <span>Set</span>
-                          <span>Minutes</span>
-                          <span>Watts</span>
-                          <span>Rest Sec</span>
-                          <span />
-                        </div>
-                      ) : pendingMode === 'level_cardio' || pendingMode === 'basic_cardio' ? (
-                        <div className="grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2 px-1 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
-                          <span>Set</span>
-                          <span>Minutes</span>
-                          <span>Level</span>
-                          <span>Rest Sec</span>
-                          <span />
-                        </div>
-                      ) : (
-                        <div className="grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2 px-1 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
-                          <span>Set</span>
-                          <span>{getSetMetricLabel(pendingExercise.exercise, pendingExercise.exercise.name)}</span>
-                          <span>{isAssistedPullExercise(pendingExercise.exercise) ? `Assistance (${weightUnitLabel})` : `Weight (${weightUnitLabel})`}</span>
-                          <span>Rest Sec</span>
-                          <span />
-                        </div>
-                      )}
-                      {pendingExercise.sets.map((set, setIndex) => (
-                        pendingMode === 'interval' ? (
-                          <div key={`${pendingExercise.instanceId}-${setIndex}`} className="grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2">
-                            <div className="flex items-center px-3 text-sm font-medium text-muted-foreground">{getSetDisplayName(set)}</div>
-                            <Input type="number" min={1} value={formatNumericInput(set.reps)} onChange={(e) => updatePendingSetField(setIndex, 'reps', e.target.value === '' ? 1 : Math.max(1, Number(e.target.value)))} placeholder="# intervals" />
-                            <Input type="number" min={1} value={formatNumericInput(set.interval_duration_sec)} onChange={(e) => updatePendingSetField(setIndex, 'interval_duration_sec', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Work sec" />
-                            <Input type="number" min={0} value={formatNumericInput(set.rest_seconds)} onChange={(e) => updatePendingSetField(setIndex, 'rest_seconds', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Rest sec" />
-                            <Button variant="ghost" size="icon-sm" onClick={() => removeSetFromPendingExercise(setIndex)} disabled={pendingExercise.sets.length <= 1}><X className="h-3.5 w-3.5" /></Button>
-                          </div>
-                        ) : pendingMode === 'treadmill' ? (
-                          <div key={`${pendingExercise.instanceId}-${setIndex}`} className="grid grid-cols-[80px_1fr_1fr_1fr_1fr_auto] gap-2">
-                            <div className="flex items-center px-3 text-sm font-medium text-muted-foreground">{getSetDisplayName(set)}</div>
-                            <Input type="number" value={formatNumericInput(set.reps)} onChange={(e) => updatePendingSetField(setIndex, 'reps', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Minutes" />
-                            <Input type="number" value={formatNumericInput(set.speed_mph)} onChange={(e) => updatePendingSetField(setIndex, 'speed_mph', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Speed MPH" />
-                            <Input type="number" value={formatNumericInput(set.incline_pct)} onChange={(e) => updatePendingSetField(setIndex, 'incline_pct', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Incline %" />
-                            <Input type="number" value={formatNumericInput(set.rest_seconds)} onChange={(e) => updatePendingSetField(setIndex, 'rest_seconds', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Rest sec" />
-                            <Button variant="ghost" size="icon-sm" onClick={() => removeSetFromPendingExercise(setIndex)} disabled={pendingExercise.sets.length <= 1}><X className="h-3.5 w-3.5" /></Button>
-                          </div>
-                        ) : pendingMode === 'run_walk' ? (
-                          <div key={`${pendingExercise.instanceId}-${setIndex}`} className="grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2">
-                            <div className="flex items-center px-3 text-sm font-medium text-muted-foreground">{getSetDisplayName(set)}</div>
-                            <Input type="number" value={formatNumericInput(set.reps)} onChange={(e) => updatePendingSetField(setIndex, 'reps', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Minutes" />
-                            <Input type="number" value={formatNumericInput(set.speed_mph)} onChange={(e) => updatePendingSetField(setIndex, 'speed_mph', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Speed MPH" />
-                            <Input type="number" value={formatNumericInput(set.rest_seconds)} onChange={(e) => updatePendingSetField(setIndex, 'rest_seconds', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Rest sec" />
-                            <Button variant="ghost" size="icon-sm" onClick={() => removeSetFromPendingExercise(setIndex)} disabled={pendingExercise.sets.length <= 1}><X className="h-3.5 w-3.5" /></Button>
-                          </div>
-                        ) : pendingMode === 'bike' || pendingMode === 'rower' ? (
-                          <div key={`${pendingExercise.instanceId}-${setIndex}`} className="grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2">
-                            <div className="flex items-center px-3 text-sm font-medium text-muted-foreground">{getSetDisplayName(set)}</div>
-                            <Input type="number" value={formatNumericInput(set.reps)} onChange={(e) => updatePendingSetField(setIndex, 'reps', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Minutes" />
-                            <Input type="number" value={formatNumericInput(set.watts)} onChange={(e) => updatePendingSetField(setIndex, 'watts', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Watts" />
-                            <Input type="number" value={formatNumericInput(set.rest_seconds)} onChange={(e) => updatePendingSetField(setIndex, 'rest_seconds', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Rest sec" />
-                            <Button variant="ghost" size="icon-sm" onClick={() => removeSetFromPendingExercise(setIndex)} disabled={pendingExercise.sets.length <= 1}><X className="h-3.5 w-3.5" /></Button>
-                          </div>
-                        ) : pendingMode === 'level_cardio' || pendingMode === 'basic_cardio' ? (
-                          <div key={`${pendingExercise.instanceId}-${setIndex}`} className="grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2">
-                            <div className="flex items-center px-3 text-sm font-medium text-muted-foreground">{getSetDisplayName(set)}</div>
-                            <Input type="number" value={formatNumericInput(set.reps)} onChange={(e) => updatePendingSetField(setIndex, 'reps', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Minutes" />
-                            <Input type="number" value={formatNumericInput(set.machine_level)} onChange={(e) => updatePendingSetField(setIndex, 'machine_level', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Level" />
-                            <Input type="number" value={formatNumericInput(set.rest_seconds)} onChange={(e) => updatePendingSetField(setIndex, 'rest_seconds', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Rest sec" />
-                            <Button variant="ghost" size="icon-sm" onClick={() => removeSetFromPendingExercise(setIndex)} disabled={pendingExercise.sets.length <= 1}><X className="h-3.5 w-3.5" /></Button>
-                          </div>
-                        ) : (
-                          <div
-                            key={`${pendingExercise.instanceId}-${setIndex}`}
-                            className={getDropSetRowClass('grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2 rounded-xl border border-transparent px-2 py-2', set)}
-                          >
-                            <div className={cn('flex items-center px-3 text-sm font-medium', getDropSetLabelClass(set))}>{getSetDisplayName(set)}</div>
-                            <Input type="number" value={formatNumericInput(set.reps)} onChange={(e) => updatePendingSetField(setIndex, 'reps', e.target.value === '' ? 0 : Number(e.target.value))} placeholder={getSetMetricPlaceholder(pendingExercise.exercise, pendingExercise.exercise.name)} />
-                            <Input type="number" value={formatWorkoutWeightInput(set.weight_kg, unitSystem)} onChange={(e) => updatePendingSetField(setIndex, 'weight_kg', parseWorkoutWeightInput(e.target.value, unitSystem))} placeholder={isAssistedPullExercise(pendingExercise.exercise) ? `Assistance (${weightUnitLabel})` : `Weight (${weightUnitLabel})`} />
-                            <Input type="number" value={formatNumericInput(set.rest_seconds)} onChange={(e) => updatePendingSetField(setIndex, 'rest_seconds', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Rest sec" />
-                            <Button variant="ghost" size="icon-sm" onClick={() => removeSetFromPendingExercise(setIndex)} disabled={pendingExercise.sets.length <= 1}><X className="h-3.5 w-3.5" /></Button>
-                          </div>
-                        )
-                      ))}
-                    </div>
-                  )
-                })()}
-
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <Button type="button" size="sm" variant="outline" onClick={addSetToPendingExercise}>
-                        <Plus className="mr-1 h-3.5 w-3.5" />
-                        {getExerciseInputMode(pendingExercise.exercise) === 'interval' ? 'Add round' : 'Add set'}
-                      </Button>
-                      {pendingMode === 'strength' && (
-                        <Button type="button" size="sm" variant="outline" onClick={addDropSetToPendingExercise}>
-                          <Plus className="mr-1 h-3.5 w-3.5" />
-                          Add drop set
-                        </Button>
-                      )}
-                      <Button type="button" size="sm" variant="brand" onClick={confirmPendingExercise}>
-                        Add exercise
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex flex-wrap gap-2">
-                  {['bench', 'run', 'walk', 'deadlift', 'squat', 'curl'].map((example) => (
-                    <button
-                      key={example}
-                      type="button"
-                      onClick={() => setManualSearch(example)}
-                      className="rounded-full border border-border/60 bg-muted/10 px-3 py-1.5 text-xs capitalize text-muted-foreground transition-colors hover:bg-muted/20 hover:text-foreground"
-                    >
-                      {example}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-border/50 bg-muted/10 p-4">
-                <p className="text-sm font-semibold">Today&apos;s workout summary</p>
-                <div className="mt-4 space-y-3">
-                  <div className="rounded-xl border border-border/50 bg-background px-3 py-2.5">
-                    <p className="font-data text-lg font-semibold">{manualSummary.caloriesBurned}</p>
-                    <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Estimated calories</p>
-                  </div>
-                  <div className="rounded-xl border border-border/50 bg-background px-3 py-2.5">
-                    <p className="font-data text-lg font-semibold">{manualSummary.durationMin}</p>
-                    <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Estimated minutes</p>
-                  </div>
-                </div>
-
-                <div className="mt-4 grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setManualAction('log')}
-                    className={`rounded-xl border px-3 py-2.5 text-sm transition-colors ${manualAction === 'log' ? 'border-foreground bg-foreground text-background' : 'border-border/60 bg-background text-foreground'}`}
-                  >
-                    Log Workout
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setManualAction('save')}
-                    className={`rounded-xl border px-3 py-2.5 text-sm transition-colors ${manualAction === 'save' ? 'border-foreground bg-foreground text-background' : 'border-border/60 bg-background text-foreground'}`}
-                  >
-                    Save Workout
-                  </button>
-                </div>
-
-                {(manualAction === 'save' || editingLoggedWorkoutId) && (
-                  <div className="mt-4 space-y-3">
-                    <div className="space-y-1.5">
-                      <Label>{editingLoggedWorkoutId ? 'Workout name' : 'Saved workout name'}</Label>
-                      <Input
-                        value={manualWorkoutName}
-                        onChange={(e) => setManualWorkoutName(e.target.value)}
-                        placeholder={editingLoggedWorkoutId ? 'e.g. Upper body session' : 'e.g. Upper body pump'}
-                      />
-                    </div>
-                    {editingLoggedWorkoutId && (
-                      <div className="space-y-1.5">
-                        <Label>Workout date</Label>
-                        <Input
-                          type="date"
-                          value={manualWorkoutDate}
-                          onChange={(e) => setManualWorkoutDate(e.target.value)}
-                        />
+                    ) : (
+                      <div className="px-4 py-6 text-center">
+                        <p className="text-sm text-muted-foreground">No exercises match your filters</p>
+                        {manualSearch.trim() && (
+                          <Button variant="outline" size="sm" className="mt-3" onClick={addCustomManualExercise}>
+                            Add &quot;{manualSearch}&quot; as custom exercise
+                          </Button>
+                        )}
                       </div>
                     )}
                   </div>
                 )}
 
-                <div className="mt-4 flex flex-col gap-2">
-                  <Button variant="brand" className="w-full" onClick={handleLogManualWorkout}>
-                    {editingLoggedWorkoutId ? 'Update Logged Workout' : manualAction === 'save' ? 'Save Workout' : 'Log Workout'}
-                  </Button>
-                  {editingLoggedWorkoutId && (
-                    <Button variant="outline" className="w-full" onClick={closeLoggedWorkoutEditor}>
-                      Close Editor
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-sm font-semibold">Exercises added</p>
-                <p className="text-xs text-muted-foreground">Enter sets, reps, weight, and rest for everything you did.</p>
-              </div>
-              <Badge variant="outline" className="mt-0.5">{manualExercises.length} exercises</Badge>
-            </div>
-
-            {manualExercises.length > 0 ? (
-              <div className="space-y-3">
-                {manualExercises.map((exercise) => {
-                  const exerciseSummary = summarizeExercises([{ exercise: exercise.exercise, sets: exercise.sets }], getMetProfile(user))
-                  const cardioExercise = isCardioExercise(exercise.exercise)
-                  const inputMode = getExerciseInputMode(exercise.exercise)
-
-                  return (
-                    <div key={exercise.instanceId} className="rounded-2xl border border-border/60 bg-card p-4">
-                      <div className="mb-4 flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-semibold">{exercise.exercise.name}</p>
-                          <p className="mt-1 text-xs text-muted-foreground">{exercise.exercise.equipment}</p>
-                          <button
-                            type="button"
-                            onClick={() => setPreviewExercise(exercise.exercise)}
-                            className="mt-1 flex items-center gap-1 text-[11px] text-primary/70 hover:text-primary transition-colors"
-                          >
-                            <PlayCircle className="h-3 w-3" />
-                            How to do this
-                          </button>
+              {/* Pending exercise config */}
+              {pendingExercise && (
+                <div className="rounded-2xl border border-border/60 bg-muted/10 p-5">
+                  {(() => {
+                    const pendingMode = getExerciseInputMode(pendingExercise.exercise)
+                    return (
+                      <>
+                        <div className="mb-4 flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold">Adjust before adding</p>
+                            <p className="mt-1 text-sm">{pendingExercise.exercise.name}</p>
+                            <p className="text-xs text-muted-foreground">{pendingExercise.exercise.equipment}</p>
+                            <button type="button" onClick={() => setPreviewExercise(pendingExercise.exercise)} className="mt-1 flex items-center gap-1 text-[11px] text-primary/70 hover:text-primary transition-colors">
+                              <PlayCircle className="h-3 w-3" />
+                              How to do this
+                            </button>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Select value={getExerciseSetMetric(pendingExercise.exercise)} onValueChange={(value) => updatePendingExerciseSetMetric(value as ExerciseSetMetric)}>
+                              <SelectTrigger className="h-8 w-[110px] text-xs"><SelectValue placeholder="Metric" /></SelectTrigger>
+                              <SelectContent>
+                                {SET_METRIC_OPTIONS.map((option) => (
+                                  <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Button variant="ghost" size="icon-sm" onClick={() => setPendingExercise(null)}>
+                              <X className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <Select
-                            value={getExerciseSetMetric(exercise.exercise)}
-                            onValueChange={(value) => updateManualExerciseSetMetric(exercise.instanceId, value as ExerciseSetMetric)}
-                          >
-                            <SelectTrigger className="h-8 w-[110px] text-xs">
-                              <SelectValue placeholder="Metric" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {SET_METRIC_OPTIONS.map((option) => (
-                                <SelectItem key={option.value} value={option.value}>
-                                  {option.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <Badge variant="outline" className="capitalize">{exercise.exercise.difficulty}</Badge>
-                          <Button variant="ghost" size="icon-sm" className="text-destructive/70 hover:text-destructive" onClick={() => setManualExercises((current) => current.filter((item) => item.instanceId !== exercise.instanceId))}>
-                            <Trash2 className="h-3.5 w-3.5" />
+
+                        <div className="space-y-2">
+                          {pendingMode === 'interval' ? (
+                            <div className="grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2 px-1 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                              <span>Round</span><span>Intervals</span><span>Work (sec)</span><span>Rest (sec)</span><span />
+                            </div>
+                          ) : pendingMode === 'treadmill' ? (
+                            <div className="grid grid-cols-[80px_1fr_1fr_1fr_1fr_auto] gap-2 px-1 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                              <span>Set</span><span>Minutes</span><span>Speed MPH</span><span>Incline %</span><span>Rest Sec</span><span />
+                            </div>
+                          ) : pendingMode === 'run_walk' ? (
+                            <div className="grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2 px-1 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                              <span>Set</span><span>Minutes</span><span>Speed MPH</span><span>Rest Sec</span><span />
+                            </div>
+                          ) : pendingMode === 'bike' || pendingMode === 'rower' ? (
+                            <div className="grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2 px-1 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                              <span>Set</span><span>Minutes</span><span>Watts</span><span>Rest Sec</span><span />
+                            </div>
+                          ) : pendingMode === 'level_cardio' || pendingMode === 'basic_cardio' ? (
+                            <div className="grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2 px-1 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                              <span>Set</span><span>Minutes</span><span>Level</span><span>Rest Sec</span><span />
+                            </div>
+                          ) : (
+                            <div className="grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2 px-1 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                              <span>Set</span>
+                              <span>{getSetMetricLabel(pendingExercise.exercise)}</span>
+                              <span>{isAssistedPullExercise(pendingExercise.exercise) ? `Assistance (${weightUnitLabel})` : `Weight (${weightUnitLabel})`}</span>
+                              <span>Rest Sec</span><span />
+                            </div>
+                          )}
+                          {pendingExercise.sets.map((set, setIndex) => (
+                            pendingMode === 'interval' ? (
+                              <div key={`${pendingExercise.instanceId}-${setIndex}`} className="grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2">
+                                <div className="flex items-center px-3 text-sm font-medium text-muted-foreground">{getSetDisplayName(set)}</div>
+                                <Input type="number" min={1} value={formatNumericInput(set.reps)} onChange={(e) => updatePendingSetField(setIndex, 'reps', e.target.value === '' ? 1 : Math.max(1, Number(e.target.value)))} placeholder="# intervals" />
+                                <Input type="number" min={1} value={formatNumericInput(set.interval_duration_sec)} onChange={(e) => updatePendingSetField(setIndex, 'interval_duration_sec', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Work sec" />
+                                <Input type="number" min={0} value={formatNumericInput(set.rest_seconds)} onChange={(e) => updatePendingSetField(setIndex, 'rest_seconds', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Rest sec" />
+                                <Button variant="ghost" size="icon-sm" onClick={() => removeSetFromPendingExercise(setIndex)} disabled={pendingExercise.sets.length <= 1}><X className="h-3.5 w-3.5" /></Button>
+                              </div>
+                            ) : pendingMode === 'treadmill' ? (
+                              <div key={`${pendingExercise.instanceId}-${setIndex}`} className="grid grid-cols-[80px_1fr_1fr_1fr_1fr_auto] gap-2">
+                                <div className="flex items-center px-3 text-sm font-medium text-muted-foreground">{getSetDisplayName(set)}</div>
+                                <Input type="number" value={formatNumericInput(set.reps)} onChange={(e) => updatePendingSetField(setIndex, 'reps', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Minutes" />
+                                <Input type="number" value={formatNumericInput(set.speed_mph)} onChange={(e) => updatePendingSetField(setIndex, 'speed_mph', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Speed MPH" />
+                                <Input type="number" value={formatNumericInput(set.incline_pct)} onChange={(e) => updatePendingSetField(setIndex, 'incline_pct', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Incline %" />
+                                <Input type="number" value={formatNumericInput(set.rest_seconds)} onChange={(e) => updatePendingSetField(setIndex, 'rest_seconds', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Rest sec" />
+                                <Button variant="ghost" size="icon-sm" onClick={() => removeSetFromPendingExercise(setIndex)} disabled={pendingExercise.sets.length <= 1}><X className="h-3.5 w-3.5" /></Button>
+                              </div>
+                            ) : pendingMode === 'run_walk' ? (
+                              <div key={`${pendingExercise.instanceId}-${setIndex}`} className="grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2">
+                                <div className="flex items-center px-3 text-sm font-medium text-muted-foreground">{getSetDisplayName(set)}</div>
+                                <Input type="number" value={formatNumericInput(set.reps)} onChange={(e) => updatePendingSetField(setIndex, 'reps', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Minutes" />
+                                <Input type="number" value={formatNumericInput(set.speed_mph)} onChange={(e) => updatePendingSetField(setIndex, 'speed_mph', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Speed MPH" />
+                                <Input type="number" value={formatNumericInput(set.rest_seconds)} onChange={(e) => updatePendingSetField(setIndex, 'rest_seconds', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Rest sec" />
+                                <Button variant="ghost" size="icon-sm" onClick={() => removeSetFromPendingExercise(setIndex)} disabled={pendingExercise.sets.length <= 1}><X className="h-3.5 w-3.5" /></Button>
+                              </div>
+                            ) : pendingMode === 'bike' || pendingMode === 'rower' ? (
+                              <div key={`${pendingExercise.instanceId}-${setIndex}`} className="grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2">
+                                <div className="flex items-center px-3 text-sm font-medium text-muted-foreground">{getSetDisplayName(set)}</div>
+                                <Input type="number" value={formatNumericInput(set.reps)} onChange={(e) => updatePendingSetField(setIndex, 'reps', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Minutes" />
+                                <Input type="number" value={formatNumericInput(set.watts)} onChange={(e) => updatePendingSetField(setIndex, 'watts', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Watts" />
+                                <Input type="number" value={formatNumericInput(set.rest_seconds)} onChange={(e) => updatePendingSetField(setIndex, 'rest_seconds', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Rest sec" />
+                                <Button variant="ghost" size="icon-sm" onClick={() => removeSetFromPendingExercise(setIndex)} disabled={pendingExercise.sets.length <= 1}><X className="h-3.5 w-3.5" /></Button>
+                              </div>
+                            ) : pendingMode === 'level_cardio' || pendingMode === 'basic_cardio' ? (
+                              <div key={`${pendingExercise.instanceId}-${setIndex}`} className="grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2">
+                                <div className="flex items-center px-3 text-sm font-medium text-muted-foreground">{getSetDisplayName(set)}</div>
+                                <Input type="number" value={formatNumericInput(set.reps)} onChange={(e) => updatePendingSetField(setIndex, 'reps', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Minutes" />
+                                <Input type="number" value={formatNumericInput(set.machine_level)} onChange={(e) => updatePendingSetField(setIndex, 'machine_level', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Level" />
+                                <Input type="number" value={formatNumericInput(set.rest_seconds)} onChange={(e) => updatePendingSetField(setIndex, 'rest_seconds', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Rest sec" />
+                                <Button variant="ghost" size="icon-sm" onClick={() => removeSetFromPendingExercise(setIndex)} disabled={pendingExercise.sets.length <= 1}><X className="h-3.5 w-3.5" /></Button>
+                              </div>
+                            ) : (
+                              <div key={`${pendingExercise.instanceId}-${setIndex}`} className={getDropSetRowClass('grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2 rounded-xl border border-transparent px-2 py-2', set)}>
+                                <div className={cn('flex items-center px-3 text-sm font-medium', getDropSetLabelClass(set))}>{getSetDisplayName(set)}</div>
+                                <Input type="number" value={formatNumericInput(set.reps)} onChange={(e) => updatePendingSetField(setIndex, 'reps', e.target.value === '' ? 0 : Number(e.target.value))} placeholder={getSetMetricPlaceholder(pendingExercise.exercise)} />
+                                <Input type="number" value={formatWorkoutWeightInput(set.weight_kg, unitSystem)} onChange={(e) => updatePendingSetField(setIndex, 'weight_kg', parseWorkoutWeightInput(e.target.value, unitSystem))} placeholder={isAssistedPullExercise(pendingExercise.exercise) ? `Assistance (${weightUnitLabel})` : `Weight (${weightUnitLabel})`} />
+                                <Input type="number" value={formatNumericInput(set.rest_seconds)} onChange={(e) => updatePendingSetField(setIndex, 'rest_seconds', e.target.value === '' ? 0 : Number(e.target.value))} placeholder="Rest sec" />
+                                <Button variant="ghost" size="icon-sm" onClick={() => removeSetFromPendingExercise(setIndex)} disabled={pendingExercise.sets.length <= 1}><X className="h-3.5 w-3.5" /></Button>
+                              </div>
+                            )
+                          ))}
+                        </div>
+
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          <Button type="button" size="sm" variant="outline" onClick={addSetToPendingExercise}>
+                            <Plus className="mr-1 h-3.5 w-3.5" />
+                            {pendingMode === 'interval' ? 'Add round' : 'Add set'}
+                          </Button>
+                          {pendingMode === 'strength' && (
+                            <Button type="button" size="sm" variant="outline" onClick={addDropSetToPendingExercise}>
+                              <Plus className="mr-1 h-3.5 w-3.5" />
+                              Add drop set
+                            </Button>
+                          )}
+                          <Button type="button" size="sm" variant="brand" onClick={confirmPendingExercise}>
+                            Add exercise
                           </Button>
                         </div>
-                      </div>
+                      </>
+                    )
+                  })()}
+                </div>
+              )}
 
-                      <div className="mb-3 grid gap-2 sm:grid-cols-3">
-                        <div className="rounded-xl border border-border/50 bg-muted/10 px-3 py-2">
-                          <p className="font-data text-sm font-semibold">{exerciseSummary.caloriesBurned}</p>
-                          <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Est. kcal</p>
+              {/* Recent workouts — cards matching the mockup style */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                    {workoutLogs.length > 0 ? 'Recent Workouts' : 'No history yet'}
+                  </p>
+                  {workoutLogs.length > 0 && (
+                    <button type="button" onClick={() => void loadOlderWorkoutHistory()} className="text-[11px] font-medium text-emerald-400 transition-colors hover:text-emerald-300 disabled:opacity-50" disabled={loadingOlderHistory}>
+                      {loadingOlderHistory ? 'Loading…' : 'Load older'}
+                    </button>
+                  )}
+                </div>
+
+                {workoutLogs.length > 0 ? (
+                  workoutLogs.slice().sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 6).map((log) => {
+                    const totalSets = log.exercises.reduce((s, e) => s + e.sets.length, 0)
+                    const isLogToday = log.date === getTodayISO()
+                    const isExpanded = expandedLogId === log.id
+                    const durationLabel = formatWorkoutDuration(log.started_at, log.completed_at, log.duration_min)
+                    const logDate = new Date(log.date)
+                    const dateLabel = isLogToday ? 'Today' : logDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                    const replayWorkout = buildReplayWorkoutFromLog(log)
+                    return (
+                      <div key={log.id} className="rounded-2xl border border-border/60 bg-card overflow-hidden transition-colors hover:border-border/80">
+                        {/* Main row */}
+                        <div className="flex items-center gap-3 px-4 py-4">
+                          <button
+                            type="button"
+                            onClick={() => setExpandedLogId(isExpanded ? null : log.id)}
+                            className="min-w-0 flex-1 text-left"
+                          >
+                            <div className="flex items-center gap-2 mb-1.5">
+                              <p className="text-sm font-semibold truncate">{log.workout.name}</p>
+                              {isLogToday && <span className="shrink-0 rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-400 uppercase tracking-wide">Today</span>}
+                            </div>
+                            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                              <span className="flex items-center gap-1">
+                                <Dumbbell className="h-3 w-3 shrink-0" />
+                                {log.exercises.length} exercise{log.exercises.length !== 1 ? 's' : ''}
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <BookOpen className="h-3 w-3 shrink-0" />
+                                {totalSets} sets
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <Circle className="h-3 w-3 shrink-0" />
+                                {durationLabel}
+                              </span>
+                            </div>
+                          </button>
+                          <div className="flex items-center gap-3 shrink-0">
+                            <span className="text-xs text-muted-foreground">{dateLabel}</span>
+                            <Button size="sm" variant="outline" className="gap-1.5 h-8 px-3 text-xs" onClick={() => startWorkoutFromLog(log)}>
+                              <Play className="w-3 h-3" />
+                              Start Again
+                            </Button>
+                            <button type="button" onClick={() => setExpandedLogId(isExpanded ? null : log.id)} className="p-1 rounded-md hover:bg-muted/40 transition-colors">
+                              {isExpanded ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" /> : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />}
+                            </button>
+                          </div>
                         </div>
-                        <div className="rounded-xl border border-border/50 bg-muted/10 px-3 py-2">
-                          <p className="font-data text-sm font-semibold">{exercise.sets.length}</p>
-                          <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Sets</p>
+
+                        {/* Expandable detail */}
+                        <AnimatePresence>
+                          {isExpanded && (
+                            <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.18 }} className="overflow-hidden">
+                              <div className="border-t border-border/40 px-4 pb-4 pt-3 bg-muted/5 space-y-3">
+                                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                                  {[
+                                    { label: 'Started', value: formatWorkoutTime(log.started_at) },
+                                    { label: 'Finished', value: formatWorkoutTime(log.completed_at) },
+                                    { label: 'Duration', value: durationLabel },
+                                    { label: 'Calories', value: log.calories_burned_kcal ? `${log.calories_burned_kcal} kcal` : '—' },
+                                  ].map(({ label, value }) => (
+                                    <div key={label} className="rounded-lg bg-muted/30 border border-border/40 px-2.5 py-2 text-center">
+                                      <p className="font-data text-xs font-semibold tabular-nums">{value}</p>
+                                      <p className="text-[10px] text-muted-foreground mt-0.5">{label}</p>
+                                    </div>
+                                  ))}
+                                </div>
+                                <div className="space-y-1.5">
+                                  {replayWorkout.exercises.map((exercise, exIdx) => (
+                                    <div key={`${log.id}-${exercise.exercise.id}-${exIdx}`} className="rounded-lg bg-muted/20 border border-border/30 px-3 py-2.5">
+                                      <div className="flex items-center justify-between gap-3">
+                                        <p className="text-xs font-medium">{exercise.exercise.name}</p>
+                                        <p className="text-[10px] text-muted-foreground">{exercise.sets.length} set{exercise.sets.length !== 1 ? 's' : ''}</p>
+                                      </div>
+                                      <div className="mt-2 flex flex-wrap gap-1.5">
+                                        {exercise.sets.map((set, setIndex) => (
+                                          <span
+                                            key={`${log.id}-${exercise.exercise.id}-${set.set_number}-${set.drop_set_index ?? 'base'}-${setIndex}`}
+                                            className={cn(
+                                              'inline-flex items-center gap-1 rounded-full border border-border/40 bg-background/70 px-2 py-1 text-[10px] text-muted-foreground',
+                                              set.set_type === 'drop' && 'border-primary/25 text-primary/80',
+                                            )}
+                                          >
+                                            <span className="font-medium">{getSetDisplayName(set)}</span>
+                                            <span>{formatLoggedWorkoutSetSummary(set, exercise.exercise, unitSystem)}</span>
+                                          </span>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                                <div className="flex gap-2 pt-0.5">
+                                  <Button size="sm" variant="outline" className="gap-1.5" onClick={() => loadLoggedWorkoutForEdit(log.id)}>
+                                    <Pencil className="w-3.5 h-3.5" />
+                                    Edit Log
+                                  </Button>
+                                  <Button size="sm" variant="ghost" className="gap-1.5 text-destructive/70 hover:text-destructive" onClick={() => removeWorkoutLog(log.id)}>
+                                    Delete
+                                  </Button>
+                                </div>
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                    )
+                  })
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-border/50 px-6 py-10 text-center">
+                    <p className="text-sm font-medium text-muted-foreground">No workouts logged yet</p>
+                    <p className="mt-1 text-xs text-muted-foreground">Hit Start New Workout to begin</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Today's logged workouts (if any besides the recent list) */}
+              {todayLoggedWorkouts.length > 0 && (
+                <div className="rounded-2xl border border-border/60 bg-card overflow-hidden">
+                  <div className="px-5 py-3 border-b border-border/40 flex items-center justify-between">
+                    <p className="text-sm font-semibold">Today&apos;s logged workouts</p>
+                    <Badge variant="outline">{todayLoggedWorkouts.length}</Badge>
+                  </div>
+                  {todayLoggedWorkouts.map((log) => {
+                    const durationLabel = formatWorkoutDuration(log.started_at, log.completed_at, log.duration_min)
+                    return (
+                      <div key={log.id} className="flex items-center gap-3 px-5 py-3.5 border-b border-border/30 last:border-b-0">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium truncate">{log.workout.name}</p>
+                          <p className="mt-0.5 text-xs text-muted-foreground">
+                            {log.exercises.length} exercises · {durationLabel} · {log.calories_burned_kcal || 0} kcal
+                          </p>
                         </div>
-                        <div className="rounded-xl border border-border/50 bg-muted/10 px-3 py-2">
-                          <p className="font-data text-sm font-semibold">{exerciseSummary.durationMin}</p>
-                          <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Est. min</p>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <Button variant="outline" size="sm" onClick={() => loadLoggedWorkoutForEdit(log.id)}>Edit</Button>
+                          <Button variant="ghost" size="sm" className="text-destructive/70 hover:text-destructive" onClick={() => removeWorkoutLog(log.id)}>Delete</Button>
                         </div>
                       </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          ) : (
+            /* ── ACTIVE WORKOUT MODE ── */
+            <div className="flex flex-col">
+              {/* Sticky session top bar */}
+              <div className="sticky top-0 z-30 -mx-4 px-4 py-3 bg-background/98 backdrop-blur-sm border-b border-border/50 flex items-center gap-3 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => { setManualExercises([]); setPendingExercise(null); setManualAction('log'); setManualWorkoutName(''); setWorkoutStarted(false); setSessionStartedAt(null); setSessionPausedAt(null) }}
+                  className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors shrink-0"
+                >
+                  <ArrowLeft className="h-5 w-5" />
+                </button>
+                <div className="flex items-center gap-3 flex-1 min-w-0">
+                  <div className="h-9 w-9 rounded-xl bg-emerald-500/15 border border-emerald-500/20 flex items-center justify-center shrink-0">
+                    <Dumbbell className="h-4 w-4 text-emerald-400" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-mono text-2xl font-bold leading-none tracking-tight text-foreground">
+                      {sessionStartedAt ? formatElapsed(sessionStartedAt, sessionPausedAt ?? sessionNowMs) : '00:00'}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">{completedSetsCount}/{totalManualSets} sets · {sessionPausedAt ? <span className="text-amber-400/80">Paused</span> : 'Workout Session'}</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (sessionPausedAt) {
+                      setSessionStartedAt((prev) => prev !== null ? prev + (Date.now() - sessionPausedAt) : prev)
+                      setSessionPausedAt(null)
+                    } else {
+                      setSessionPausedAt(Date.now())
+                    }
+                  }}
+                  className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors shrink-0"
+                  aria-label={sessionPausedAt ? 'Resume timer' : 'Pause timer'}
+                >
+                  {sessionPausedAt ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setManualExercises([]); setPendingExercise(null); setManualAction('log'); setManualWorkoutName(''); setWorkoutStarted(false); setSessionStartedAt(null); setSessionPausedAt(null) }}
+                  className="text-sm text-muted-foreground hover:text-destructive transition-colors px-1 shrink-0"
+                >
+                  Discard
+                </button>
+              </div>
 
-                      <div className="overflow-hidden rounded-xl border border-border/50">
-                        <div className="overflow-x-auto">
+              {/* Empty state or exercise cards */}
+              {manualExercises.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 text-center">
+                  <div className="h-16 w-16 rounded-2xl bg-muted/25 border border-border/40 flex items-center justify-center mb-4">
+                    <Dumbbell className="h-7 w-7 text-muted-foreground/30" />
+                  </div>
+                  <p className="text-sm font-medium text-muted-foreground">Ready when you are</p>
+                  <p className="text-xs text-muted-foreground/50 mt-1 max-w-[200px]">Tap &ldquo;Add Exercise&rdquo; below to start building your session</p>
+                </div>
+              ) : (
+              <div className="space-y-4 py-4 pb-32"><>{manualExercises.map((exercise) => {
+                const cardioExercise = isCardioExercise(exercise.exercise)
+                const inputMode = getExerciseInputMode(exercise.exercise)
+                const lastSummary = getLastLoggedSummary(exercise.exercise.id, workoutLogs, unitSystem)
+                return (
+                  <div key={exercise.instanceId} className="rounded-2xl border border-border/60 bg-card overflow-hidden">
+                    {/* Card header */}
+                    <div className="px-4 pt-4 pb-3 flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-base font-semibold text-emerald-400 truncate">{exercise.exercise.name}</p>
+                        {lastSummary ? (
+                          <p className="text-xs text-muted-foreground mt-0.5">Last: {lastSummary}</p>
+                        ) : (
+                          <p className="text-xs text-muted-foreground mt-0.5">{exercise.exercise.equipment}</p>
+                        )}
+                        <button type="button" onClick={() => setPreviewExercise(exercise.exercise)} className="mt-1.5 flex items-center gap-1 text-[11px] text-primary/60 hover:text-primary transition-colors">
+                          <PlayCircle className="h-3 w-3" />
+                          How to do this
+                        </button>
+                      </div>
+                      <button
+                        type="button"
+                        className="text-muted-foreground/40 hover:text-destructive transition-colors p-1.5 rounded-lg hover:bg-destructive/10 mt-0.5 shrink-0"
+                        onClick={() => setManualExercises((current) => current.filter((item) => item.instanceId !== exercise.instanceId))}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+
+                    {/* Set table — strength mode: clean grid with checkboxes */}
+                    {inputMode === 'strength' ? (
+                      <>
+                        <div className="grid grid-cols-[2.5rem_1fr_1fr_2.5rem_2rem] gap-2 px-4 py-2.5 border-t border-border/40 bg-muted/20 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                          <span>Set</span>
+                          <span>{cardioExercise ? `Load (${weightUnitLabel})` : isAssistedPullExercise(exercise.exercise) ? `Assist (${weightUnitLabel})` : `Weight (${weightUnitLabel})`}</span>
+                          <span>{getSetMetricLabel(exercise.exercise)}</span>
+                          <span />
+                          <span />
+                        </div>
+                        {exercise.sets.map((set, setIndex) => {
+                          const isActiveRest = restTimer?.instanceId === exercise.instanceId && restTimer.setIndex === setIndex
+                          const restMins = isActiveRest ? Math.floor(restTimer!.secondsLeft / 60).toString().padStart(2, '0') : '00'
+                          const restSecs = isActiveRest ? (restTimer!.secondsLeft % 60).toString().padStart(2, '0') : '00'
+                          return (
+                            <div key={setIndex}>
+                              <div className={cn('grid grid-cols-[2.5rem_1fr_1fr_2.5rem_2rem] gap-2 border-t border-border/30 transition-colors', set.set_type === 'drop' ? 'pl-8 pr-4 py-2' : 'px-4 py-2', set.completed && 'bg-emerald-500/5')}>
+                                <span className={cn('flex items-center text-xs font-mono', set.completed ? 'text-emerald-400' : 'text-muted-foreground/50', set.set_type === 'drop' && 'italic')}>{getSetDisplayName(set)}</span>
+                                <Input
+                                  type="number"
+                                  value={formatWorkoutWeightInput(set.weight_kg, unitSystem) || ''}
+                                  onChange={(e) => updateManualSetField(exercise.instanceId, setIndex, 'weight_kg', parseWorkoutWeightInput(e.target.value, unitSystem))}
+                                  className={cn('h-10 text-sm', set.completed && 'opacity-50 pointer-events-none')}
+                                  placeholder="—"
+                                />
+                                <Input
+                                  type="number"
+                                  value={set.reps || ''}
+                                  onChange={(e) => updateManualSetField(exercise.instanceId, setIndex, 'reps', Number(e.target.value))}
+                                  className={cn('h-10 text-sm', set.completed && 'opacity-50 pointer-events-none')}
+                                  placeholder="—"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => toggleManualSetComplete(exercise.instanceId, setIndex)}
+                                  className={cn(
+                                    'h-10 w-10 rounded-lg border flex items-center justify-center transition-colors',
+                                    set.completed
+                                      ? 'border-emerald-500/50 bg-emerald-500/20 text-emerald-400'
+                                      : 'border-border/50 text-muted-foreground/25 hover:border-emerald-500/40 hover:text-emerald-400/70'
+                                  )}
+                                >
+                                  <Check className="h-4 w-4" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => removeSetFromManualExercise(exercise.instanceId, setIndex)}
+                                  disabled={exercise.sets.filter((s) => s.set_type !== 'drop').length <= 1 && set.set_type !== 'drop'}
+                                  className="flex items-center justify-center text-muted-foreground/30 hover:text-destructive/70 transition-colors disabled:opacity-20 disabled:pointer-events-none"
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                              {set.completed && (
+                                <div className={cn('px-4 py-2 border-t border-border/20 flex items-center gap-3', isActiveRest ? 'bg-emerald-500/[0.04]' : 'bg-transparent')}>
+                                  {isActiveRest ? (
+                                    <>
+                                      <span className="font-mono text-sm font-semibold text-emerald-400 tabular-nums w-10">{restMins}:{restSecs}</span>
+                                      <button type="button" onClick={() => setRestTimer((prev) => prev ? { ...prev, secondsLeft: prev.secondsLeft + 30 } : prev)} className="text-xs text-muted-foreground hover:text-foreground transition-colors border border-border/50 rounded-md px-2 py-1">+30s</button>
+                                      <button type="button" onClick={() => setRestTimer((prev) => prev ? { ...prev, secondsLeft: prev.secondsLeft + 60 } : prev)} className="text-xs text-muted-foreground hover:text-foreground transition-colors border border-border/50 rounded-md px-2 py-1">+60s</button>
+                                      <button type="button" onClick={() => setRestTimer(null)} className="ml-auto text-xs text-muted-foreground/60 hover:text-muted-foreground transition-colors">Skip</button>
+                                    </>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => setRestTimer({ instanceId: exercise.instanceId, setIndex, secondsLeft: 30 })}
+                                      className="flex items-center gap-1.5 text-xs font-medium text-emerald-400/70 hover:text-emerald-400 transition-colors border border-emerald-500/25 hover:border-emerald-500/50 rounded-md px-2.5 py-1"
+                                    >
+                                      Start rest timer
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
+                        <div className="px-4 py-3 border-t border-border/30 flex gap-4">
+                          <button type="button" onClick={() => addSetToManualExercise(exercise.instanceId)} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+                            <Plus className="h-3.5 w-3.5" />Add Set
+                          </button>
+                          <button type="button" onClick={() => addDropSetToManualExercise(exercise.instanceId)} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+                            <Plus className="h-3.5 w-3.5" />Drop Set
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                    <>
+                    <div className="overflow-hidden border-t border-border/40">
+                      <div className="overflow-x-auto">
                         {inputMode === 'treadmill' ? (
-                          <div className="grid grid-cols-[80px_1fr_1fr_1fr_1fr_auto] gap-2 border-b border-border/40 bg-muted/20 px-3 py-2 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
-                            <span>Set</span>
-                            <span>Minutes</span>
-                            <span>Speed MPH</span>
-                            <span>Incline %</span>
-                            <span>Rest sec</span>
-                            <span className="text-right">Action</span>
+                          <div className="grid grid-cols-[80px_1fr_1fr_1fr_1fr_auto] gap-2 border-b border-border/40 bg-muted/20 px-3 py-2.5 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                            <span>Set</span><span>Minutes</span><span>Speed MPH</span><span>Incline %</span><span>Rest sec</span><span className="text-right">Del</span>
                           </div>
                         ) : inputMode === 'run_walk' ? (
-                          <div className="grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2 border-b border-border/40 bg-muted/20 px-3 py-2 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
-                            <span>Set</span>
-                            <span>Minutes</span>
-                            <span>Speed MPH</span>
-                            <span>Rest sec</span>
-                            <span className="text-right">Action</span>
+                          <div className="grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2 border-b border-border/40 bg-muted/20 px-3 py-2.5 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                            <span>Set</span><span>Minutes</span><span>Speed MPH</span><span>Rest sec</span><span className="text-right">Del</span>
                           </div>
                         ) : inputMode === 'bike' || inputMode === 'rower' ? (
-                          <div className="grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2 border-b border-border/40 bg-muted/20 px-3 py-2 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
-                            <span>Set</span>
-                            <span>Minutes</span>
-                            <span>Watts</span>
-                            <span>Rest sec</span>
-                            <span className="text-right">Action</span>
+                          <div className="grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2 border-b border-border/40 bg-muted/20 px-3 py-2.5 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                            <span>Set</span><span>Minutes</span><span>Watts</span><span>Rest sec</span><span className="text-right">Del</span>
                           </div>
                         ) : inputMode === 'level_cardio' || inputMode === 'basic_cardio' ? (
-                          <div className="grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2 border-b border-border/40 bg-muted/20 px-3 py-2 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
-                            <span>Set</span>
-                            <span>Minutes</span>
-                            <span>Level</span>
-                            <span>Rest sec</span>
-                            <span className="text-right">Action</span>
+                          <div className="grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2 border-b border-border/40 bg-muted/20 px-3 py-2.5 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                            <span>Set</span><span>Minutes</span><span>Level</span><span>Rest sec</span><span className="text-right">Del</span>
                           </div>
                         ) : (
-                          <div className="grid grid-cols-5 gap-2 border-b border-border/40 bg-muted/20 px-3 py-2 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                          <div className="grid grid-cols-5 gap-2 border-b border-border/40 bg-muted/20 px-3 py-2.5 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
                             <span>Set</span>
                             <span>{getSetMetricLabel(exercise.exercise)}</span>
-                            <span>{cardioExercise
-                              ? `Incline / Load (${weightUnitLabel})`
-                              : isAssistedPullExercise(exercise.exercise)
-                                ? `Assistance (${weightUnitLabel})`
-                                : `Weight (${weightUnitLabel})`}</span>
+                            <span>{cardioExercise ? `Incline / Load (${weightUnitLabel})` : isAssistedPullExercise(exercise.exercise) ? `Assistance (${weightUnitLabel})` : `Weight (${weightUnitLabel})`}</span>
                             <span>Rest sec</span>
-                            <span className="text-right">Action</span>
+                            <span className="text-right">Del</span>
                           </div>
                         )}
                         {exercise.sets.map((set, setIndex) => (
                           inputMode === 'treadmill' ? (
-                            <div key={`${exercise.instanceId}-${setIndex}`} className="grid grid-cols-[80px_1fr_1fr_1fr_1fr_auto] gap-2 border-b border-border/30 px-3 py-2 last:border-b-0">
+                            <div key={`${exercise.instanceId}-${setIndex}`} className="grid grid-cols-[80px_1fr_1fr_1fr_1fr_auto] gap-2 border-b border-border/30 px-3 py-2.5 last:border-b-0">
                               <span className="flex items-center font-data text-sm">{getSetDisplayName(set)}</span>
-                              <Input
-                                type="number"
-                                value={set.reps}
-                                onChange={(e) => updateManualSetField(exercise.instanceId, setIndex, 'reps', Number(e.target.value))}
-                                className="h-8 text-xs"
-                                placeholder="Minutes"
-                              />
-                              <Input
-                                type="number"
-                                value={formatNumericInput(set.speed_mph)}
-                                onChange={(e) => updateManualSetField(exercise.instanceId, setIndex, 'speed_mph', Number(e.target.value))}
-                                className="h-8 text-xs"
-                                placeholder="Speed MPH"
-                              />
-                              <Input
-                                type="number"
-                                value={formatNumericInput(set.incline_pct)}
-                                onChange={(e) => updateManualSetField(exercise.instanceId, setIndex, 'incline_pct', Number(e.target.value))}
-                                className="h-8 text-xs"
-                                placeholder="Incline %"
-                              />
-                              <Input type="number" value={set.rest_seconds} onChange={(e) => updateManualSetField(exercise.instanceId, setIndex, 'rest_seconds', Number(e.target.value))} className="h-8 text-xs" />
-                              <div className="flex justify-end">
-                                <Button type="button" size="icon-sm" variant="ghost" onClick={() => removeSetFromManualExercise(exercise.instanceId, setIndex)} disabled={exercise.sets.length <= 1}>
-                                  <X className="h-3.5 w-3.5" />
-                                </Button>
-                              </div>
+                              <Input type="number" value={set.reps} onChange={(e) => updateManualSetField(exercise.instanceId, setIndex, 'reps', Number(e.target.value))} className="h-9 text-sm" placeholder="Minutes" />
+                              <Input type="number" value={formatNumericInput(set.speed_mph)} onChange={(e) => updateManualSetField(exercise.instanceId, setIndex, 'speed_mph', Number(e.target.value))} className="h-9 text-sm" placeholder="Speed" />
+                              <Input type="number" value={formatNumericInput(set.incline_pct)} onChange={(e) => updateManualSetField(exercise.instanceId, setIndex, 'incline_pct', Number(e.target.value))} className="h-9 text-sm" placeholder="Incline" />
+                              <Input type="number" value={set.rest_seconds} onChange={(e) => updateManualSetField(exercise.instanceId, setIndex, 'rest_seconds', Number(e.target.value))} className="h-9 text-sm" />
+                              <div className="flex justify-end"><Button type="button" size="icon-sm" variant="ghost" onClick={() => removeSetFromManualExercise(exercise.instanceId, setIndex)} disabled={exercise.sets.length <= 1}><X className="h-3.5 w-3.5" /></Button></div>
                             </div>
                           ) : inputMode === 'run_walk' ? (
-                            <div key={`${exercise.instanceId}-${setIndex}`} className="grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2 border-b border-border/30 px-3 py-2 last:border-b-0">
+                            <div key={`${exercise.instanceId}-${setIndex}`} className="grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2 border-b border-border/30 px-3 py-2.5 last:border-b-0">
                               <span className="flex items-center font-data text-sm">{getSetDisplayName(set)}</span>
-                              <Input type="number" value={set.reps} onChange={(e) => updateManualSetField(exercise.instanceId, setIndex, 'reps', Number(e.target.value))} className="h-8 text-xs" placeholder="Minutes" />
-                              <Input type="number" value={formatNumericInput(set.speed_mph)} onChange={(e) => updateManualSetField(exercise.instanceId, setIndex, 'speed_mph', Number(e.target.value))} className="h-8 text-xs" placeholder="Speed MPH" />
-                              <Input type="number" value={set.rest_seconds} onChange={(e) => updateManualSetField(exercise.instanceId, setIndex, 'rest_seconds', Number(e.target.value))} className="h-8 text-xs" />
+                              <Input type="number" value={set.reps} onChange={(e) => updateManualSetField(exercise.instanceId, setIndex, 'reps', Number(e.target.value))} className="h-9 text-sm" placeholder="Minutes" />
+                              <Input type="number" value={formatNumericInput(set.speed_mph)} onChange={(e) => updateManualSetField(exercise.instanceId, setIndex, 'speed_mph', Number(e.target.value))} className="h-9 text-sm" placeholder="Speed MPH" />
+                              <Input type="number" value={set.rest_seconds} onChange={(e) => updateManualSetField(exercise.instanceId, setIndex, 'rest_seconds', Number(e.target.value))} className="h-9 text-sm" />
                               <div className="flex justify-end"><Button type="button" size="icon-sm" variant="ghost" onClick={() => removeSetFromManualExercise(exercise.instanceId, setIndex)} disabled={exercise.sets.length <= 1}><X className="h-3.5 w-3.5" /></Button></div>
                             </div>
                           ) : inputMode === 'bike' || inputMode === 'rower' ? (
-                            <div key={`${exercise.instanceId}-${setIndex}`} className="grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2 border-b border-border/30 px-3 py-2 last:border-b-0">
+                            <div key={`${exercise.instanceId}-${setIndex}`} className="grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2 border-b border-border/30 px-3 py-2.5 last:border-b-0">
                               <span className="flex items-center font-data text-sm">{getSetDisplayName(set)}</span>
-                              <Input type="number" value={set.reps} onChange={(e) => updateManualSetField(exercise.instanceId, setIndex, 'reps', Number(e.target.value))} className="h-8 text-xs" placeholder="Minutes" />
-                              <Input type="number" value={formatNumericInput(set.watts)} onChange={(e) => updateManualSetField(exercise.instanceId, setIndex, 'watts', Number(e.target.value))} className="h-8 text-xs" placeholder="Watts" />
-                              <Input type="number" value={set.rest_seconds} onChange={(e) => updateManualSetField(exercise.instanceId, setIndex, 'rest_seconds', Number(e.target.value))} className="h-8 text-xs" />
+                              <Input type="number" value={set.reps} onChange={(e) => updateManualSetField(exercise.instanceId, setIndex, 'reps', Number(e.target.value))} className="h-9 text-sm" placeholder="Minutes" />
+                              <Input type="number" value={formatNumericInput(set.watts)} onChange={(e) => updateManualSetField(exercise.instanceId, setIndex, 'watts', Number(e.target.value))} className="h-9 text-sm" placeholder="Watts" />
+                              <Input type="number" value={set.rest_seconds} onChange={(e) => updateManualSetField(exercise.instanceId, setIndex, 'rest_seconds', Number(e.target.value))} className="h-9 text-sm" />
                               <div className="flex justify-end"><Button type="button" size="icon-sm" variant="ghost" onClick={() => removeSetFromManualExercise(exercise.instanceId, setIndex)} disabled={exercise.sets.length <= 1}><X className="h-3.5 w-3.5" /></Button></div>
                             </div>
                           ) : inputMode === 'level_cardio' || inputMode === 'basic_cardio' ? (
-                            <div key={`${exercise.instanceId}-${setIndex}`} className="grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2 border-b border-border/30 px-3 py-2 last:border-b-0">
+                            <div key={`${exercise.instanceId}-${setIndex}`} className="grid grid-cols-[80px_1fr_1fr_1fr_auto] gap-2 border-b border-border/30 px-3 py-2.5 last:border-b-0">
                               <span className="flex items-center font-data text-sm">{getSetDisplayName(set)}</span>
-                              <Input type="number" value={set.reps} onChange={(e) => updateManualSetField(exercise.instanceId, setIndex, 'reps', Number(e.target.value))} className="h-8 text-xs" placeholder="Minutes" />
-                              <Input type="number" value={formatNumericInput(set.machine_level)} onChange={(e) => updateManualSetField(exercise.instanceId, setIndex, 'machine_level', Number(e.target.value))} className="h-8 text-xs" placeholder="Level" />
-                              <Input type="number" value={set.rest_seconds} onChange={(e) => updateManualSetField(exercise.instanceId, setIndex, 'rest_seconds', Number(e.target.value))} className="h-8 text-xs" />
+                              <Input type="number" value={set.reps} onChange={(e) => updateManualSetField(exercise.instanceId, setIndex, 'reps', Number(e.target.value))} className="h-9 text-sm" placeholder="Minutes" />
+                              <Input type="number" value={formatNumericInput(set.machine_level)} onChange={(e) => updateManualSetField(exercise.instanceId, setIndex, 'machine_level', Number(e.target.value))} className="h-9 text-sm" placeholder="Level" />
+                              <Input type="number" value={set.rest_seconds} onChange={(e) => updateManualSetField(exercise.instanceId, setIndex, 'rest_seconds', Number(e.target.value))} className="h-9 text-sm" />
                               <div className="flex justify-end"><Button type="button" size="icon-sm" variant="ghost" onClick={() => removeSetFromManualExercise(exercise.instanceId, setIndex)} disabled={exercise.sets.length <= 1}><X className="h-3.5 w-3.5" /></Button></div>
                             </div>
                           ) : (
-                            <div
-                              key={`${exercise.instanceId}-${setIndex}`}
-                              className={getDropSetRowClass('grid grid-cols-5 gap-2 border-b border-border/30 px-3 py-2 last:border-b-0', set)}
-                            >
+                            <div key={`${exercise.instanceId}-${setIndex}`} className={getDropSetRowClass('grid grid-cols-5 gap-2 border-b border-border/30 px-3 py-2.5 last:border-b-0', set)}>
                               <span className={cn('flex items-center font-data text-sm', getDropSetLabelClass(set))}>{getSetDisplayName(set)}</span>
-                              <Input
-                                type="number"
-                                value={set.reps}
-                                onChange={(e) => updateManualSetField(exercise.instanceId, setIndex, 'reps', Number(e.target.value))}
-                                className="h-8 text-xs"
-                                placeholder={getSetMetricPlaceholder(exercise.exercise)}
-                              />
-                              <Input
-                                type="number"
-                                value={formatWorkoutWeightInput(set.weight_kg, unitSystem)}
-                                onChange={(e) => updateManualSetField(exercise.instanceId, setIndex, 'weight_kg', parseWorkoutWeightInput(e.target.value, unitSystem))}
-                                className="h-8 text-xs"
-                                placeholder={cardioExercise
-                                  ? `Incline / resistance (${weightUnitLabel})`
-                                  : isAssistedPullExercise(exercise.exercise)
-                                    ? `Assistance (${weightUnitLabel})`
-                                    : `Weight (${weightUnitLabel})`}
-                              />
-                              <Input type="number" value={set.rest_seconds} onChange={(e) => updateManualSetField(exercise.instanceId, setIndex, 'rest_seconds', Number(e.target.value))} className="h-8 text-xs" />
-                              <div className="flex justify-end">
-                                <Button type="button" size="icon-sm" variant="ghost" onClick={() => removeSetFromManualExercise(exercise.instanceId, setIndex)} disabled={exercise.sets.length <= 1}>
-                                  <X className="h-3.5 w-3.5" />
-                                </Button>
-                              </div>
+                              <Input type="number" value={set.reps} onChange={(e) => updateManualSetField(exercise.instanceId, setIndex, 'reps', Number(e.target.value))} className="h-9 text-sm" placeholder={getSetMetricPlaceholder(exercise.exercise)} />
+                              <Input type="number" value={formatWorkoutWeightInput(set.weight_kg, unitSystem)} onChange={(e) => updateManualSetField(exercise.instanceId, setIndex, 'weight_kg', parseWorkoutWeightInput(e.target.value, unitSystem))} className="h-9 text-sm" placeholder={cardioExercise ? `Incline / resistance (${weightUnitLabel})` : isAssistedPullExercise(exercise.exercise) ? `Assistance (${weightUnitLabel})` : `Weight (${weightUnitLabel})`} />
+                              <Input type="number" value={set.rest_seconds} onChange={(e) => updateManualSetField(exercise.instanceId, setIndex, 'rest_seconds', Number(e.target.value))} className="h-9 text-sm" />
+                              <div className="flex justify-end"><Button type="button" size="icon-sm" variant="ghost" onClick={() => removeSetFromManualExercise(exercise.instanceId, setIndex)} disabled={exercise.sets.length <= 1}><X className="h-3.5 w-3.5" /></Button></div>
                             </div>
                           )
                         ))}
-                        </div>
-                      </div>
-
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        <Button type="button" size="sm" variant="outline" onClick={() => addSetToManualExercise(exercise.instanceId)}>
-                          <Plus className="mr-1 h-3.5 w-3.5" />
-                          Add set
-                        </Button>
-                        {inputMode === 'strength' && (
-                          <Button type="button" size="sm" variant="outline" onClick={() => addDropSetToManualExercise(exercise.instanceId)}>
-                            <Plus className="mr-1 h-3.5 w-3.5" />
-                            Add drop set
-                          </Button>
-                        )}
                       </div>
                     </div>
-                  )
-                })}
-              </div>
-            ) : (
-              <div className="rounded-2xl border border-dashed border-border/60 px-4 py-14 text-center">
-                <p className="text-sm font-medium text-muted-foreground">No exercises added yet</p>
-                <p className="mt-1 text-xs text-muted-foreground">Search for a movement above and add what you did today.</p>
-              </div>
-            )}
-          </div>
 
-          <div className="space-y-3">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-sm font-semibold">Today&apos;s logged workouts</p>
-                <p className="text-xs text-muted-foreground">Re-open a logged workout to tweak it, or remove it if entered by mistake.</p>
-              </div>
-              <Badge variant="outline" className="mt-0.5">{todayLoggedWorkouts.length} today</Badge>
-            </div>
+                    {/* Cardio: Add set */}
+                    <div className="px-3 py-3 border-t border-border/30">
+                      <button type="button" onClick={() => addSetToManualExercise(exercise.instanceId)} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+                        <Plus className="h-3.5 w-3.5" />Add Set
+                      </button>
+                    </div>
+                  </>
+                  )}
+                  </div>
+                )
+                            })}</></div>)}
 
-            {todayLoggedWorkouts.length > 0 ? (
-              <div className="space-y-3">
-                {todayLoggedWorkouts.map((log) => {
-                  const startedTime = formatWorkoutTime(log.started_at)
-                  const finishedTime = formatWorkoutTime(log.completed_at)
-                  const durationLabel = formatWorkoutDuration(log.started_at, log.completed_at, log.duration_min)
-
-                  return (
-                  <div key={log.id} className="rounded-2xl border border-border/60 bg-card p-4">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-semibold">{log.workout.name}</p>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {log.exercises.length} exercises · {durationLabel} · {log.calories_burned_kcal || 0} kcal
-                        </p>
-                        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
-                          <span>Started: <span className="font-medium text-foreground/85">{startedTime}</span></span>
-                          <span>Finished: <span className="font-medium text-foreground/85">{finishedTime}</span></span>
-                        </div>
-                      </div>
-                      <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
-                        <Button variant="outline" size="sm" onClick={() => loadLoggedWorkoutForEdit(log.id)}>
-                          Edit
-                        </Button>
-                        <Button variant="ghost" size="sm" className="text-destructive/70 hover:text-destructive" onClick={() => removeWorkoutLog(log.id)}>
-                          Delete
-                        </Button>
-                      </div>
+              {/* Sticky bottom action bar */}
+              <div className="sticky bottom-0 z-20 -mx-4 px-4 pb-5 pt-3 bg-background/95 backdrop-blur-sm border-t border-border/50">
+                {/* Save as template expand panel */}
+                {manualAction === 'save' && (
+                  <div className="mb-3 rounded-2xl border border-border/60 bg-muted/10 p-4">
+                    <p className="text-sm font-semibold mb-0.5">Name this workout</p>
+                    <p className="text-xs text-muted-foreground mb-3">Saves as a reusable template you can start again later.</p>
+                    <Input
+                      value={manualWorkoutName}
+                      onChange={(e) => setManualWorkoutName(e.target.value)}
+                      placeholder="e.g. Upper body pump"
+                      className="mb-3"
+                    />
+                    <div className="flex gap-2">
+                      <Button variant="outline" className="flex-1" onClick={() => setManualAction('log')}>Cancel</Button>
+                      <Button variant="brand" className="flex-1 gap-2" onClick={handleLogManualWorkout}>
+                        <Trophy className="h-4 w-4" />
+                        Save &amp; Log
+                      </Button>
                     </div>
                   </div>
-                )})}
+                )}
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    className="gap-1.5 flex-1"
+                    onClick={() => { setManualSearch(''); setShowAddExerciseModal(true) }}
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add Exercise
+                  </Button>
+                  {manualAction !== 'save' && (
+                    <Button variant="brand" className="gap-1.5 flex-1" onClick={handleLogManualWorkout}>
+                      <Trophy className="h-4 w-4" />
+                      Finish Workout
+                    </Button>
+                  )}
+                </div>
+                {manualAction !== 'save' && manualExercises.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setManualAction('save')}
+                    className="mt-2 w-full flex items-center justify-center gap-1.5 text-xs font-medium text-muted-foreground/70 hover:text-foreground transition-colors border border-border/50 hover:border-border rounded-xl py-2"
+                  >
+                    <BookOpen className="h-3.5 w-3.5" />
+                    Save as workout template
+                  </button>
+                )}
               </div>
-            ) : (
-              <div className="rounded-2xl border border-dashed border-border/60 px-4 py-10 text-center">
-                <p className="text-sm font-medium text-muted-foreground">No workouts logged yet today</p>
+            </div>
+          )}
+
+          {/* Add Exercise modal — opens from the active workout bottom bar */}
+          <Dialog open={showAddExerciseModal} onOpenChange={(open) => { setShowAddExerciseModal(open); if (!open) { setManualSearch(''); setExerciseMuscleFilter('all') } }}>
+            <DialogContent className="max-h-[88vh] w-[calc(100vw-1rem)] max-w-lg overflow-hidden flex flex-col p-0 gap-0 rounded-2xl">
+              <DialogDescription className="sr-only">Search and add an exercise to your active session</DialogDescription>
+              {/* Search header */}
+              <div className="px-4 pt-4 pb-3 shrink-0">
+                <DialogTitle className="sr-only">Add Exercise</DialogTitle>
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/60" />
+                  <Input
+                    value={manualSearch}
+                    onChange={(e) => setManualSearch(e.target.value)}
+                    onKeyDown={handleManualSearchKeyDown}
+                    placeholder="Search exercises…"
+                    type="search"
+                    inputMode="search"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    autoFocus
+                    className="pl-10 h-12 rounded-xl border-border/50 bg-muted/20 focus-visible:bg-background focus-visible:border-emerald-500/50 focus-visible:ring-emerald-500/15 text-base placeholder:text-muted-foreground/50 transition-all"
+                  />
+                  {manualSearch && (
+                    <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/50 hover:text-foreground transition-colors" onClick={() => setManualSearch('')}>
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
               </div>
-            )}
-          </div>
+
+              {/* Category pills */}
+              <div className="overflow-x-auto px-4 pb-3 shrink-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                <div className="flex gap-2 min-w-max">
+                  {([['all', 'All'], ['chest', 'Chest'], ['back', 'Back'], ['quads', 'Legs'], ['shoulders', 'Shoulders'], ['biceps', 'Arms'], ['core', 'Core'], ['cardio', 'Cardio']] as const).map(([val, label]) => (
+                    <button
+                      key={val}
+                      onClick={() => setExerciseMuscleFilter(val)}
+                      className={cn(
+                        'rounded-full border px-4 py-1.5 text-sm font-medium transition-colors whitespace-nowrap',
+                        exerciseMuscleFilter === val
+                          ? 'border-emerald-500/60 bg-emerald-500/15 text-emerald-300 shadow-[0_0_0_1px_rgba(16,185,129,0.15)]'
+                          : 'border-border/50 bg-muted/10 text-muted-foreground hover:border-border hover:text-foreground hover:bg-muted/20'
+                      )}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div className="h-px bg-border/40 shrink-0 mx-4" />
+
+              {/* Content */}
+              <div className="flex-1 overflow-y-auto pb-2">
+                {manualSearch.trim().length === 0 && exerciseMuscleFilter === 'all' ? (
+                  /* Default view: split recommendations */
+                  <div className="px-4 pt-4 pb-2 space-y-4">
+                    {todaySplitExercises.length > 0 && (
+                      <div className="space-y-0.5">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/60 px-1 pb-2">
+                          {todaySplitDayType && todaySplitDayType !== 'rest' ? `${SPLIT_DAY_LABELS[todaySplitDayType]} Day — Suggested` : 'Suggested'}
+                        </p>
+                        {todaySplitExercises.map((item) => (
+                          <button key={item.id} type="button" onClick={() => addExerciseDirectly(item)} className="group flex w-full items-center gap-3.5 rounded-xl px-3 py-3 text-left transition-all hover:bg-muted/25">
+                            <div className="h-9 w-9 rounded-lg bg-muted/40 border border-border/50 flex items-center justify-center shrink-0 group-hover:border-emerald-500/30 group-hover:bg-emerald-500/8 transition-colors">
+                              <Dumbbell className="h-4 w-4 text-muted-foreground/50 group-hover:text-emerald-400/70 transition-colors" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium">{item.name}</p>
+                              <p className="mt-0.5 text-xs text-muted-foreground/60 capitalize">{item.muscle_groups.slice(0, 2).join(' · ').replace(/_/g, ' ')}</p>
+                            </div>
+                            <Plus className="h-4 w-4 text-muted-foreground/30 group-hover:text-emerald-400/70 transition-colors shrink-0" />
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {todaySplitExercises.length === 0 && (
+                      <div className="py-8 text-center">
+                        <p className="text-sm text-muted-foreground">Search or select a category above</p>
+                      </div>
+                    )}
+                  </div>
+                ) : (manualSuggestions.length > 0 || apiManualSuggestions.length > 0) ? (
+                  /* Search/filter results */
+                  <div className="px-4 pt-3 pb-2 space-y-0.5">
+                    {manualSuggestions.map((item) => (
+                      <button key={item.id} type="button" onClick={() => addExerciseDirectly(item)} className="group flex w-full items-center gap-3.5 rounded-xl px-3 py-3 text-left transition-all hover:bg-muted/25">
+                        <div className="h-9 w-9 rounded-lg bg-muted/40 border border-border/50 flex items-center justify-center shrink-0 group-hover:border-emerald-500/30 group-hover:bg-emerald-500/8 transition-colors">
+                          <Dumbbell className="h-4 w-4 text-muted-foreground/50 group-hover:text-emerald-400/70 transition-colors" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium">{item.name}</p>
+                          <p className="mt-0.5 text-xs text-muted-foreground/60 capitalize">{item.muscle_groups.slice(0, 2).join(' · ').replace(/_/g, ' ')}</p>
+                        </div>
+                        <Plus className="h-4 w-4 text-muted-foreground/30 group-hover:text-emerald-400/70 transition-colors shrink-0" />
+                      </button>
+                    ))}
+                    {apiManualSuggestions.map((item) => (
+                      <button key={item.id} type="button" onClick={() => addExerciseDirectly(item)} className="group flex w-full items-center gap-3.5 rounded-xl px-3 py-3 text-left transition-all hover:bg-muted/25">
+                        <div className="h-9 w-9 rounded-lg bg-muted/40 border border-border/50 flex items-center justify-center shrink-0 group-hover:border-emerald-500/30 group-hover:bg-emerald-500/8 transition-colors">
+                          <Dumbbell className="h-4 w-4 text-muted-foreground/50 group-hover:text-emerald-400/70 transition-colors" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium">{item.name}</p>
+                          <p className="mt-0.5 text-xs text-muted-foreground/60 capitalize">{item.muscle_groups.slice(0, 2).join(' · ').replace(/_/g, ' ')}</p>
+                        </div>
+                        <Plus className="h-4 w-4 text-muted-foreground/30 group-hover:text-emerald-400/70 transition-colors shrink-0" />
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="py-8 px-4 text-center">
+                    <p className="text-sm text-muted-foreground">No exercises match your search</p>
+                    {manualSearch.trim() && (
+                      <Button variant="outline" size="sm" className="mt-3" onClick={() => { addCustomManualExercise(); setShowAddExerciseModal(false) }}>
+                        Add &quot;{manualSearch}&quot; as custom exercise
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </div>
+            </DialogContent>
+          </Dialog>
         </TabsContent>
 
         <TabsContent value="saved" className="mt-6 space-y-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-lg font-semibold">Saved workouts</p>
-              <p className="mt-1 text-sm text-muted-foreground">Start a workout you already know, or edit it before you run it.</p>
-            </div>
-            <Button variant="outline" className="gap-2" onClick={() => { setEditingWorkout(null); setBuilderOpen(true) }}>
-              <Plus className="h-4 w-4" />
-              Create Saved Workout
-            </Button>
+          <div className="space-y-1.5">
+            <p className="text-xs text-muted-foreground">
+              {WEEK_DAY_LABELS[todayWeekDay]} · <span className="font-medium text-foreground">{todaySplitDayType ? SPLIT_DAY_LABELS[todaySplitDayType] : 'No split set'}</span>
+            </p>
+            {todayRecommendedWorkouts.length > 0 ? (
+              <TodayWorkoutBanner
+                workouts={todayRecommendedWorkouts}
+                onStart={startWorkout}
+                onPreview={setPreviewWorkout}
+              />
+            ) : (
+              <div className="rounded-2xl border border-border/60 bg-card p-4">
+                <div className="flex items-center gap-2">
+                  <Dumbbell className="h-4 w-4 text-muted-foreground" />
+                  <p className="text-sm font-semibold">Recommended for today</p>
+                </div>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  {todaySplitDayType === 'rest'
+                    ? 'Today is marked as a rest day in your split.'
+                    : todaySplitDayType
+                      ? `No workouts match your ${SPLIT_DAY_LABELS[todaySplitDayType].toLowerCase()} day yet. Save one, build one, or adjust your split.`
+                      : 'Set your training split to get workout recommendations here.'}
+                </p>
+              </div>
+            )}
           </div>
-
           {showAcftKeyInstructions && (
             <Card className="border-primary/20 bg-primary/[0.04]">
               <CardHeader className="pb-3">
@@ -5186,13 +5287,6 @@ export default function WorkoutsPage() {
 
           {accountCustomWorkouts.length > 0 && (
             <div className="space-y-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold">Your saved workouts</p>
-                  <p className="text-xs text-muted-foreground">Built by you or saved from the Log Workout tab.</p>
-                </div>
-              </div>
-
               {/* Search + filter row */}
               <div className="space-y-2">
                 <div className="flex gap-2">
@@ -5305,6 +5399,32 @@ export default function WorkoutsPage() {
         </TabsContent>
 
         <TabsContent value="premade" className="mt-6 space-y-6">
+          <div className="space-y-1.5">
+            <p className="text-xs text-muted-foreground">
+              {WEEK_DAY_LABELS[todayWeekDay]} · <span className="font-medium text-foreground">{todaySplitDayType ? SPLIT_DAY_LABELS[todaySplitDayType] : 'No split set'}</span>
+            </p>
+            {todayRecommendedWorkouts.length > 0 ? (
+              <TodayWorkoutBanner
+                workouts={todayRecommendedWorkouts}
+                onStart={startWorkout}
+                onPreview={setPreviewWorkout}
+              />
+            ) : (
+              <div className="rounded-2xl border border-border/60 bg-card p-4">
+                <div className="flex items-center gap-2">
+                  <Dumbbell className="h-4 w-4 text-muted-foreground" />
+                  <p className="text-sm font-semibold">Recommended for today</p>
+                </div>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  {todaySplitDayType === 'rest'
+                    ? 'Today is marked as a rest day in your split.'
+                    : todaySplitDayType
+                      ? `No workouts match your ${SPLIT_DAY_LABELS[todaySplitDayType].toLowerCase()} day yet. Save one, build one, or adjust your split.`
+                      : 'Set your training split to get workout recommendations here.'}
+                </p>
+              </div>
+            )}
+          </div>
           <div className="space-y-4">
             <div>
               <p className="text-lg font-semibold">Premade workouts</p>

@@ -184,6 +184,28 @@ async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit, tim
   }
 }
 
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  return await Promise.race([
+    promise,
+    new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error(message)), timeoutMs)
+    }),
+  ])
+}
+
+function isAbortError(error: unknown) {
+  return error instanceof DOMException
+    ? error.name === 'AbortError'
+    : error instanceof Error && error.name === 'AbortError'
+}
+
+function shouldUseDirectAuthFallback() {
+  if (typeof window === 'undefined') return false
+
+  const hostname = window.location.hostname
+  return hostname === 'localhost' || hostname === '127.0.0.1'
+}
+
 function normalizeProfile(profile: Partial<UserProfile> | null | undefined): UserProfile | null {
   if (!profile) return null
 
@@ -286,10 +308,17 @@ async function signInWithEmailDirect(
 ): Promise<AuthResponse> {
   const supabase = createClient()
 
-  const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-    email,
-    password,
-  })
+  const authResult = await Promise.race([
+    supabase.auth.signInWithPassword({
+      email,
+      password,
+    }),
+    new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error('Sign-in is taking longer than usual — your database may be waking up. Please try again.')), 30_000)
+    }),
+  ])
+
+  const { data: authData, error: authError } = authResult
 
   if (authError) {
     if (authError.message.toLowerCase().includes('email not confirmed')) {
@@ -398,7 +427,7 @@ export async function signInWithEmail(
         email,
         password,
       }),
-    }, 10_000)
+    }, 30_000)
 
     const { payload, isHtml } = await readJsonResponseSafely<AuthBootstrapPayload>(response)
 
@@ -422,10 +451,15 @@ export async function signInWithEmail(
 
     try {
       const supabase = createClient()
-      const result = await supabase.auth.setSession({
-        access_token: payload.session.access_token,
-        refresh_token: payload.session.refresh_token,
-      })
+      const result = await Promise.race([
+        supabase.auth.setSession({
+          access_token: payload.session.access_token,
+          refresh_token: payload.session.refresh_token,
+        }),
+        new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error('Applying the browser session timed out.')), 5_000)
+        }),
+      ])
       sessionError = result.error
     } catch (error) {
       if (!isCorruptedSessionStorageError(error)) {
@@ -436,10 +470,15 @@ export async function signInWithEmail(
       clearSupabaseBrowserSessionStorage()
 
       const supabase = createClient()
-      const result = await supabase.auth.setSession({
-        access_token: payload.session.access_token,
-        refresh_token: payload.session.refresh_token,
-      })
+      const result = await Promise.race([
+        supabase.auth.setSession({
+          access_token: payload.session.access_token,
+          refresh_token: payload.session.refresh_token,
+        }),
+        new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error('Applying the browser session timed out.')), 5_000)
+        }),
+      ])
       sessionError = result.error
     }
 
@@ -459,11 +498,29 @@ export async function signInWithEmail(
       usedFallbackProfile: !payload.profile,
     }
   } catch (error) {
-    console.warn('Server-side sign-in path failed, retrying with the direct browser auth flow.', error)
-    try {
-      if (isCorruptedSessionStorageError(error)) {
-        clearSupabaseBrowserSessionStorage()
+    if (isCorruptedSessionStorageError(error)) {
+      clearSupabaseBrowserSessionStorage()
+    }
+
+    const shouldFallbackDirectly = shouldUseDirectAuthFallback()
+
+    if (!shouldFallbackDirectly) {
+      if (isAbortError(error)) {
+        return {
+          success: false,
+          error: 'Sign-in timed out before the server finished responding. Please try again.',
+        }
       }
+
+      console.warn('Server-side sign-in path failed and direct browser fallback is disabled on this host.', error)
+      return {
+        success: false,
+        error: 'The sign-in request failed before it could finish. Please try again.',
+      }
+    }
+
+    console.warn('Server-side sign-in path failed, retrying with the direct browser auth flow on localhost only.', error)
+    try {
       return await signInWithEmailDirect(email, password)
     } catch (directError) {
       if (isCorruptedSessionStorageError(directError)) {
@@ -665,9 +722,14 @@ export async function getCurrentUser(): Promise<UserProfile | null> {
   try {
     let supabase = createClient()
 
-    let authLookup
+    let sessionData
     try {
-      authLookup = await supabase.auth.getUser()
+      const sessionLookup = await withTimeout(
+        supabase.auth.getSession(),
+        2_500,
+        'Timed out while reading the cached auth session.'
+      )
+      sessionData = sessionLookup.data
     } catch (error) {
       if (!isCorruptedSessionStorageError(error)) {
         throw error
@@ -676,18 +738,28 @@ export async function getCurrentUser(): Promise<UserProfile | null> {
       console.warn('Cached browser auth state was corrupted during auth bootstrap. Clearing it before retry.', error)
       clearSupabaseBrowserSessionStorage()
       supabase = createClient()
-      authLookup = await supabase.auth.getUser()
+      const sessionLookup = await withTimeout(
+        supabase.auth.getSession(),
+        2_500,
+        'Timed out while reading the cached auth session after clearing cached state.'
+      )
+      sessionData = sessionLookup.data
     }
 
-    const { data, error } = authLookup
-    if (!error && data.user) {
-      const fallbackUser = buildFallbackProfileFromAuthUser(data.user)
+    const accessToken = sessionData.session?.access_token
+    if (!accessToken) {
+      return null
+    }
+
+    const sessionUser = sessionData.session?.user
+    if (sessionUser) {
+      const fallbackUser = buildFallbackProfileFromAuthUser(sessionUser)
 
       const profileResult = await Promise.race([
         supabase
           .from('profiles')
           .select('*')
-          .eq('id', data.user.id)
+          .eq('id', sessionUser.id)
           .single(),
         new Promise<null>((resolve) => {
           setTimeout(() => resolve(null), 1200)
@@ -706,18 +778,16 @@ export async function getCurrentUser(): Promise<UserProfile | null> {
       return normalizeProfile(profileResult.data) ?? fallbackUser
     }
 
-    const { data: sessionData } = await supabase.auth.getSession()
-    const accessToken = sessionData.session?.access_token
-    if (!accessToken) {
-      return null
-    }
-
-    const response = await fetch('/api/auth/me', {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
+    const response = await fetchWithTimeout(
+      '/api/auth/me',
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+        cache: 'no-store',
       },
-      cache: 'no-store',
-    })
+      4_000
+    )
 
     if (!response.ok) {
       return null
@@ -726,6 +796,7 @@ export async function getCurrentUser(): Promise<UserProfile | null> {
     const { payload } = await readJsonResponseSafely<AuthBootstrapPayload>(response)
     return buildProfileFromBootstrapPayload(payload ?? {})
   } catch (error) {
+    console.warn('Unable to read the current auth user during bootstrap.', error)
     return null
   }
 }

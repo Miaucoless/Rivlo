@@ -403,10 +403,19 @@ export function SharedConversations() {
   const customWorkouts = useAppStore((state) => state.customWorkouts)
   const notifications = useAppStore((state) => state.notifications)
   const markNotificationRead = useAppStore((state) => state.markNotificationRead)
-  const [loading, setLoading] = useState(true)
+  const [conversations, setConversations] = useState<ConversationSummary[]>(() => {
+    if (isDemoMode) return getDemoConversations()
+    if (typeof window === 'undefined' || !user?.id) return []
+    return readSharedConversationCache(user.id).conversations
+  })
+  const [loading, setLoading] = useState(() => {
+    if (isDemoMode) return false
+    if (!user?.id) return false
+    if (typeof window === 'undefined') return true
+    return readSharedConversationCache(user.id).conversations.length === 0
+  })
   const [detailLoading, setDetailLoading] = useState(false)
   const [search, setSearch] = useState('')
-  const [conversations, setConversations] = useState<ConversationSummary[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [detail, setDetail] = useState<ConversationDetail | null>(null)
   const [draftMessage, setDraftMessage] = useState('')
@@ -885,11 +894,18 @@ export function SharedConversations() {
                         : 'border-border/60 bg-background/70 hover:border-border hover:bg-muted/25'
                     )}
                   >
-                    <button
-                      type="button"
+                    <div
+                      role="button"
+                      tabIndex={0}
                       onClick={(event) => {
                         event.stopPropagation()
                         openProfile(conversation.username, conversation.title)
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.stopPropagation()
+                          openProfile(conversation.username, conversation.title)
+                        }
                       }}
                       className="shrink-0 rounded-full transition-opacity hover:opacity-85"
                     >
@@ -899,21 +915,28 @@ export function SharedConversations() {
                       >
                         {!conversation.avatar_url ? conversation.title.charAt(0).toUpperCase() : null}
                       </div>
-                    </button>
+                    </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-start justify-between gap-3">
                         {conversation.username ? (
-                          <button
-                            type="button"
+                          <div
+                            role="button"
+                            tabIndex={0}
                             onClick={(event) => {
                               event.stopPropagation()
                               openProfile(conversation.username, conversation.title)
+                            }}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter' || event.key === ' ') {
+                                event.stopPropagation()
+                                openProfile(conversation.username, conversation.title)
+                              }
                             }}
                             className="min-w-0 text-left"
                           >
                             <p className="truncate text-sm font-semibold hover:text-primary">{conversation.title}</p>
                             <p className="text-xs text-muted-foreground">@{conversation.username}</p>
-                          </button>
+                          </div>
                         ) : (
                           <div className="min-w-0">
                             <p className="truncate text-sm font-semibold">{conversation.title}</p>
@@ -977,7 +1000,7 @@ export function SharedConversations() {
               </div>
             </div>
 
-            {detailLoading ? (
+            {detailLoading && !detail ? (
               <div className="flex flex-1 items-center justify-center">
                 <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
               </div>

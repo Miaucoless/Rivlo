@@ -10,6 +10,7 @@ import { Sidebar } from '@/components/dashboard/Sidebar'
 import { BottomNav } from '@/components/dashboard/BottomNav'
 import { TopBar } from '@/components/dashboard/TopBar'
 import { ExposeStore } from '@/components/ExposeStore'
+import { PwaRegistration } from '@/components/pwa/PwaRegistration'
 import { LevelUpController } from '@/components/xp/LevelUpController'
 
 import { useIsMobile } from '@/hooks/useIsMobile'
@@ -224,6 +225,7 @@ export default function DashboardLayout({
   return (
     <div className="relative flex min-h-screen overflow-x-hidden bg-background md:h-screen md:min-h-0 md:overflow-hidden">
       {process.env.NODE_ENV === 'production' ? null : <ExposeStore />}
+      <PwaRegistration />
       {/* Subtle ambient gradient */}
       <div className="pointer-events-none fixed inset-0 bg-gradient-to-br from-emerald-500/[0.03] via-transparent to-transparent" />
       <div className="pointer-events-none fixed left-1/2 top-[calc(env(safe-area-inset-top,0px)+3.85rem)] z-[55] -translate-x-1/2">

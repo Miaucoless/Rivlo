@@ -459,6 +459,14 @@ export async function saveXpCloudState(
   const { error } = await supabase
     .from('user_app_state')
     .upsert({ user_id: userId, xp: xpState, updated_at: new Date().toISOString() }, { onConflict: 'user_id' })
+  const missingXpColumn =
+    !!error &&
+    (
+      error.code === '42703' ||
+      error.message.includes('xp') ||
+      error.message.includes('schema cache')
+    )
+  if (missingXpColumn) return
   // RLS violations (42501) mean the session expired — data is safe locally.
   if (error && error.code !== '42501') throw new Error(error.message)
 }
@@ -472,9 +480,19 @@ export async function fetchXpCloudState(
     .select('xp')
     .eq('user_id', userId)
     .single()
+  const missingXpColumn =
+    !!error &&
+    (
+      error.code === '42703' ||
+      error.message.includes('xp') ||
+      error.message.includes('schema cache')
+    )
+  if (missingXpColumn) return null
   if (error || !data) return null
   const xp = (data as { xp?: unknown }).xp
   if (!xp || typeof xp !== 'object') return null
+  const xpObj = xp as Record<string, unknown>
+  if (typeof xpObj.total !== 'number') return null
   return xp as import('@/types').XpState
 }
 

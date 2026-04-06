@@ -1,5 +1,7 @@
 import { createBrowserClient } from '@supabase/ssr'
 
+let browserClient: ReturnType<typeof createBrowserClient> | null = null
+
 function extractSupabaseProjectRef(url: string): string | null {
   try {
     const u = new URL(url)
@@ -37,7 +39,11 @@ export function createClient() {
     }
   }
 
-  return createBrowserClient(
+  if (browserClient) {
+    return browserClient
+  }
+
+  browserClient = createBrowserClient(
     url,
     key,
     {
@@ -47,6 +53,8 @@ export function createClient() {
       },
     }
   )
+
+  return browserClient
 }
 
 // Type helper for auth response

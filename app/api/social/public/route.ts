@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
 
   let appStateQuery = db
     .from('user_app_state')
-    .select('user_id, social_posts, social_follows')
+    .select('user_id, social_posts, social_follows, xp')
 
   if (!includeProfiles) {
     appStateQuery = appStateQuery.limit(MAX_LIGHTWEIGHT_FEED_ROWS)
@@ -81,9 +81,22 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: profilesResp.error.message }, { status: 500 })
   }
 
+  const xpMap = new Map<string, { xp_total?: number; has_crown?: boolean }>()
+  for (const row of appStateResp.data ?? []) {
+    const userId = (row as { user_id?: string | null }).user_id
+    const xp = (row as { xp?: unknown }).xp
+    if (!userId || !xp || typeof xp !== 'object') continue
+    const xpObj = xp as Record<string, unknown>
+    xpMap.set(userId, {
+      xp_total: typeof xpObj.total === 'number' ? xpObj.total : undefined,
+      has_crown: xpObj.has_crown === true ? true : undefined,
+    })
+  }
+
   const profileMap = new Map<string, SocialPostUser>()
   for (const profile of profilesResp.data ?? []) {
     if (!profile.id || !profile.name) continue
+    const xpData = xpMap.get(profile.id)
     profileMap.set(profile.id, {
       id: profile.id,
       name: profile.name,
@@ -92,6 +105,8 @@ export async function GET(req: NextRequest) {
       banner_url: (profile as { banner_url?: string | null }).banner_url ?? undefined,
       bio: profile.bio ?? undefined,
       profile_visibility: profile.profile_visibility === 'private' ? 'private' : 'public',
+      xp_total: xpData?.xp_total,
+      has_crown: xpData?.has_crown,
     })
   }
 

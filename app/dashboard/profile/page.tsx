@@ -21,7 +21,7 @@ import { SocialPostComposerDialog } from '@/components/feed/SocialPostComposerDi
 import { SocialPostDetailDialog } from '@/components/feed/SocialPostDetailDialog'
 import { DEFAULT_SOCIAL_POSTS, buildSocialDraftFromPost, getSocialCreators } from '@/lib/social-feed'
 import { getFollowerCount, getFollowingCount, mergeSocialProfiles } from '@/lib/social-connections'
-import type { SocialPost, SocialPostUser } from '@/types'
+import type { SocialFollowRelationship, SocialPost, SocialPostUser } from '@/types'
 import { XpBadge } from '@/components/ui/XpBadge'
 import { XpProgressBar } from '@/components/xp/XpProgressBar'
 
@@ -32,6 +32,56 @@ type ProfileComment = {
   item_name: string
   item_type: string
   share_token: string | null
+}
+
+type PublicSocialPayload = {
+  posts: SocialPost[]
+  profiles: SocialPostUser[]
+  follows: SocialFollowRelationship[]
+}
+
+const SOCIAL_PUBLIC_CACHE_TTL_MS = 1000 * 60 * 3
+
+type CachedPublicSocialPayload = PublicSocialPayload & {
+  cachedAt: number
+}
+
+function getPublicSocialCacheKey(userId: string) {
+  return `rivora-social-public:${userId}:profiles`
+}
+
+function readPublicSocialCache(userId: string): PublicSocialPayload | null {
+  if (typeof window === 'undefined') return null
+
+  try {
+    const raw = window.sessionStorage.getItem(getPublicSocialCacheKey(userId))
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as Partial<CachedPublicSocialPayload> | null
+    if (!parsed || typeof parsed.cachedAt !== 'number') return null
+    if (Date.now() - parsed.cachedAt > SOCIAL_PUBLIC_CACHE_TTL_MS) return null
+
+    return {
+      posts: Array.isArray(parsed.posts) ? parsed.posts : [],
+      profiles: Array.isArray(parsed.profiles) ? parsed.profiles : [],
+      follows: Array.isArray(parsed.follows) ? parsed.follows : [],
+    }
+  } catch {
+    return null
+  }
+}
+
+function writePublicSocialCache(userId: string, payload: PublicSocialPayload) {
+  if (typeof window === 'undefined') return
+
+  try {
+    const nextPayload: CachedPublicSocialPayload = {
+      ...payload,
+      cachedAt: Date.now(),
+    }
+    window.sessionStorage.setItem(getPublicSocialCacheKey(userId), JSON.stringify(nextPayload))
+  } catch {
+    // Ignore cache write failures.
+  }
 }
 
 const DEMO_COMMENTS: ProfileComment[] = [
@@ -104,6 +154,8 @@ export default function ProfilePage() {
   const [composerEditingPostId, setComposerEditingPostId] = useState<string | null>(null)
   const [followersOpen, setFollowersOpen] = useState(false)
   const [followingOpen, setFollowingOpen] = useState(false)
+  const [remoteProfiles, setRemoteProfiles] = useState<SocialPostUser[]>([])
+  const [remoteFollows, setRemoteFollows] = useState<SocialFollowRelationship[]>([])
 
   useEffect(() => {
     setDraft({
@@ -119,6 +171,60 @@ export default function ProfilePage() {
   useEffect(() => {
     tabsListRef.current?.scrollTo({ left: 0 })
   }, [])
+
+  useEffect(() => {
+    let active = true
+
+    async function loadRemoteProfiles() {
+      if (!user?.id || isDemoMode) {
+        if (active) {
+          setRemoteProfiles([])
+          setRemoteFollows([])
+        }
+        return
+      }
+
+      const cachedPayload = readPublicSocialCache(user.id)
+      if (cachedPayload) {
+        if (!active) return
+        setRemoteProfiles(cachedPayload.profiles)
+        setRemoteFollows(cachedPayload.follows)
+        return
+      }
+
+      try {
+        const token = await getToken()
+        if (!token) return
+
+        const res = await fetch('/api/social/public?includeProfiles=1', {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store',
+        })
+
+        if (!res.ok) throw new Error('Could not load your social directory right now.')
+        const payload = await res.json() as PublicSocialPayload
+        if (!active) return
+
+        const nextPayload: PublicSocialPayload = {
+          posts: Array.isArray(payload.posts) ? payload.posts : [],
+          profiles: Array.isArray(payload.profiles) ? payload.profiles : [],
+          follows: Array.isArray(payload.follows) ? payload.follows : [],
+        }
+
+        setRemoteProfiles(nextPayload.profiles)
+        setRemoteFollows(nextPayload.follows)
+        writePublicSocialCache(user.id, nextPayload)
+      } catch (error) {
+        if (!active) return
+        console.error('Failed to load remote social profiles:', error)
+      }
+    }
+
+    void loadRemoteProfiles()
+    return () => {
+      active = false
+    }
+  }, [isDemoMode, user?.id])
 
   useEffect(() => {
     let active = true
@@ -173,7 +279,17 @@ export default function ProfilePage() {
     ...DEFAULT_SOCIAL_POSTS.filter((post) => !socialPosts.some((existing) => existing.id === post.id)),
   ], [socialPosts])
 
-  const socialProfiles = useMemo(() => mergeSocialProfiles(socialPosts, getSocialCreators(), user), [socialPosts, user])
+  const allFollows = useMemo(() => {
+    const deduped = new Map<string, SocialFollowRelationship>()
+    for (const relationship of [...socialFollows, ...remoteFollows]) {
+      deduped.set(`${relationship.followerId}:${relationship.followingId}`, relationship)
+    }
+    return Array.from(deduped.values())
+  }, [remoteFollows, socialFollows])
+  const socialProfiles = useMemo(
+    () => mergeSocialProfiles(socialPosts, [...getSocialCreators(), ...remoteProfiles], user),
+    [remoteProfiles, socialPosts, user]
+  )
   const currentSocialUser = useMemo<SocialPostUser>(() => ({
     id: user.id,
     name: user.name,
@@ -184,16 +300,16 @@ export default function ProfilePage() {
     profile_visibility: user.profile_visibility ?? 'public',
   }), [user])
   const peopleById = useMemo(() => new Map(socialProfiles.map((profile) => [profile.id, profile])), [socialProfiles])
-  const followerCount = getFollowerCount(socialFollows, user?.id ?? '')
-  const followingCount = getFollowingCount(socialFollows, user?.id ?? '')
-  const followers = useMemo(() => socialFollows
+  const followerCount = getFollowerCount(allFollows, user?.id ?? '')
+  const followingCount = getFollowingCount(allFollows, user?.id ?? '')
+  const followers = useMemo(() => allFollows
     .filter((item) => item.followingId === user?.id && item.status === 'accepted')
     .map((item) => peopleById.get(item.followerId))
-    .filter(Boolean), [peopleById, socialFollows, user?.id])
-  const following = useMemo(() => socialFollows
+    .filter(Boolean), [allFollows, peopleById, user?.id])
+  const following = useMemo(() => allFollows
     .filter((item) => item.followerId === user?.id && item.status === 'accepted')
     .map((item) => peopleById.get(item.followingId))
-    .filter(Boolean), [peopleById, socialFollows, user?.id])
+    .filter(Boolean), [allFollows, peopleById, user?.id])
   const savedPosts = useMemo(
     () => socialSavedPostIds
       .map((postId) => browseablePosts.find((post) => post.id === postId))
@@ -322,9 +438,9 @@ export default function ProfilePage() {
   return (
     <div className="space-y-6">
       <section className="space-y-5">
-        <div className="relative overflow-hidden rounded-[2rem] border border-border/50">
+        <div className="relative rounded-[2rem] border border-border/50">
           <div
-            className={`h-48 ${draft.banner_url ? 'bg-cover bg-center bg-no-repeat' : 'bg-[linear-gradient(135deg,rgba(16,185,129,0.18),rgba(20,184,166,0.08),rgba(15,23,42,0.04))]'}`}
+            className={`h-48 overflow-hidden rounded-[2rem] ${draft.banner_url ? 'bg-cover bg-center bg-no-repeat' : 'bg-[linear-gradient(135deg,rgba(16,185,129,0.18),rgba(20,184,166,0.08),rgba(15,23,42,0.04))]'}`}
             style={draft.banner_url ? { backgroundImage: `linear-gradient(180deg,rgba(15,23,42,0.08),rgba(15,23,42,0.2)), url(${draft.banner_url})` } : undefined}
           />
           <input
@@ -337,7 +453,7 @@ export default function ProfilePage() {
           />
           <label
             htmlFor="profile-banner-upload"
-            className="absolute bottom-0 right-3 z-10 inline-flex h-7 w-7 translate-y-[32%] cursor-pointer items-center justify-center rounded-full border border-border/70 bg-background/92 text-muted-foreground shadow-sm backdrop-blur transition-colors hover:bg-background"
+            className="absolute bottom-0 right-3 z-10 inline-flex h-7 w-7 translate-y-[50%] cursor-pointer items-center justify-center rounded-full border border-border/70 bg-background/92 text-muted-foreground shadow-sm backdrop-blur transition-colors hover:bg-background"
             aria-label="Change banner image"
           >
             <PencilLine className="h-3 w-3" />
@@ -392,17 +508,18 @@ export default function ProfilePage() {
               <div className="space-y-3">
                 <div>
                   <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">My Profile</p>
-                  <h1 className="mt-1 text-2xl font-semibold tracking-tight">{user.name}</h1>
+                  <div className="mt-1 flex items-center justify-between gap-3">
+                    <h1 className="text-2xl font-semibold tracking-tight">{user.name}</h1>
+                    <XpBadge totalXp={xpState.total} size="sm" />
+                  </div>
                   <p className="mt-1 text-sm text-muted-foreground">
                     @{user.username || fallbackUsername(user.name)} · Joined {format(new Date(user.created_at), 'MMMM yyyy')}
                   </p>
-                  <div className="mt-2 flex flex-col gap-2">
-                    <XpBadge totalXp={xpState.total} size="sm" />
-                    <XpProgressBar totalXp={xpState.total} />
+                  {draft.bio ? <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">{draft.bio}</p> : null}
+                  <div className="mt-2">
+                    <XpProgressBar totalXp={xpState.total} showBadge={false} />
                   </div>
                 </div>
-
-                {draft.bio ? <p className="max-w-2xl text-sm leading-6 text-muted-foreground">{draft.bio}</p> : null}
 
                 <div className="flex flex-wrap items-end gap-x-6 gap-y-3 pt-1">
                   <div className="min-w-[72px]">

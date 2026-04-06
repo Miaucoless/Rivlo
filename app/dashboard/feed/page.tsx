@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { XpBadge } from '@/components/ui/XpBadge'
 import { createClient } from '@/lib/supabase'
 import { useAppStore } from '@/store/useAppStore'
 import {
@@ -270,10 +271,10 @@ export default function FeedPage() {
   const visibleFeedPosts = activeTab === 'following' ? followingPosts : explorePosts
 
   const socialProfiles = useMemo(() => (
-    mergeSocialProfiles(allPosts, remoteProfiles, user)
+    remoteProfiles
       .filter((profile) => profile.id !== viewerId)
       .sort((a, b) => a.name.localeCompare(b.name))
-  ), [allPosts, remoteProfiles, user, viewerId])
+  ), [remoteProfiles, viewerId])
 
   const filteredPeople = useMemo(() => {
     const lookup = deferredPeopleQuery.trim().toLowerCase()
@@ -512,7 +513,7 @@ export default function FeedPage() {
   }
 
   const handleFollowAction = (profile: SocialPostUser) => {
-    const relationship = getFollowRelationship(socialFollows, viewerId, profile.id)
+    const relationship = getFollowRelationship(allFollows, viewerId, profile.id)
     if (relationship?.status === 'accepted') {
       unfollowUser(profile.id)
       toast.success(`Unfollowed @${profile.username}.`)
@@ -690,11 +691,17 @@ export default function FeedPage() {
                     {!hasAnyPosts && !isDemoMode ? 'No posts yet' : 'No matches'}
                   </Badge>
                   <CardTitle className="mt-4 text-lg">
-                    {!hasAnyPosts && !isDemoMode ? 'The feed is empty right now' : 'Nothing matches this view yet'}
+                    {!hasAnyPosts && !isDemoMode
+                      ? activeTab === 'following'
+                        ? 'Be the first out of your friends to post!'
+                        : 'The feed is empty right now'
+                      : 'Nothing matches this view yet'}
                   </CardTitle>
                   <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
                     {!hasAnyPosts && !isDemoMode
-                      ? 'Posts only show up here once you or people in your network actually share them. Create one to get the feed started.'
+                      ? activeTab === 'following'
+                        ? 'Once you or someone you follow shares a post, it will show up here. Start the momentum with the first one.'
+                        : 'Posts only show up here once you or people in your network actually share them. Create one to get the feed started.'
                       : activeTab === 'following'
                       ? 'Follow some people in the People tab and their posts will show up here.'
                       : 'Try a different search or clear some filters to open the feed back up.'}
@@ -702,7 +709,7 @@ export default function FeedPage() {
                 </div>
               ) : (
                 <>
-                  <motion.div layout className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                     <AnimatePresence mode="popLayout">
                       {visiblePosts.map((post) => (
                         <SocialPostCard
@@ -717,7 +724,7 @@ export default function FeedPage() {
                         />
                       ))}
                     </AnimatePresence>
-                  </motion.div>
+                  </div>
 
                   <div ref={sentinelRef} className="h-8" />
 
@@ -793,10 +800,13 @@ export default function FeedPage() {
                         <div className="min-w-0 flex-1">
                           <button
                             type="button"
-                            className="block truncate text-left text-sm font-semibold leading-5 hover:underline"
+                            className="block min-w-0 text-left hover:underline"
                             onClick={() => router.push(buildSocialProfileHref(profile))}
                           >
-                            {profile.name}
+                            <span className="flex min-w-0 items-center gap-2">
+                              <span className="truncate text-sm font-semibold leading-5">{profile.name}</span>
+                              <XpBadge totalXp={profile.xp_total ?? 0} size="sm" className="shrink-0" />
+                            </span>
                           </button>
                           <div className="flex items-center gap-2">
                             <span className="truncate text-xs text-muted-foreground">@{profile.username}</span>

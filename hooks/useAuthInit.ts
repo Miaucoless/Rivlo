@@ -5,8 +5,8 @@ import { clearAuthBootstrapUser, getCurrentUser, readAuthBootstrapUser } from '@
 export function useAuthInit() {
   const { setUser, restoreUserDataBackup, applyDashboardBootstrap, isAuthenticated, isDemoMode, user, logout } = useAppStore()
   const hasAuthenticatedUser = isAuthenticated && !!user
-  const [loading, setLoading] = useState(() => !(hasAuthenticatedUser && isDemoMode))
-  const [initialized, setInitialized] = useState(() => hasAuthenticatedUser && isDemoMode)
+  const [loading, setLoading] = useState(() => !hasAuthenticatedUser)
+  const [initialized, setInitialized] = useState(() => hasAuthenticatedUser)
 
   useEffect(() => {
     let cancelled = false
