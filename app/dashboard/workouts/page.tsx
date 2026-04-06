@@ -2854,7 +2854,7 @@ function ActiveWorkoutModal({
                   workoutLogs={workoutLogs}
                   journalEntries={journalEntries}
                   completedSetsThisSession={exercise.sets
-                    .filter((s) => s.completed)
+                    .filter((s) => s.completed && (s.actual_reps ?? 0) > 0)
                     .map((s) => ({ actual_reps: s.actual_reps ?? 0, weight_kg: s.actual_weight ?? 0 }))}
                   onApply={(weight_kg) => applyWeightToAllSets(exerciseIndex, weight_kg)}
                 />
