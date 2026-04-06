@@ -2846,7 +2846,7 @@ function ActiveWorkoutModal({
                   </Button>
                 )}
               </div>
-              {!isCardioExercise(exercise.exercise) && (
+              {getExerciseSetMetric(exercise.exercise) === 'reps' && (
                 <ProgressionSuggestion
                   exerciseId={exercise.exercise.id}
                   exerciseName={exercise.exercise.name}
@@ -2856,6 +2856,7 @@ function ActiveWorkoutModal({
                   completedSetsThisSession={exercise.sets
                     .filter((s) => s.completed && (s.actual_reps ?? 0) > 0)
                     .map((s) => ({ actual_reps: s.actual_reps ?? 0, weight_kg: s.actual_weight ?? 0 }))}
+                  unitSystem={unitSystem}
                   onApply={(weight_kg) => applyWeightToAllSets(exerciseIndex, weight_kg)}
                 />
               )}

@@ -12,6 +12,7 @@ interface Props {
   workoutLogs: WorkoutLog[]
   journalEntries?: JournalEntry[]
   completedSetsThisSession?: Array<{ actual_reps: number; weight_kg: number }>
+  unitSystem?: 'imperial' | 'metric'
   onApply: (weight_kg: number) => void
 }
 
@@ -24,6 +25,7 @@ export function ProgressionSuggestion({
   workoutLogs,
   journalEntries,
   completedSetsThisSession,
+  unitSystem,
   onApply,
 }: Props) {
   const { suggestion, shouldShow, dismiss, apply } = useProgressionSuggestion({
@@ -33,6 +35,7 @@ export function ProgressionSuggestion({
     workoutLogs,
     journalEntries,
     completedSetsThisSession,
+    unitSystem,
   })
 
   if (!shouldShow || !suggestion) return null

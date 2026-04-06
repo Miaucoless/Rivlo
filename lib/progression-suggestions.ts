@@ -22,6 +22,7 @@ export interface SuggestionInput {
   workoutLogs: WorkoutLog[]
   journalEntries?: JournalEntry[]
   completedSetsThisSession?: Array<{ actual_reps: number; weight_kg: number }>
+  unitSystem?: 'imperial' | 'metric'
 }
 
 const UPPER_BODY: MuscleGroup[] = ['chest', 'back', 'shoulders', 'biceps', 'triceps', 'forearms']
@@ -38,6 +39,12 @@ export function getWeightIncrement(muscleGroups: MuscleGroup[]): number {
 /** Rounds a weight to the nearest 2.5 kg. */
 function roundTo2_5(kg: number): number {
   return Math.round(kg / 2.5) * 2.5
+}
+
+/** Formats a weight value in the user's preferred unit system. */
+function formatWeight(kg: number, unitSystem?: 'imperial' | 'metric'): string {
+  if (unitSystem === 'imperial') return `${Math.round(kg * 2.20462)} lb`
+  return `${kg} kg`
 }
 
 /** Returns the best set (highest actual_reps, then highest weight, then lowest set_number). */
@@ -65,7 +72,7 @@ function getExerciseLogs(exerciseId: string, workoutLogs: WorkoutLog[]) {
     const exEntry = log.exercises.find((ex) => ex.exercise_id === exerciseId)
     if (!exEntry) continue
     const validSets = exEntry.sets.filter(
-      (s) => typeof s.actual_reps === 'number' && typeof s.weight_kg === 'number'
+      (s) => typeof s.actual_reps === 'number' && typeof s.weight_kg === 'number' && s.weight_kg > 0 && s.actual_reps > 0
     )
     if (validSets.length > 0) {
       relevant.push({ date: log.date, sets: validSets as Array<{ set_number: number; actual_reps: number; weight_kg: number }> })
@@ -77,7 +84,7 @@ function getExerciseLogs(exerciseId: string, workoutLogs: WorkoutLog[]) {
 
 /** Returns the highest-priority suggestion for this exercise, or null if nothing to show. */
 export function getProgressionSuggestion(input: SuggestionInput): ProgressionSuggestion | null {
-  const { exerciseId, muscleGroups, workoutLogs, journalEntries, completedSetsThisSession } = input
+  const { exerciseId, muscleGroups, workoutLogs, journalEntries, completedSetsThisSession, unitSystem } = input
   const logs = getExerciseLogs(exerciseId, workoutLogs)
   const increment = getWeightIncrement(muscleGroups)
 
@@ -113,7 +120,7 @@ export function getProgressionSuggestion(input: SuggestionInput): ProgressionSug
       const suggested = roundTo2_5(lastWeight + increment)
       return {
         type: 'streak',
-        text: `10+ reps two sessions running — ready for ${suggested} kg`,
+        text: `10+ reps two sessions running — ready for ${formatWeight(suggested, unitSystem)}`,
         suggestedWeight_kg: suggested,
       }
     }
@@ -124,7 +131,7 @@ export function getProgressionSuggestion(input: SuggestionInput): ProgressionSug
     const suggested = roundTo2_5(lastWeight + increment)
     return {
       type: 'increase',
-      text: `Hit ${lastBest.actual_reps} reps last time — try ${suggested} kg × 8`,
+      text: `Hit ${lastBest.actual_reps} reps last time — try ${formatWeight(suggested, unitSystem)} × 8`,
       suggestedWeight_kg: suggested,
     }
   }
@@ -138,7 +145,7 @@ export function getProgressionSuggestion(input: SuggestionInput): ProgressionSug
     const weeks = Math.floor(daysSince / 7)
     return {
       type: 'absence',
-      text: `First time logging this in ${weeks} week${weeks !== 1 ? 's' : ''} — consider ${suggested} kg to ease back in`,
+      text: `First time logging this in ${weeks} week${weeks !== 1 ? 's' : ''} — consider ${formatWeight(suggested, unitSystem)} to ease back in`,
       suggestedWeight_kg: suggested,
     }
   }
@@ -161,7 +168,7 @@ export function getProgressionSuggestion(input: SuggestionInput): ProgressionSug
     const suggested = roundTo2_5(Math.max(0, lastWeight - increment))
     return {
       type: 'decrease',
-      text: `Only hit ${lastBest.actual_reps} reps last time — try ${suggested} kg to reach 8`,
+      text: `Only hit ${lastBest.actual_reps} reps last time — try ${formatWeight(suggested, unitSystem)} to reach 8`,
       suggestedWeight_kg: suggested,
     }
   }
