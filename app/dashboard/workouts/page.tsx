@@ -1943,22 +1943,31 @@ function ActiveWorkoutModal({
   const [exercises, setExercises] = useState<ActiveExercise[]>(() => {
     if (initialExercises && initialExercises.length > 0) return initialExercises
     const base = createActiveExercisesFromWorkout(workout)
-    // Pre-fill actual_weight from the most recent log of this same workout
-    const lastLog = [...workoutLogs]
-      .filter((l) => l.workout_id === workout.id)
-      .sort((a, b) => b.date.localeCompare(a.date))[0]
-    if (!lastLog) return base
+    // Build a map: exerciseId → most-recent sets with non-zero weight, across all logs
+    const lastSetsById = new Map<string, Array<{ weight_kg: number }>>()
+    const lastSetsByName = new Map<string, Array<{ weight_kg: number }>>()
+    const sorted = [...workoutLogs].sort((a, b) => b.date.localeCompare(a.date))
+    for (const log of sorted) {
+      for (const ex of log.exercises) {
+        const validSets = ex.sets.filter((s) => s.weight_kg > 0)
+        if (validSets.length === 0) continue
+        if (!lastSetsById.has(ex.exercise_id)) lastSetsById.set(ex.exercise_id, validSets)
+        const nameKey = ex.exercise_name.toLowerCase()
+        if (!lastSetsByName.has(nameKey)) lastSetsByName.set(nameKey, validSets)
+      }
+    }
+    const hasAnyHistory = lastSetsById.size > 0 || lastSetsByName.size > 0
+    if (!hasAnyHistory) return base
     return base.map((exercise) => {
-      const loggedEx =
-        lastLog.exercises.find((e) => e.exercise_id === exercise.exercise.id) ??
-        lastLog.exercises.find((e) => e.exercise_name.toLowerCase() === exercise.exercise.name.toLowerCase())
-      if (!loggedEx) return exercise
+      const lastSets =
+        lastSetsById.get(exercise.exercise.id) ??
+        lastSetsByName.get(exercise.exercise.name.toLowerCase())
+      if (!lastSets) return exercise
       return {
         ...exercise,
         sets: exercise.sets.map((set, i) => {
-          const loggedSet = loggedEx.sets[i]
-          if (!loggedSet || loggedSet.weight_kg <= 0) return set
-          return { ...set, actual_weight: loggedSet.weight_kg }
+          const ref = lastSets[i] ?? lastSets[lastSets.length - 1]
+          return { ...set, actual_weight: ref.weight_kg }
         }),
       }
     })
