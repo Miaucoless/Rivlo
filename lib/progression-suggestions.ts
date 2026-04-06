@@ -110,7 +110,7 @@ export function getProgressionSuggestion(input: SuggestionInput): ProgressionSug
   if (logs.length >= 2) {
     const prevBest = getBestSet(logs[1].sets)
     if (lastBest.actual_reps >= 10 && prevBest && prevBest.actual_reps >= 10) {
-      const suggested = lastWeight + increment
+      const suggested = roundTo2_5(lastWeight + increment)
       return {
         type: 'streak',
         text: `10+ reps two sessions running — ready for ${suggested} kg`,
@@ -121,7 +121,7 @@ export function getProgressionSuggestion(input: SuggestionInput): ProgressionSug
 
   // ── Priority 3: Increase Weight (≥10 reps last session)
   if (lastBest.actual_reps >= 10) {
-    const suggested = lastWeight + increment
+    const suggested = roundTo2_5(lastWeight + increment)
     return {
       type: 'increase',
       text: `Hit ${lastBest.actual_reps} reps last time — try ${suggested} kg × 8`,
@@ -158,7 +158,7 @@ export function getProgressionSuggestion(input: SuggestionInput): ProgressionSug
 
   // ── Priority 6: Decrease Weight (≤5 reps last session)
   if (lastBest.actual_reps <= 5) {
-    const suggested = Math.max(0, lastWeight - increment)
+    const suggested = roundTo2_5(Math.max(0, lastWeight - increment))
     return {
       type: 'decrease',
       text: `Only hit ${lastBest.actual_reps} reps last time — try ${suggested} kg to reach 8`,
