@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { WorkoutTimerBar } from '@/components/workout/WorkoutTimerBar'
 import { WorkoutTimerStrip } from '@/components/workout/WorkoutTimerStrip'
+import { ProgressionSuggestion } from '@/components/workout/ProgressionSuggestion'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -1892,6 +1893,7 @@ function ActiveWorkoutModal({
   metProfile,
   unitSystem,
   workoutLogs,
+  journalEntries,
   initialExercises,
   initialStartedAt,
   onClose,
@@ -1905,6 +1907,7 @@ function ActiveWorkoutModal({
   metProfile: MetProfile
   unitSystem: UnitSystem
   workoutLogs: import('@/types').WorkoutLog[]
+  journalEntries: import('@/types').JournalEntry[]
   initialExercises?: ActiveExercise[]
   initialStartedAt?: string | null
   onClose: () => void
@@ -2227,6 +2230,19 @@ function ActiveWorkoutModal({
 
   const removeExerciseFromLiveWorkout = (exerciseIndex: number) => {
     setExercises((current) => current.filter((_, currentIndex) => currentIndex !== exerciseIndex))
+  }
+
+  const applyWeightToAllSets = (exerciseIndex: number, weight_kg: number) => {
+    setExercises((current) =>
+      current.map((exercise, currentExerciseIndex) =>
+        currentExerciseIndex === exerciseIndex
+          ? {
+              ...exercise,
+              sets: exercise.sets.map((set) => ({ ...set, actual_weight: weight_kg })),
+            }
+          : exercise
+      )
+    )
   }
 
   const toggleSet = (exerciseIndex: number, setIndex: number) => {
@@ -2830,6 +2846,19 @@ function ActiveWorkoutModal({
                   </Button>
                 )}
               </div>
+              {!isCardioExercise(exercise.exercise) && (
+                <ProgressionSuggestion
+                  exerciseId={exercise.exercise.id}
+                  exerciseName={exercise.exercise.name}
+                  muscleGroups={exercise.exercise.muscle_groups}
+                  workoutLogs={workoutLogs}
+                  journalEntries={journalEntries}
+                  completedSetsThisSession={exercise.sets
+                    .filter((s) => s.completed)
+                    .map((s) => ({ actual_reps: s.actual_reps ?? 0, weight_kg: s.actual_weight ?? 0 }))}
+                  onApply={(weight_kg) => applyWeightToAllSets(exerciseIndex, weight_kg)}
+                />
+              )}
             </div>
           })}
         </div>
@@ -5275,11 +5304,6 @@ export default function WorkoutsPage() {
                       <X className="w-3.5 h-3.5" />
                     </button>
                   )}
-                  {premadeSearch && (
-                    <button className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => setPremadeSearch('')}>
-                      <X className="h-4 w-4" />
-                    </button>
-                  )}
                 </div>
 
                 {/* Filters dropdown */}
@@ -5379,6 +5403,7 @@ export default function WorkoutsPage() {
             metProfile={getMetProfile(user)}
             unitSystem={unitSystem}
             workoutLogs={workoutLogs}
+            journalEntries={journalEntries}
             initialExercises={activeWorkoutSession?.workout.id === runningWorkout.id ? activeWorkoutSession.exercises : undefined}
             initialStartedAt={activeWorkoutSession?.workout.id === runningWorkout.id ? activeWorkoutSession.startedAt : null}
             onClose={pauseRunningWorkout}
@@ -5482,6 +5507,7 @@ export default function WorkoutsPage() {
             metProfile={getMetProfile(user)}
             unitSystem={unitSystem}
             workoutLogs={workoutLogs}
+            journalEntries={journalEntries}
             initialExercises={editingLoggedWorkoutSession.exercises}
             onClose={closeLoggedWorkoutEditor}
             onPause={closeLoggedWorkoutEditor}
