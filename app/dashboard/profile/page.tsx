@@ -458,11 +458,8 @@ export default function ProfilePage() {
           >
             <PencilLine className="h-3 w-3" />
           </label>
-        </div>
-        <div className="relative -mt-10 space-y-6 px-1 pb-1 pt-0 sm:px-2">
-          <div className="flex flex-col gap-5">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-              <div className="relative h-20 w-20 shrink-0">
+          <div className="absolute bottom-0 left-4 z-20 translate-y-1/2">
+            <div className="relative h-20 w-20 shrink-0">
                 <input
                   id="profile-avatar-upload"
                   ref={avatarInputRef}
@@ -503,9 +500,12 @@ export default function ProfilePage() {
                     </svg>
                   </span>
                 )}
-              </div>
-
-              <div className="space-y-3">
+            </div>
+          </div>
+        </div>
+        <div className="relative space-y-6 px-1 pb-1 pt-10 sm:px-2">
+          <div className="flex flex-col gap-5">
+            <div className="space-y-3">
                 <div>
                   <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">My Profile</p>
                   <div className="mt-1 flex items-center justify-between gap-3">
@@ -544,7 +544,6 @@ export default function ProfilePage() {
                   </button>
                 </div>
               </div>
-            </div>
           </div>
 
           <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">

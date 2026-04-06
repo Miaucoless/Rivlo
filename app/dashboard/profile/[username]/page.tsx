@@ -397,22 +397,24 @@ export default function PublicProfilePage() {
       </Button>
 
       <section className="space-y-5">
-        <div
-          className={`h-48 overflow-hidden rounded-[2rem] border border-border/50 ${profileUser?.banner_url ? 'bg-cover bg-center bg-no-repeat' : 'bg-[linear-gradient(135deg,rgba(16,185,129,0.2),rgba(20,184,166,0.08),rgba(15,23,42,0.04))]'}`}
-          style={profileUser?.banner_url ? { backgroundImage: `linear-gradient(180deg,rgba(15,23,42,0.08),rgba(15,23,42,0.2)), url(${profileUser.banner_url})` } : undefined}
-        />
-        <div className="relative -mt-10 space-y-6 px-1 pb-1 pt-0 sm:px-2">
+        <div className="relative">
+          <div
+            className={`h-48 overflow-hidden rounded-[2rem] border border-border/50 ${profileUser?.banner_url ? 'bg-cover bg-center bg-no-repeat' : 'bg-[linear-gradient(135deg,rgba(16,185,129,0.2),rgba(20,184,166,0.08),rgba(15,23,42,0.04))]'}`}
+            style={profileUser?.banner_url ? { backgroundImage: `linear-gradient(180deg,rgba(15,23,42,0.08),rgba(15,23,42,0.2)), url(${profileUser.banner_url})` } : undefined}
+          />
+          <div className="absolute bottom-0 left-4 z-10 translate-y-1/2">
+            <AvatarWithBadge
+              src={profileUser.avatar_url ?? undefined}
+              name={profileUser.name}
+              size={80}
+              hasCrown={profileUser.has_crown}
+              className="border-4 border-background shadow-lg"
+            />
+          </div>
+        </div>
+        <div className="relative space-y-6 px-1 pb-1 pt-10 sm:px-2">
           <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-              <AvatarWithBadge
-                src={profileUser.avatar_url ?? undefined}
-                name={profileUser.name}
-                size={80}
-                hasCrown={profileUser.has_crown}
-                className="border-4 border-background shadow-lg"
-              />
-
-              <div className="space-y-3">
+            <div className="space-y-3">
                 <div>
                   <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">Profile</p>
                   <h1 className="mt-1 text-2xl font-semibold tracking-tight">{profileUser.name}</h1>
@@ -450,7 +452,6 @@ export default function PublicProfilePage() {
                     <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Following</p>
                   </button>
                 </div>
-              </div>
             </div>
 
             {currentUserMatches ? null : (

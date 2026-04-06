@@ -2494,7 +2494,6 @@ function ActiveWorkoutModal({
       createLiveExerciseFromTemplate(created),
     ])
     setExerciseSearch('')
-    toast.success(`${item.name} added to this workout.`)
   }
 
   const addCustomExerciseToLiveWorkout = () => {
@@ -2506,7 +2505,6 @@ function ActiveWorkoutModal({
       createLiveExerciseFromTemplate(created),
     ])
     setExerciseSearch('')
-    toast.success('Custom exercise added to this workout.')
   }
 
   const setAllSetsCompletion = (completed: boolean) => {
@@ -3034,8 +3032,6 @@ function ActiveWorkoutModal({
           })}
         </div>
 
-        {renderExerciseAdder('Need one more?', 'Add another exercise here without scrolling back to the top.')}
-
         {!isEditMode && (
           <>
             <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
@@ -3491,7 +3487,6 @@ export default function WorkoutsPage() {
         scopes: ['workouts', 'templates', 'journal'],
         profile: 'default',
       })
-      toast.success('Loaded older workout history.')
     } catch {
       toast.error('Could not load older workout history.')
     } finally {
@@ -3572,9 +3567,6 @@ export default function WorkoutsPage() {
   }
 
   const pauseRunningWorkout = () => {
-    if (runningWorkout) {
-      toast.success('Workout paused. You can continue anytime.')
-    }
     setRunningWorkout(null)
   }
 
@@ -3586,7 +3578,6 @@ export default function WorkoutsPage() {
   const discardActiveWorkoutSession = () => {
     setRunningWorkout(null)
     setActiveWorkoutSession(null)
-    toast.success('Paused workout cleared.')
   }
 
   const handleActiveSessionExercisesChange = useCallback((exercises: ActiveExercise[], startedAt?: string | null) => {
@@ -3806,7 +3797,6 @@ export default function WorkoutsPage() {
     if (!pendingExercise) return
     setManualExercises((current) => [...current, pendingExercise])
     setPendingExercise(null)
-    toast.success(`${pendingExercise.exercise.name} added to today's workout.`)
   }
 
   const addExerciseDirectly = (item: ExerciseLibraryItem) => {
@@ -3814,7 +3804,6 @@ export default function WorkoutsPage() {
     setManualExercises((current) => [...current, newExercise])
     setManualSearch('')
     setShowAddExerciseModal(false)
-    toast.success(`${item.name} added.`)
   }
 
   const handleManualSearchKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
@@ -4137,7 +4126,7 @@ export default function WorkoutsPage() {
     })
   }
 
-  const closeLoggedWorkoutEditor = (options?: { silent?: boolean }) => {
+  const closeLoggedWorkoutEditor = () => {
     setEditingLoggedWorkoutId(null)
     setEditingLoggedWorkoutSession(null)
     setManualAction('log')
@@ -4149,9 +4138,6 @@ export default function WorkoutsPage() {
     setWorkoutStarted(false)
     setSessionStartedAt(null)
     setSessionPausedAt(null)
-    if (!options?.silent) {
-      toast.success('Closed workout editor.')
-    }
   }
 
   const loadLoggedWorkoutForEdit = (logId: string) => {
@@ -4167,7 +4153,6 @@ export default function WorkoutsPage() {
       log: target,
       exercises: createActiveExercisesFromWorkoutLog(target),
     })
-    toast.success('Opened completed workout editor.')
   }
 
   const handleSaveWorkout = async (workout: Workout) => {
@@ -4240,19 +4225,20 @@ export default function WorkoutsPage() {
             <div>
               <h2 className="font-display text-xl sm:text-3xl font-bold tracking-tight">Workouts</h2>
             </div>
-            <div className="flex flex-wrap items-center justify-end gap-2">
+            <div className="flex items-center gap-2">
               <Button
                 type="button"
                 variant="outline"
-                className="h-11 rounded-full border-emerald-500/35 bg-emerald-500/8 px-4 text-sm font-semibold text-emerald-300 hover:border-emerald-400/45 hover:bg-emerald-500/12 hover:text-emerald-200"
+                className="h-9 rounded-full border-emerald-500/35 bg-emerald-500/8 px-3 text-sm font-semibold text-emerald-300 hover:border-emerald-400/45 hover:bg-emerald-500/12 hover:text-emerald-200"
                 onClick={openSplitDialog}
               >
-                <Zap className="mr-2 h-4 w-4" />
+                <Zap className="mr-1.5 h-4 w-4" />
                 <span className="truncate">{splitPillLabel}</span>
               </Button>
-              <Button variant="outline" className="h-11 gap-2 rounded-full px-4" onClick={() => { setEditingWorkout(null); setBuilderOpen(true) }}>
+              <Button variant="outline" className="h-9 gap-1.5 rounded-full px-3" onClick={() => { setEditingWorkout(null); setBuilderOpen(true) }}>
                 <Plus className="h-4 w-4" />
-                Create Saved Workout
+                <span className="hidden sm:inline">Create Saved Workout</span>
+                <span className="sm:hidden">New</span>
               </Button>
             </div>
           </div>
@@ -4401,18 +4387,6 @@ export default function WorkoutsPage() {
           {!isActiveWorkout ? (
             /* ── PRE-WORKOUT MODE ── */
             <div className="space-y-6 pt-1">
-              {/* Split selector pill */}
-              <div className="flex items-center justify-between">
-                <button
-                  type="button"
-                  onClick={openSplitDialog}
-                  className="flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/8 px-3 py-1.5 text-xs font-semibold text-emerald-300 transition-colors hover:border-emerald-400/45 hover:bg-emerald-500/12 hover:text-emerald-200"
-                >
-                  <Zap className="h-3 w-3" />
-                  {splitPillLabel}
-                </button>
-              </div>
-
               {/* Primary CTA */}
               <Button
                 variant="brand"
@@ -4672,12 +4646,15 @@ export default function WorkoutsPage() {
                           >
                             <div className="flex items-center gap-2 mb-1.5">
                               <p className="text-sm font-semibold truncate">{log.workout.name}</p>
-                              {isLogToday && <span className="shrink-0 rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-400 uppercase tracking-wide">Today</span>}
+                              {isLogToday
+                                ? <span className="shrink-0 rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-400 uppercase tracking-wide">Today</span>
+                                : <span className="shrink-0 text-[10px] text-muted-foreground">{dateLabel}</span>
+                              }
                             </div>
-                            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                            <div className="flex items-center gap-2.5 text-xs text-muted-foreground">
                               <span className="flex items-center gap-1">
                                 <Dumbbell className="h-3 w-3 shrink-0" />
-                                {log.exercises.length} exercise{log.exercises.length !== 1 ? 's' : ''}
+                                {log.exercises.length} ex
                               </span>
                               <span className="flex items-center gap-1">
                                 <BookOpen className="h-3 w-3 shrink-0" />
@@ -4689,11 +4666,11 @@ export default function WorkoutsPage() {
                               </span>
                             </div>
                           </button>
-                          <div className="flex items-center gap-3 shrink-0">
-                            <span className="text-xs text-muted-foreground">{dateLabel}</span>
+                          <div className="flex items-center gap-2 shrink-0">
                             <Button size="sm" variant="outline" className="gap-1.5 h-8 px-3 text-xs" onClick={() => startWorkoutFromLog(log)}>
                               <Play className="w-3 h-3" />
-                              Start Again
+                              <span className="hidden sm:inline">Start Again</span>
+                              <span className="sm:hidden">Start</span>
                             </Button>
                             <button type="button" onClick={() => setExpandedLogId(isExpanded ? null : log.id)} className="p-1 rounded-md hover:bg-muted/40 transition-colors">
                               {isExpanded ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" /> : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />}
@@ -4726,18 +4703,18 @@ export default function WorkoutsPage() {
                                         <p className="text-xs font-medium">{exercise.exercise.name}</p>
                                         <p className="text-[10px] text-muted-foreground">{exercise.sets.length} set{exercise.sets.length !== 1 ? 's' : ''}</p>
                                       </div>
-                                      <div className="mt-2 flex flex-wrap gap-1.5">
+                                      <div className="mt-2 space-y-1.5">
                                         {exercise.sets.map((set, setIndex) => (
-                                          <span
+                                          <div
                                             key={`${log.id}-${exercise.exercise.id}-${set.set_number}-${set.drop_set_index ?? 'base'}-${setIndex}`}
                                             className={cn(
-                                              'inline-flex items-center gap-1 rounded-full border border-border/40 bg-background/70 px-2 py-1 text-[10px] text-muted-foreground',
+                                              'flex items-center justify-between gap-3 rounded-lg border border-border/40 bg-background/70 px-2.5 py-1.5 text-[11px] text-muted-foreground',
                                               set.set_type === 'drop' && 'border-primary/25 text-primary/80',
                                             )}
                                           >
                                             <span className="font-medium">{getSetDisplayName(set)}</span>
-                                            <span>{formatLoggedWorkoutSetSummary(set, exercise.exercise, unitSystem)}</span>
-                                          </span>
+                                            <span className="text-right">{formatLoggedWorkoutSetSummary(set, exercise.exercise, unitSystem)}</span>
+                                          </div>
                                         ))}
                                       </div>
                                     </div>
@@ -5648,7 +5625,7 @@ export default function WorkoutsPage() {
         )}
       </Dialog>
 
-      <Dialog open={!!editingLoggedWorkoutSession} onOpenChange={(open) => { if (!open) closeLoggedWorkoutEditor({ silent: true }) }}>
+      <Dialog open={!!editingLoggedWorkoutSession} onOpenChange={(open) => { if (!open) closeLoggedWorkoutEditor() }}>
         {editingLoggedWorkoutSession && (
           <ActiveWorkoutModal
             workout={editingLoggedWorkoutSession.log.workout}
@@ -5715,7 +5692,7 @@ export default function WorkoutsPage() {
               })
 
               toast.success('Workout updated without changing the original logged time.')
-              closeLoggedWorkoutEditor({ silent: true })
+              closeLoggedWorkoutEditor()
             }}
           />
         )}

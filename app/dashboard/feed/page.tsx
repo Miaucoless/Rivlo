@@ -40,7 +40,6 @@ import { SocialPostComposerDialog } from '@/components/feed/SocialPostComposerDi
 import { categorizeIngredient, estimatePrice } from '@/lib/grocery-generator'
 import { buildSocialProfileHref, canViewPost, getFollowRelationship, mergeSocialProfiles } from '@/lib/social-connections'
 import type { CalendarReminder, SocialFeedFilter, SocialFeedSort, SocialFollowRelationship, SocialPost, SocialPostDraft, SocialPostUser } from '@/types'
-import { toast } from 'sonner'
 
 const FEED_BATCH_SIZE = 6
 const SOCIAL_PUBLIC_CACHE_TTL_MS = 1000 * 60 * 3
@@ -181,7 +180,7 @@ export default function FeedPage() {
         return
       }
 
-      const includeProfiles = activeTab === 'people'
+      const includeProfiles = true
       const cachedPayload = readPublicSocialCache(viewerId, includeProfiles)
       if (cachedPayload) {
         if (!active) return
@@ -437,7 +436,6 @@ export default function FeedPage() {
       }
 
       incrementSocialPostStats(activePost.id, { used: 1 })
-      toast.success('Meal added to your account.')
     } else {
       const workingPost: SocialPost = {
         ...activePost,
@@ -474,7 +472,6 @@ export default function FeedPage() {
       }
 
       incrementSocialPostStats(activePost.id, { used: 1 })
-      toast.success('Workout added to your account.')
     }
 
     setActionMode(null)
@@ -501,7 +498,6 @@ export default function FeedPage() {
     requestAnimationFrame(() => {
       window.scrollTo({ top: 0, behavior: 'smooth' })
     })
-    toast.success(isEditing ? 'Post updated.' : 'Post published to your feed.')
   }
 
   const handleEditPost = () => {
@@ -516,21 +512,14 @@ export default function FeedPage() {
     const relationship = getFollowRelationship(allFollows, viewerId, profile.id)
     if (relationship?.status === 'accepted') {
       unfollowUser(profile.id)
-      toast.success(`Unfollowed @${profile.username}.`)
       return
     }
     if (relationship?.status === 'pending') {
       cancelFollowRequest(profile.id)
-      toast.success(`Canceled follow request to @${profile.username}.`)
       return
     }
 
-    const nextStatus = requestToFollowUser(profile)
-    if (nextStatus === 'accepted') {
-      toast.success(`Now following @${profile.username}.`)
-    } else if (nextStatus === 'pending') {
-      toast.success(`Follow request sent to @${profile.username}.`)
-    }
+    requestToFollowUser(profile)
   }
 
   const handleDeletePost = () => {
@@ -546,7 +535,6 @@ export default function FeedPage() {
       const nextQuery = nextParams.toString()
       router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false })
     }
-    toast.success('Post deleted.')
   }
 
   return (
@@ -774,7 +762,7 @@ export default function FeedPage() {
               ) : (
                 <ul className="divide-y divide-border/50">
                   {filteredPeople.map((profile) => {
-                    const relationship = getFollowRelationship(socialFollows, viewerId, profile.id)
+                    const relationship = getFollowRelationship(allFollows, viewerId, profile.id)
                     const isFollowing = relationship?.status === 'accepted'
                     const isPending = relationship?.status === 'pending'
                     return (
