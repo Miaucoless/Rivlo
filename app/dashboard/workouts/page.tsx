@@ -5,9 +5,9 @@ import React from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, Reorder, useDragControls } from 'framer-motion'
 import {
-  ArrowLeft, BookOpen, Check, CheckCircle, ChevronDown, ChevronUp, Circle, Copy, Dumbbell, Eye, Loader2, Pause, Pencil, Play, PlayCircle, Plus, Search,
+  ArrowLeft, BookOpen, Check, CheckCircle, ChevronDown, ChevronUp, Circle, Copy, Dumbbell, Eye, GripVertical, Loader2, Pause, Pencil, Play, PlayCircle, Plus, Search,
   SlidersHorizontal, Sparkles, Trash2, Trophy, X, MessageSquareText, Zap,
 } from 'lucide-react'
 import { WorkoutTimerBar } from '@/components/workout/WorkoutTimerBar'
@@ -1207,6 +1207,21 @@ function SavedWorkoutCard({
         itemData={workout as unknown as Record<string, unknown>}
       />
     </div>
+  )
+}
+
+function DraggableManualExerciseCard({
+  exercise,
+  children,
+}: {
+  exercise: EditableWorkoutExercise
+  children: (dragHandleProps: { onPointerDown: (e: React.PointerEvent) => void }) => React.ReactNode
+}) {
+  const controls = useDragControls()
+  return (
+    <Reorder.Item value={exercise} dragListener={false} dragControls={controls} className="list-none">
+      {children({ onPointerDown: (e) => controls.start(e) })}
+    </Reorder.Item>
   )
 }
 
@@ -4829,7 +4844,12 @@ export default function WorkoutsPage() {
                   <p className="text-xs text-muted-foreground/50 mt-1 max-w-[200px]">Tap &ldquo;Add Exercise&rdquo; below to start building your session</p>
                 </div>
               ) : (
-              <div className="space-y-4 py-4 pb-32"><>{manualExercises.map((exercise) => {
+              <Reorder.Group
+                axis="y"
+                values={manualExercises}
+                onReorder={setManualExercises}
+                className="space-y-4 py-4 pb-32 list-none p-0 m-0"
+              ><>{manualExercises.map((exercise) => {
                 const cardioExercise = isCardioExercise(exercise.exercise)
                 const inputMode = getExerciseInputMode(exercise.exercise)
                 const lastSummary = getLastLoggedSummary(exercise.exercise.id, workoutLogs, unitSystem)
@@ -4838,9 +4858,19 @@ export default function WorkoutsPage() {
                   -1
                 )
                 return (
-                  <div key={exercise.instanceId} className="rounded-2xl border border-border/60 bg-card overflow-hidden">
+                  <DraggableManualExerciseCard key={exercise.instanceId} exercise={exercise}>
+                    {({ onPointerDown }) => (
+                  <div className="rounded-2xl border border-border/60 bg-card overflow-hidden">
                     {/* Card header */}
                     <div className="px-4 pt-4 pb-3 flex items-start justify-between gap-3">
+                      <button
+                        type="button"
+                        onPointerDown={onPointerDown}
+                        className="cursor-grab touch-none text-muted-foreground/30 hover:text-muted-foreground/60 active:cursor-grabbing shrink-0"
+                        aria-label="Drag to reorder"
+                      >
+                        <GripVertical className="h-4 w-4" />
+                      </button>
                       <div className="min-w-0">
                         <p className="text-base font-semibold text-emerald-400 truncate">{exercise.exercise.name}</p>
                         {lastSummary ? (
@@ -5032,8 +5062,10 @@ export default function WorkoutsPage() {
                   </>
                   )}
                   </div>
+                    )}
+                  </DraggableManualExerciseCard>
                 )
-                            })}</></div>)}
+                            })}</></Reorder.Group>)}
 
               {/* Sticky bottom action bar */}
               <div className="sticky bottom-0 z-20 -mx-4 px-4 pb-5 pt-3 bg-background/95 backdrop-blur-sm border-t border-border/50">
