@@ -3272,6 +3272,7 @@ export default function WorkoutsPage() {
 
   const [manualSearch, setManualSearch] = useState('')
   const [loadingOlderHistory, setLoadingOlderHistory] = useState(false)
+  const [historyLimit, setHistoryLimit] = useState(6)
   const [manualAction, setManualAction] = useState<'log' | 'save'>('log')
   const [showAddExerciseModal, setShowAddExerciseModal] = useState(false)
   const [workoutStarted, setWorkoutStarted] = useState(false)
@@ -3479,19 +3480,8 @@ export default function WorkoutsPage() {
       .slice(0, 8)
   }, [todaySplitDayType])
 
-  const loadOlderWorkoutHistory = async () => {
-    setLoadingOlderHistory(true)
-    try {
-      await syncNow({
-        force: true,
-        scopes: ['workouts', 'templates', 'journal'],
-        profile: 'default',
-      })
-    } catch {
-      toast.error('Could not load older workout history.')
-    } finally {
-      setLoadingOlderHistory(false)
-    }
+  const loadOlderWorkoutHistory = () => {
+    setHistoryLimit((prev) => prev + 6)
   }
   const averageDurationByWorkoutId = useMemo(() => {
     const stats = new Map<string, { total: number; count: number }>()
@@ -3519,6 +3509,7 @@ export default function WorkoutsPage() {
       const parsed = JSON.parse(rawSession) as PersistedActiveWorkoutSession
       if (!parsed?.workout || !Array.isArray(parsed.exercises)) return
       setActiveWorkoutSession(parsed)
+      setRunningWorkout(parsed.workout)
     } catch {
       window.localStorage.removeItem(ACTIVE_WORKOUT_SESSION_KEY)
     }
@@ -4238,7 +4229,7 @@ export default function WorkoutsPage() {
               <Button variant="outline" className="h-9 gap-1.5 rounded-full px-3" onClick={() => { setEditingWorkout(null); setBuilderOpen(true) }}>
                 <Plus className="h-4 w-4" />
                 <span className="hidden sm:inline">Create Saved Workout</span>
-                <span className="sm:hidden">New</span>
+                <span className="sm:hidden">Build Workout</span>
               </Button>
             </div>
           </div>
@@ -4619,15 +4610,15 @@ export default function WorkoutsPage() {
                   <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                     {workoutLogs.length > 0 ? 'Recent Workouts' : 'No history yet'}
                   </p>
-                  {workoutLogs.length > 0 && (
-                    <button type="button" onClick={() => void loadOlderWorkoutHistory()} className="text-[11px] font-medium text-emerald-400 transition-colors hover:text-emerald-300 disabled:opacity-50" disabled={loadingOlderHistory}>
-                      {loadingOlderHistory ? 'Loading…' : 'Load older'}
+                  {workoutLogs.length > historyLimit && (
+                    <button type="button" onClick={loadOlderWorkoutHistory} className="text-[11px] font-medium text-emerald-400 transition-colors hover:text-emerald-300">
+                      Load older
                     </button>
                   )}
                 </div>
 
                 {workoutLogs.length > 0 ? (
-                  workoutLogs.slice().sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 6).map((log) => {
+                  workoutLogs.slice().sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, historyLimit).map((log) => {
                     const totalSets = log.exercises.reduce((s, e) => s + e.sets.length, 0)
                     const isLogToday = log.date === getTodayISO()
                     const isExpanded = expandedLogId === log.id
