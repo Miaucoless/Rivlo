@@ -11,6 +11,12 @@ import { XpBadge } from '@/components/ui/XpBadge'
 import { AvatarWithBadge } from '@/components/ui/AvatarWithBadge'
 import { Card, CardContent } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { PeopleDialog } from '@/components/feed/PeopleDialog'
 import { SocialPostCard } from '@/components/feed/SocialPostCard'
 import { SocialPostDetailDialog } from '@/components/feed/SocialPostDetailDialog'
@@ -455,15 +461,31 @@ export default function PublicProfilePage() {
             </div>
 
             {currentUserMatches ? null : (
-              <Button onClick={handleFollow} className="rounded-full md:mt-2">
-                {relationship?.status === 'accepted'
-                  ? 'Following'
-                  : relationship?.status === 'pending'
+              relationship?.status === 'accepted' ? (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" className="rounded-full md:mt-2">
+                      Following
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      className="text-destructive focus:text-destructive"
+                      onClick={() => unfollowUser(profileUser.id)}
+                    >
+                      Unfollow
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : (
+                <Button onClick={handleFollow} className="rounded-full md:mt-2">
+                  {relationship?.status === 'pending'
                     ? 'Requested'
                     : profileUser.profile_visibility === 'private'
                       ? 'Request Follow'
                       : 'Follow'}
-              </Button>
+                </Button>
+              )
             )}
           </div>
         </div>
