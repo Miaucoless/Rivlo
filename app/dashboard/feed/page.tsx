@@ -11,6 +11,12 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { XpBadge } from '@/components/ui/XpBadge'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { createClient } from '@/lib/supabase'
 import { useAppStore } from '@/store/useAppStore'
 import {
@@ -809,9 +815,21 @@ export default function FeedPage() {
 
                         <div className="flex-shrink-0">
                           {isFollowing ? (
-                            <Button variant="outline" size="sm" className="rounded-full" onClick={() => handleFollowAction(profile)}>
-                              Following
-                            </Button>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="outline" size="sm" className="rounded-full">
+                                  Following
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem
+                                  className="text-destructive focus:text-destructive"
+                                  onClick={() => handleFollowAction(profile)}
+                                >
+                                  Unfollow
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           ) : isPending ? (
                             <Button variant="outline" size="sm" className="rounded-full" onClick={() => handleFollowAction(profile)}>
                               Requested
