@@ -4833,6 +4833,10 @@ export default function WorkoutsPage() {
                 const cardioExercise = isCardioExercise(exercise.exercise)
                 const inputMode = getExerciseInputMode(exercise.exercise)
                 const lastSummary = getLastLoggedSummary(exercise.exercise.id, workoutLogs, unitSystem)
+                const lastCompletedSetIndex = exercise.sets.reduce(
+                  (last, set, i) => (set.completed ? i : last),
+                  -1
+                )
                 return (
                   <div key={exercise.instanceId} className="rounded-2xl border border-border/60 bg-card overflow-hidden">
                     {/* Card header */}
@@ -4911,7 +4915,7 @@ export default function WorkoutsPage() {
                                   <X className="h-3.5 w-3.5" />
                                 </button>
                               </div>
-                              {set.completed && (
+                              {set.completed && setIndex === lastCompletedSetIndex && (
                                 <div className={cn('px-4 py-2 border-t border-border/20 flex items-center gap-3', isActiveRest ? 'bg-emerald-500/[0.04]' : 'bg-transparent')}>
                                   {isActiveRest ? (
                                     <>
