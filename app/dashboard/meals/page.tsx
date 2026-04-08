@@ -1137,6 +1137,7 @@ function MealEditorModal({
   initialMealType,
   editingMeal,
   editingSavedMeal,
+  addToTodayMeal,
   onSave,
   onSaveTemplate,
   onOpenScanner,
@@ -1146,12 +1147,13 @@ function MealEditorModal({
   initialMealType: MealType | null
   editingMeal: MealLogEntry | null
   editingSavedMeal: SavedMealTemplate | null
+  addToTodayMeal: SavedMealTemplate | null
   onSave: (data: Omit<MealLogEntry, 'id'>) => void
   onSaveTemplate: (meal: Omit<SavedMealTemplate, 'id' | 'updated_at'>, existingId?: string) => void
   onOpenScanner?: () => void
 }) {
   const { savedMeals, customRecipes, mealEntries } = useAppStore()
-  const isMealTypeLocked = initialMealType !== null && !editingMeal && !editingSavedMeal
+  const isMealTypeLocked = initialMealType !== null && !editingMeal && !editingSavedMeal && !addToTodayMeal
   const recipeLibrary = useRecipeLibrary(open)
   const [foodCatalog, setFoodCatalog] = useKnownFoodCatalog(open)
   const allRecipes = useMemo(() => [...customRecipes, ...recipeLibrary], [customRecipes, recipeLibrary])
@@ -1706,6 +1708,25 @@ function MealEditorModal({
 
   useEffect(() => {
     if (!open) return
+    if (addToTodayMeal) {
+      setSource('manual')
+      setMealType(addToTodayMeal.meal_type)
+      setManualMealName(addToTodayMeal.name)
+      setManualCalories(String(addToTodayMeal.macros.calories))
+      setManualProtein(String(addToTodayMeal.macros.protein_g))
+      setManualCarbs(String(addToTodayMeal.macros.carbs_g))
+      setManualFat(String(addToTodayMeal.macros.fat_g))
+      setManualItems(
+        addToTodayMeal.items.map((item) => ({
+          id: `ing-${Date.now()}-${Math.random()}`,
+          name: item.matched_name,
+          amount: item.amount ?? 1,
+          unit: item.unit,
+          macros: item.macros ?? { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 },
+        }))
+      )
+      return
+    }
     if (editingSavedMeal) {
       setSource('manual')
       setMealType(editingSavedMeal.meal_type)
@@ -1869,7 +1890,7 @@ function MealEditorModal({
       setManualItems([])
       setManualSaveAsTemplate(false)
     }
-  }, [editingMeal, editingSavedMeal, initialMealType, open])
+  }, [editingMeal, editingSavedMeal, addToTodayMeal, initialMealType, open])
 
   useEffect(() => {
     setSavedMealMultiplier('1')
@@ -2104,6 +2125,31 @@ function MealEditorModal({
             },
           ]
 
+      if (addToTodayMeal) {
+        onSave({
+          meal_type: mealType,
+          name: finalName,
+          macros: finalMacros,
+          time: format(new Date(), 'h:mm a'),
+          recipe: null,
+          meal_items: manualItems.map((item) => ({
+            name: item.name,
+            macros: {
+              calories: item.macros.calories,
+              protein_g: item.macros.protein_g ?? 0,
+              carbs_g: item.macros.carbs_g ?? 0,
+              fat_g: item.macros.fat_g ?? 0,
+            },
+            amount: item.amount,
+            unit: item.unit,
+          })),
+          entry_source: 'saved',
+          saved_meal_template_id: addToTodayMeal.id,
+        })
+        onOpenChange(false)
+        return
+      }
+
       if (editingSavedMeal) {
         const ingredientItems = savedMealIngredients.map((ing) => ({
           input: ing.name,
@@ -2308,7 +2354,7 @@ function MealEditorModal({
         )}
         <DialogHeader className={!editingMeal && !editingSavedMeal && onOpenScanner ? 'pl-16 pr-8' : 'pr-8'}>
           <DialogTitle>
-            {editingSavedMeal ? 'Edit saved meal' : editingMeal ? 'Edit meal entry' : 'Add meal entry'}
+            {addToTodayMeal ? 'Customize & Add' : editingSavedMeal ? 'Edit saved meal' : editingMeal ? 'Edit meal entry' : 'Add meal entry'}
           </DialogTitle>
         </DialogHeader>
 
@@ -2963,7 +3009,7 @@ function MealEditorModal({
               </div>
               )}
 
-              {!editingSavedMeal && (
+              {!editingSavedMeal && !addToTodayMeal && (
                 <button
                   type="button"
                   onClick={() => setManualSaveAsTemplate((value) => !value)}
@@ -4068,6 +4114,8 @@ export default function MealsPage() {
   const [editingMeal, setEditingMeal] = useState<MealLogEntry | null>(null)
   const [editingSavedMeal, setEditingSavedMeal] = useState<SavedMealTemplate | null>(null)
   const [editSavedMealOpen, setEditSavedMealOpen] = useState(false)
+  const [addToTodayMealOpen, setAddToTodayMealOpen] = useState(false)
+  const [addToTodayMealSource, setAddToTodayMealSource] = useState<SavedMealTemplate | null>(null)
   const [savedMealTargets, setSavedMealTargets] = useState<Partial<Record<string, MealType>>>({})
   const [expandedSavedMeals, setExpandedSavedMeals] = useState<Record<string, boolean>>({})
   const [savedMealSearchText, setSavedMealSearchText] = useState('')
@@ -4780,6 +4828,17 @@ export default function MealsPage() {
                         <Button variant="brand" size="sm" className="gap-1.5 text-xs h-8 shrink-0" onClick={() => handleAddSavedMealToToday(meal)}>
                           <Plus className="w-3 h-3" />
                           Add
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-xs h-8 shrink-0"
+                          onClick={() => {
+                            setAddToTodayMealSource({ ...meal, meal_type: savedMealTargets[meal.id] ?? meal.meal_type })
+                            setAddToTodayMealOpen(true)
+                          }}
+                        >
+                          Edit & Add
                         </Button>
                         <Button variant="outline" size="sm" className="text-xs h-8 shrink-0" onClick={() => openPublishComposerForSavedMeal(meal)}>
                           Post
@@ -5734,6 +5793,7 @@ export default function MealsPage() {
         initialMealType={editorMealType}
         editingMeal={editingMeal}
         editingSavedMeal={null}
+        addToTodayMeal={null}
         onSave={handleSaveMeal}
         onSaveTemplate={handleSaveTemplate}
         onOpenScanner={() => {
@@ -5747,6 +5807,20 @@ export default function MealsPage() {
         onOpenChange={setEditSavedMealOpen}
         meal={editingSavedMeal}
         onSave={handleSaveTemplate}
+      />
+
+      <MealEditorModal
+        open={addToTodayMealOpen}
+        onOpenChange={(open) => {
+          setAddToTodayMealOpen(open)
+          if (!open) setAddToTodayMealSource(null)
+        }}
+        initialMealType={addToTodayMealSource?.meal_type ?? null}
+        editingMeal={null}
+        editingSavedMeal={null}
+        addToTodayMeal={addToTodayMealSource}
+        onSave={handleSaveMeal}
+        onSaveTemplate={handleSaveTemplate}
       />
     </div>
   )
