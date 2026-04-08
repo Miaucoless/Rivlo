@@ -114,6 +114,8 @@ export const EXERCISE_CLASSIFICATIONS: Record<string, ExerciseClassification> = 
   'lib-spider-curl':               { primary_type: 'strength' },
   'lib-reverse-curl':              { primary_type: 'strength' },
   'lib-cross-body-hammer-curl':    { primary_type: 'strength', modifiers: ['unilateral', 'alternating'] },
+  'lib-bayesian-curl-bilateral':   { primary_type: 'strength' },
+  'lib-bayesian-curl-unilateral':  { primary_type: 'strength', modifiers: ['unilateral'] },
 
   // ── Triceps ───────────────────────────────────────────────────────────────
   'lib-triceps-pushdown':              { primary_type: 'strength' },
