@@ -178,21 +178,17 @@ export default function DashboardLayout({
       setIsPullRefreshing(true)
       setPullDistance(PULL_TO_REFRESH_THRESHOLD)
 
-      void (async () => {
-        try {
-          await syncNow({ force: true, scopes: routeScopes, profile: routeProfile })
-          startTransition(() => {
-            router.refresh()
-          })
-        } finally {
-          pullRefreshingRef.current = false
-          if (!cancelled) {
-            setIsPullRefreshing(false)
-            setPullDistance(0)
-          }
-          pullDistanceRef.current = 0
-        }
-      })()
+      // Fire sync in background — don't block the UI on it
+      void syncNow({ force: true, scopes: routeScopes, profile: routeProfile })
+      startTransition(() => {
+        router.refresh()
+      })
+      pullRefreshingRef.current = false
+      if (!cancelled) {
+        setIsPullRefreshing(false)
+        setPullDistance(0)
+      }
+      pullDistanceRef.current = 0
     }
 
     window.addEventListener('touchstart', handleTouchStart, { passive: true })

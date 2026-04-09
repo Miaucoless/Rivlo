@@ -58,6 +58,7 @@ interface ActiveSet extends WorkoutSet {
 }
 
 interface ActiveExercise {
+  instanceId: string
   exercise: WorkoutExercise['exercise']
   sets: ActiveSet[]
 }
@@ -577,8 +578,26 @@ function getDropSetLabelClass(set: Pick<WorkoutSet, 'set_type'>) {
   )
 }
 
+function createExerciseInstanceId(prefix = 'exercise') {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return `${prefix}-${crypto.randomUUID()}`
+  }
+
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+}
+
+function ensureActiveExercisesHaveInstanceIds(
+  exercises: Array<Omit<ActiveExercise, 'instanceId'> & Partial<Pick<ActiveExercise, 'instanceId'>>>
+): ActiveExercise[] {
+  return exercises.map((exercise) => ({
+    ...exercise,
+    instanceId: exercise.instanceId ?? createExerciseInstanceId('active'),
+  }))
+}
+
 function createActiveExercisesFromWorkout(workout: Workout): ActiveExercise[] {
   return workout.exercises.map((exercise) => ({
+    instanceId: createExerciseInstanceId('active'),
     exercise: exercise.exercise,
     sets: exercise.sets.map((set) => ({
       ...set,
@@ -622,6 +641,7 @@ function createActiveExercisesFromWorkoutLog(log: WorkoutLog): ActiveExercise[] 
       createCustomExercise(exerciseName).exercise
 
     return {
+      instanceId: createExerciseInstanceId('active'),
       exercise: {
         ...exercise,
         set_metric: exercise.set_metric ?? templateExercise?.exercise.set_metric ?? inferExerciseSetMetric(exercise),
@@ -1215,6 +1235,21 @@ function DraggableManualExerciseCard({
   children,
 }: {
   exercise: EditableWorkoutExercise
+  children: (dragHandleProps: { onPointerDown: (e: React.PointerEvent) => void }) => React.ReactNode
+}) {
+  const controls = useDragControls()
+  return (
+    <Reorder.Item value={exercise} dragListener={false} dragControls={controls} className="list-none">
+      {children({ onPointerDown: (e) => controls.start(e) })}
+    </Reorder.Item>
+  )
+}
+
+function DraggableActiveExerciseCard({
+  exercise,
+  children,
+}: {
+  exercise: ActiveExercise
   children: (dragHandleProps: { onPointerDown: (e: React.PointerEvent) => void }) => React.ReactNode
 }) {
   const controls = useDragControls()
@@ -2068,7 +2103,7 @@ function ActiveWorkoutModal({
 }) {
   const isEditMode = mode === 'edit-log'
   const lastSessionSyncRef = useRef<{ exercises: ActiveExercise[]; startedAt: string | null }>({
-    exercises: initialExercises ?? [],
+    exercises: initialExercises ? ensureActiveExercisesHaveInstanceIds(initialExercises) : [],
     startedAt: isEditMode ? (lockedTiming?.startedAt ?? null) : (initialStartedAt ?? null),
   })
   // Build a lookup of most recent performance per exercise id
@@ -2089,7 +2124,7 @@ function ActiveWorkoutModal({
     return map
   }, [workoutLogs, workout.id])
   const [exercises, setExercises] = useState<ActiveExercise[]>(() => {
-    if (initialExercises && initialExercises.length > 0) return initialExercises
+    if (initialExercises && initialExercises.length > 0) return ensureActiveExercisesHaveInstanceIds(initialExercises)
     const base = createActiveExercisesFromWorkout(workout)
     // Build a map: exerciseId → most-recent sets with non-zero weight, across all logs
     const lastSetsById = new Map<string, Array<{ weight_kg: number }>>()
@@ -2165,7 +2200,7 @@ function ActiveWorkoutModal({
 
   useEffect(() => {
     if (initialExercises && initialExercises.length > 0) {
-      setExercises(initialExercises)
+      setExercises(ensureActiveExercisesHaveInstanceIds(initialExercises))
       setStartedAt(isEditMode ? (lockedTiming?.startedAt ?? null) : (initialStartedAt ?? null))
       return
     }
@@ -2480,6 +2515,7 @@ function ActiveWorkoutModal({
       lastPerformance[historyKeyByName]?.sets
 
     return {
+      instanceId: createExerciseInstanceId('active'),
       exercise: template.exercise,
       sets: template.sets.map((set, setIndex) => {
         const previousSet = previousSets?.[setIndex] ?? previousSets?.[previousSets.length - 1]
@@ -2801,86 +2837,104 @@ function ActiveWorkoutModal({
           isEditMode ? 'Adjust this completed workout with extra movements if you need to.' : 'Search and drop a movement into this live workout.'
         )}
 
-        <div className="space-y-4">
+        <Reorder.Group
+          axis="y"
+          values={exercises}
+          onReorder={setExercises}
+          className="space-y-4 list-none m-0 p-0"
+        >
           {exercises.map((exercise, exerciseIndex) => {
             const inputMode = getExerciseInputMode(exercise.exercise)
             const prevData = lastPerformance[exercise.exercise.id] || lastPerformance[`name:${exercise.exercise.name}`]
-            return <div key={`${exercise.exercise.id}-${exerciseIndex}`} className="rounded-2xl border border-border/60 bg-card p-4">
-              <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold">{exercise.exercise.name}</p>
-                  <p className="text-xs text-muted-foreground">{exercise.exercise.equipment}</p>
-                  <button
-                    type="button"
-                    onClick={() => setPreviewExercise(exercise.exercise)}
-                    className="mt-1 flex items-center gap-1 text-[11px] text-primary/70 hover:text-primary transition-colors"
-                  >
-                    <PlayCircle className="h-3 w-3" />
-                    How to do this
-                  </button>
-                  {prevData && prevData.sets.length > 0 && (
-                    <p className="mt-1 text-[11px] text-muted-foreground/70 truncate">
-                      Last:{' '}
-                      {prevData.sets.map((s, si) => {
-                        const w = s.weight_kg > 0
-                          ? ` @ ${unitSystem === 'imperial' ? Math.round(s.weight_kg * 2.205) : s.weight_kg} ${unitSystem === 'imperial' ? 'lb' : 'kg'}`
-                          : ''
-                        return `${s.actual_reps}${w}${si < prevData.sets.length - 1 ? ' · ' : ''}`
-                      })}
-                    </p>
-                  )}
-                </div>
-                <div className="flex flex-wrap items-center gap-1">
-                  <Select
-                    value={getExerciseSetMetric(exercise.exercise)}
-                    onValueChange={(value) => updateLiveExerciseSetMetric(exerciseIndex, value as ExerciseSetMetric)}
-                  >
-                    <SelectTrigger className="h-8 w-[110px] text-xs">
-                      <SelectValue placeholder="Metric" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {SET_METRIC_OPTIONS.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={() => moveExercise(exerciseIndex, 'up')}
-                    disabled={exerciseIndex === 0}
-                    aria-label="Move exercise up"
-                  >
-                    <ChevronUp className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={() => moveExercise(exerciseIndex, 'down')}
-                    disabled={exerciseIndex === exercises.length - 1}
-                    aria-label="Move exercise down"
-                  >
-                    <ChevronDown className="h-3.5 w-3.5" />
-                  </Button>
-                  <Badge variant="outline" className="capitalize shrink-0">{exercise.exercise.difficulty}</Badge>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    className="text-destructive/70 hover:text-destructive"
-                    onClick={() => removeExerciseFromLiveWorkout(exerciseIndex)}
-                    aria-label="Delete exercise from this workout"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              </div>
+            return (
+              <DraggableActiveExerciseCard key={exercise.instanceId} exercise={exercise}>
+                {({ onPointerDown }) => (
+                  <div className="rounded-2xl border border-border/60 bg-card p-4">
+                    <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="flex min-w-0 items-start gap-3">
+                        <button
+                          type="button"
+                          onPointerDown={onPointerDown}
+                          className="cursor-grab touch-none text-muted-foreground/30 hover:text-muted-foreground/60 active:cursor-grabbing shrink-0"
+                          aria-label="Drag to reorder exercise"
+                        >
+                          <GripVertical className="h-4 w-4" />
+                        </button>
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold">{exercise.exercise.name}</p>
+                          <p className="text-xs text-muted-foreground">{exercise.exercise.equipment}</p>
+                          <button
+                            type="button"
+                            onClick={() => setPreviewExercise(exercise.exercise)}
+                            className="mt-1 flex items-center gap-1 text-[11px] text-primary/70 hover:text-primary transition-colors"
+                          >
+                            <PlayCircle className="h-3 w-3" />
+                            How to do this
+                          </button>
+                          {prevData && prevData.sets.length > 0 && (
+                            <p className="mt-1 text-[11px] text-muted-foreground/70 truncate">
+                              Last:{' '}
+                              {prevData.sets.map((s, si) => {
+                                const w = s.weight_kg > 0
+                                  ? ` @ ${unitSystem === 'imperial' ? Math.round(s.weight_kg * 2.205) : s.weight_kg} ${unitSystem === 'imperial' ? 'lb' : 'kg'}`
+                                  : ''
+                                return `${s.actual_reps}${w}${si < prevData.sets.length - 1 ? ' · ' : ''}`
+                              })}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1">
+                        <Select
+                          value={getExerciseSetMetric(exercise.exercise)}
+                          onValueChange={(value) => updateLiveExerciseSetMetric(exerciseIndex, value as ExerciseSetMetric)}
+                        >
+                          <SelectTrigger className="h-8 w-[110px] text-xs">
+                            <SelectValue placeholder="Metric" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {SET_METRIC_OPTIONS.map((option) => (
+                              <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() => moveExercise(exerciseIndex, 'up')}
+                          disabled={exerciseIndex === 0}
+                          aria-label="Move exercise up"
+                        >
+                          <ChevronUp className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() => moveExercise(exerciseIndex, 'down')}
+                          disabled={exerciseIndex === exercises.length - 1}
+                          aria-label="Move exercise down"
+                        >
+                          <ChevronDown className="h-3.5 w-3.5" />
+                        </Button>
+                        <Badge variant="outline" className="capitalize shrink-0">{exercise.exercise.difficulty}</Badge>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          className="text-destructive/70 hover:text-destructive"
+                          onClick={() => removeExerciseFromLiveWorkout(exerciseIndex)}
+                          aria-label="Delete exercise from this workout"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </div>
 
-              <div className="space-y-2 overflow-hidden">
+                    <div className="space-y-2 overflow-hidden">
                 {inputMode === 'treadmill' ? (
                   <div className="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 px-3 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
                     <span>Set</span>
@@ -3010,42 +3064,45 @@ function ActiveWorkoutModal({
                     </div>
                   )
                 ))}
-              </div>
+                    </div>
 
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Button type="button" size="sm" variant="outline" onClick={() => addSetToExercise(exerciseIndex)}>
-                  <Plus className="mr-1 h-3.5 w-3.5" />
-                  Add set
-                </Button>
-                {inputMode === 'strength' && (
-                  <Button type="button" size="sm" variant="outline" onClick={() => addDropSetToExercise(exerciseIndex)}>
-                    <Plus className="mr-1 h-3.5 w-3.5" />
-                    Add drop set
-                  </Button>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Button type="button" size="sm" variant="outline" onClick={() => addSetToExercise(exerciseIndex)}>
+                        <Plus className="mr-1 h-3.5 w-3.5" />
+                        Add set
+                      </Button>
+                      {inputMode === 'strength' && (
+                        <Button type="button" size="sm" variant="outline" onClick={() => addDropSetToExercise(exerciseIndex)}>
+                          <Plus className="mr-1 h-3.5 w-3.5" />
+                          Add drop set
+                        </Button>
+                      )}
+                    </div>
+                    {getExerciseSetMetric(exercise.exercise) === 'reps' && (
+                      <ProgressionSuggestion
+                        exerciseId={exercise.exercise.id}
+                        exerciseName={exercise.exercise.name}
+                        muscleGroups={exercise.exercise.muscle_groups}
+                        equipment={exercise.exercise.equipment}
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        primaryType={(exercise.exercise as any).primary_type}
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        modifiers={(exercise.exercise as any).modifiers}
+                        workoutLogs={workoutLogs}
+                        journalEntries={journalEntries}
+                        completedSetsThisSession={exercise.sets
+                          .filter((s) => s.completed && (s.actual_reps ?? 0) > 0)
+                          .map((s) => ({ actual_reps: s.actual_reps ?? 0, weight_kg: s.actual_weight ?? 0 }))}
+                        unitSystem={unitSystem}
+                        onApply={(weight_kg) => applyWeightToAllSets(exerciseIndex, weight_kg)}
+                      />
+                    )}
+                  </div>
                 )}
-              </div>
-              {getExerciseSetMetric(exercise.exercise) === 'reps' && (
-                <ProgressionSuggestion
-                  exerciseId={exercise.exercise.id}
-                  exerciseName={exercise.exercise.name}
-                  muscleGroups={exercise.exercise.muscle_groups}
-                  equipment={exercise.exercise.equipment}
-                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                  primaryType={(exercise.exercise as any).primary_type}
-                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                  modifiers={(exercise.exercise as any).modifiers}
-                  workoutLogs={workoutLogs}
-                  journalEntries={journalEntries}
-                  completedSetsThisSession={exercise.sets
-                    .filter((s) => s.completed && (s.actual_reps ?? 0) > 0)
-                    .map((s) => ({ actual_reps: s.actual_reps ?? 0, weight_kg: s.actual_weight ?? 0 }))}
-                  unitSystem={unitSystem}
-                  onApply={(weight_kg) => applyWeightToAllSets(exerciseIndex, weight_kg)}
-                />
-              )}
-            </div>
+              </DraggableActiveExerciseCard>
+            )
           })}
-        </div>
+        </Reorder.Group>
 
         {!isEditMode && (
           <>
@@ -3533,7 +3590,10 @@ export default function WorkoutsPage() {
       if (!rawSession) return
       const parsed = JSON.parse(rawSession) as PersistedActiveWorkoutSession
       if (!parsed?.workout || !Array.isArray(parsed.exercises)) return
-      setActiveWorkoutSession(parsed)
+      setActiveWorkoutSession({
+        ...parsed,
+        exercises: ensureActiveExercisesHaveInstanceIds(parsed.exercises),
+      })
       setRunningWorkout(parsed.workout)
     } catch {
       window.localStorage.removeItem(ACTIVE_WORKOUT_SESSION_KEY)
