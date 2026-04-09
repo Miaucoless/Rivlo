@@ -589,6 +589,10 @@ function createExerciseInstanceId(prefix = 'exercise') {
 function ensureActiveExercisesHaveInstanceIds(
   exercises: Array<Omit<ActiveExercise, 'instanceId'> & Partial<Pick<ActiveExercise, 'instanceId'>>>
 ): ActiveExercise[] {
+  if (exercises.every((exercise) => typeof exercise.instanceId === 'string' && exercise.instanceId.length > 0)) {
+    return exercises as ActiveExercise[]
+  }
+
   return exercises.map((exercise) => ({
     ...exercise,
     instanceId: exercise.instanceId ?? createExerciseInstanceId('active'),

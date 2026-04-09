@@ -1095,6 +1095,7 @@ type UserDataBackup = Pick<
   | 'waterUnit'
   | 'weeklyMealPlan'
   | 'groceryList'
+  | 'xpState'
   | 'streak'
   | 'lastSyncedAt'
   | 'cloudHydratedUserId'
@@ -1103,6 +1104,105 @@ type UserDataBackup = Pick<
 
 function normalizeHydratedScopes(value: unknown): CloudHydrationScope[] {
   return Array.isArray(value) ? value as CloudHydrationScope[] : []
+}
+
+const DEFAULT_XP_STATE: XpState = {
+  total: 0,
+  has_crown: false,
+  last_action_dates: {},
+  streak_days: 0,
+}
+
+function isValidXpDate(value: unknown): value is string {
+  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)
+}
+
+function normalizeXpState(value: unknown): XpState {
+  if (!value || typeof value !== 'object') return DEFAULT_XP_STATE
+
+  const raw = value as Partial<XpState> & {
+    last_action_dates?: Record<string, unknown>
+  }
+  const lastActionDates = raw.last_action_dates && typeof raw.last_action_dates === 'object'
+    ? raw.last_action_dates
+    : {}
+
+  return {
+    total: typeof raw.total === 'number' && raw.total > 0 ? raw.total : 0,
+    has_crown: raw.has_crown === true,
+    last_action_dates: {
+      workout: isValidXpDate(lastActionDates.workout) ? lastActionDates.workout : undefined,
+      water: isValidXpDate(lastActionDates.water) ? lastActionDates.water : undefined,
+      protein: isValidXpDate(lastActionDates.protein) ? lastActionDates.protein : undefined,
+      meal: isValidXpDate(lastActionDates.meal) ? lastActionDates.meal : undefined,
+      meal_count: typeof lastActionDates.meal_count === 'number' && lastActionDates.meal_count > 0 ? lastActionDates.meal_count : undefined,
+      journal: isValidXpDate(lastActionDates.journal) ? lastActionDates.journal : undefined,
+      weight: isValidXpDate(lastActionDates.weight) ? lastActionDates.weight : undefined,
+      post: isValidXpDate(lastActionDates.post) ? lastActionDates.post : undefined,
+      streak_bonus: isValidXpDate(lastActionDates.streak_bonus) ? lastActionDates.streak_bonus : undefined,
+      perfect_day: isValidXpDate(lastActionDates.perfect_day) ? lastActionDates.perfect_day : undefined,
+    },
+    streak_days: typeof raw.streak_days === 'number' && raw.streak_days > 0 ? raw.streak_days : 0,
+    last_active_date: isValidXpDate(raw.last_active_date) ? raw.last_active_date : undefined,
+  }
+}
+
+function mergeXpActionDate(
+  left: string | undefined,
+  right: string | undefined,
+) {
+  if (!left) return right
+  if (!right) return left
+  return left >= right ? left : right
+}
+
+function reconcileXpState(localState: XpState, cloudState: XpState | null) {
+  const local = normalizeXpState(localState)
+  const cloud = cloudState ? normalizeXpState(cloudState) : null
+
+  if (!cloud) {
+    return {
+      merged: local,
+      shouldWriteCloud: local.total > 0 || local.has_crown,
+    }
+  }
+
+  const mergedMealDate = mergeXpActionDate(local.last_action_dates.meal, cloud.last_action_dates.meal)
+
+  const merged: XpState = {
+    total: Math.max(local.total, cloud.total),
+    has_crown: local.has_crown || cloud.has_crown,
+    last_action_dates: {
+      workout: mergeXpActionDate(local.last_action_dates.workout, cloud.last_action_dates.workout),
+      water: mergeXpActionDate(local.last_action_dates.water, cloud.last_action_dates.water),
+      protein: mergeXpActionDate(local.last_action_dates.protein, cloud.last_action_dates.protein),
+      meal: mergedMealDate,
+      meal_count:
+        mergedMealDate === local.last_action_dates.meal && mergedMealDate === cloud.last_action_dates.meal
+          ? Math.max(local.last_action_dates.meal_count ?? 0, cloud.last_action_dates.meal_count ?? 0) || undefined
+          : mergedMealDate === local.last_action_dates.meal
+            ? local.last_action_dates.meal_count
+            : mergedMealDate === cloud.last_action_dates.meal
+              ? cloud.last_action_dates.meal_count
+              : undefined,
+      journal: mergeXpActionDate(local.last_action_dates.journal, cloud.last_action_dates.journal),
+      weight: mergeXpActionDate(local.last_action_dates.weight, cloud.last_action_dates.weight),
+      post: mergeXpActionDate(local.last_action_dates.post, cloud.last_action_dates.post),
+      streak_bonus: mergeXpActionDate(local.last_action_dates.streak_bonus, cloud.last_action_dates.streak_bonus),
+      perfect_day: mergeXpActionDate(local.last_action_dates.perfect_day, cloud.last_action_dates.perfect_day),
+    },
+    streak_days: Math.max(local.streak_days, cloud.streak_days),
+    last_active_date: mergeXpActionDate(local.last_active_date, cloud.last_active_date),
+  }
+
+  const shouldWriteCloud =
+    merged.total !== cloud.total ||
+    merged.has_crown !== cloud.has_crown ||
+    JSON.stringify(merged.last_action_dates) !== JSON.stringify(cloud.last_action_dates) ||
+    merged.streak_days !== cloud.streak_days ||
+    merged.last_active_date !== cloud.last_active_date
+
+  return { merged, shouldWriteCloud }
 }
 
 function userDataBackupKey(userId: string) {
@@ -1134,6 +1234,7 @@ function buildUserDataBackup(state: AppStore): UserDataBackup {
     waterUnit: state.waterUnit,
     weeklyMealPlan: state.weeklyMealPlan,
     groceryList: state.groceryList,
+    xpState: state.xpState,
     streak: state.streak,
     lastSyncedAt: state.lastSyncedAt,
     cloudHydratedUserId: state.cloudHydratedUserId,
@@ -1152,6 +1253,7 @@ function readUserDataBackup(userId: string): Partial<UserDataBackup> | null {
 
     return {
       ...(parsed as Partial<UserDataBackup>),
+      xpState: normalizeXpState((parsed as Partial<UserDataBackup>).xpState),
       cloudHydratedScopes: normalizeHydratedScopes((parsed as Partial<UserDataBackup>).cloudHydratedScopes),
     }
   } catch {
@@ -1200,6 +1302,7 @@ function hasHydratedUserData(state: Pick<
   | 'waterLogs'
   | 'weeklyMealPlan'
   | 'groceryList'
+  | 'xpState'
 >) {
   return (
     state.savedMeals.length > 0 ||
@@ -1217,6 +1320,8 @@ function hasHydratedUserData(state: Pick<
     state.workoutLogs.length > 0 ||
     Object.keys(state.mealEntries).length > 0 ||
     Object.keys(state.waterLogs).length > 0 ||
+    state.xpState.total > 0 ||
+    state.xpState.has_crown ||
     !!state.weeklyMealPlan ||
     !!state.groceryList
   )
@@ -1240,7 +1345,7 @@ export const useAppStore = create<AppStore>()(
       socialLikedPostIds: [],
       socialPostComments: {},
       socialComposerPrefill: null,
-      xpState: { total: 0, has_crown: false, last_action_dates: {}, streak_days: 0 },
+      xpState: DEFAULT_XP_STATE,
       pendingLevelUpResult: null,
       user: null,
       isAuthenticated: false,
@@ -1607,8 +1712,11 @@ export const useAppStore = create<AppStore>()(
         // Hydrate XP state from its own column (targeted read, no full-row fetch)
         try {
           const cloudXp = await fetchXpCloudState(userId)
-          if (cloudXp) {
-            set({ xpState: cloudXp })
+          const { merged, shouldWriteCloud } = reconcileXpState(get().xpState, cloudXp)
+          set({ xpState: merged })
+
+          if (shouldWriteCloud) {
+            await saveXpCloudState(userId, merged)
           }
         } catch {
           // XP column may not exist yet (migration pending) — fail silently
@@ -3086,6 +3194,7 @@ export const useAppStore = create<AppStore>()(
           theme: state.theme === 'light' || state.theme === 'system' ? state.theme : 'dark',
           notificationPreferences: state.notificationPreferences ?? DEFAULT_NOTIFICATION_PREFERENCES,
           waterUnit: state.waterUnit === 'ml' || state.waterUnit === 'l' ? state.waterUnit : 'oz',
+          xpState: normalizeXpState(state.xpState),
           lastSyncedAt: null,
           cloudHydratedScopes: [],
           socialPosts: Array.isArray(state.socialPosts) ? state.socialPosts : [],
@@ -3099,6 +3208,7 @@ export const useAppStore = create<AppStore>()(
         theme: state.theme,
         notificationPreferences: state.notificationPreferences,
         waterUnit: state.waterUnit,
+        xpState: state.xpState,
         // Persist user's own social posts so they survive page refresh immediately
         // (cloud hydration will merge and sync any newer data from other devices)
         socialPosts: state.socialPosts,
