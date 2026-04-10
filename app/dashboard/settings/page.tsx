@@ -5,9 +5,8 @@ import React from 'react'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { motion } from 'framer-motion'
 import {
-  User, Target, BarChart3, Bell, Shield, Download,
+  User, Target, BarChart3, Shield, Download,
   Save, Trash2, Moon, Sun, Monitor, Zap, Check,
   Users, UserPlus, UserCheck, UserX, X, Loader2, Search, ExternalLink, FileText, Mail,
 } from 'lucide-react'

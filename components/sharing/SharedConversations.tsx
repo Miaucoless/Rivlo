@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { ArrowLeft, BookOpen, CheckCircle, Circle, Compass, Dumbbell, Inbox, Loader2, MessageSquareText, Search, Send, Share2, ShoppingCart, Sparkles, Target, TrendingUp, UtensilsCrossed, Users } from 'lucide-react'
+import { ArrowLeft, CheckCircle, Circle, Compass, Dumbbell, Inbox, Loader2, Search, Send, Share2, ShoppingCart, Sparkles, Target, TrendingUp, UtensilsCrossed, Users } from 'lucide-react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase'
 import { DEMO_INBOX_ITEMS } from '@/lib/demo-shares'

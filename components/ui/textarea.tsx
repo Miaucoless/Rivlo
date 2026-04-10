@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils'
 export interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {}
 
 const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
-  ({ className, ...props }, ref) => {
+  ({ className, autoFocus: _autoFocus, ...props }, ref) => {
     return (
       <textarea
         className={cn(

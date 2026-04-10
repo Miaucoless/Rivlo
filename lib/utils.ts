@@ -349,7 +349,7 @@ export function generateRecommendation(profile: UserProfile, recentData: {
   workouts_this_week: number
   current_weight: number
 }): string {
-  const { avg_calories, avg_protein, workouts_this_week, current_weight } = recentData
+  const { avg_calories, avg_protein, workouts_this_week } = recentData
   const recommendations: string[] = []
 
   const calorie_diff = profile.calorie_target - avg_calories

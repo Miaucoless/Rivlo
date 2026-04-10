@@ -15,12 +15,12 @@ import {
   ChevronLeft,
   LogOut,
   Flame,
-  Trophy,
   Pill,
   MessageSquareText,
   Compass,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { isConversationNotification } from '@/lib/notifications'
 import { useAppStore } from '@/store/useAppStore'
 import { toast } from 'sonner'
 
@@ -41,7 +41,7 @@ export function Sidebar() {
   const router = useRouter()
   const { user, sidebarCollapsed, toggleSidebar, logout, streak, isDemoMode, notifications } = useAppStore()
   const unreadSharedCount = notifications.filter((notification) =>
-    !notification.read && notification.action_url?.startsWith('/dashboard/shared?conversation=')
+    !notification.read && isConversationNotification(notification)
   ).length
 
   const handleLogout = async () => {

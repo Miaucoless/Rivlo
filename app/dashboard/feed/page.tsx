@@ -3,7 +3,7 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { addDays, format } from 'date-fns'
-import { motion, AnimatePresence } from 'framer-motion'
+import { AnimatePresence } from 'framer-motion'
 import { Compass, Plus, Search, UserPlus, Users } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -38,13 +38,12 @@ import {
   sortSocialPosts,
 } from '@/lib/social-feed'
 import type { SocialSubFilter } from '@/lib/social-feed'
-import { PeopleDialog } from '@/components/feed/PeopleDialog'
 import { SocialPostCard } from '@/components/feed/SocialPostCard'
 import { SocialPostDetailDialog } from '@/components/feed/SocialPostDetailDialog'
 import { SocialPostUseDialog, type SocialUseDialogPayload } from '@/components/feed/SocialPostUseDialog'
 import { SocialPostComposerDialog } from '@/components/feed/SocialPostComposerDialog'
 import { categorizeIngredient, estimatePrice } from '@/lib/grocery-generator'
-import { buildSocialProfileHref, canViewPost, getFollowRelationship, mergeSocialProfiles } from '@/lib/social-connections'
+import { buildSocialProfileHref, canViewPost, getFollowRelationship } from '@/lib/social-connections'
 import type { CalendarReminder, SocialFeedFilter, SocialFeedSort, SocialFollowRelationship, SocialPost, SocialPostDraft, SocialPostUser } from '@/types'
 
 const FEED_BATCH_SIZE = 6
@@ -485,7 +484,6 @@ export default function FeedPage() {
   }
 
   const publishPost = (draft: SocialPostDraft) => {
-    const isEditing = !!composerEditingPostId
     if (composerEditingPostId) {
       updateSocialPost(composerEditingPostId, draft)
     } else {

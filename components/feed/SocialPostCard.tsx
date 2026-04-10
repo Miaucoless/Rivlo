@@ -54,7 +54,6 @@ export const SocialPostCard = forwardRef<HTMLDivElement, {
   const didSwipe = useRef(false)
   const lastTapAt = useRef(0)
   const suppressNextOpen = useRef(false)
-  const commentInputRef = useRef<HTMLInputElement>(null)
   const [commentOpen, setCommentOpen] = useState(false)
   const [commentText, setCommentText] = useState('')
 
@@ -77,7 +76,7 @@ export const SocialPostCard = forwardRef<HTMLDivElement, {
     touchDeltaX.current = e.touches[0].clientX - touchStartX.current
   }
 
-  const handleTouchEnd = (e: React.TouchEvent) => {
+  const handleTouchEnd = () => {
     const delta = touchDeltaX.current
     if (Math.abs(delta) > 40 && hasMultiple) {
       didSwipe.current = true
@@ -117,7 +116,6 @@ export const SocialPostCard = forwardRef<HTMLDivElement, {
   const handleCommentOpen = (event: React.MouseEvent) => {
     event.stopPropagation()
     setCommentOpen(true)
-    requestAnimationFrame(() => commentInputRef.current?.focus())
   }
 
   const handleCommentSubmit = () => {
@@ -324,7 +322,6 @@ export const SocialPostCard = forwardRef<HTMLDivElement, {
             onClick={(event) => event.stopPropagation()}
           >
             <input
-              ref={commentInputRef}
               value={commentText}
               onChange={(event) => setCommentText(event.target.value)}
               onKeyDown={(event) => {

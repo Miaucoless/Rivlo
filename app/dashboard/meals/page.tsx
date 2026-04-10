@@ -4,15 +4,14 @@ import React from 'react'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
-import { useRouter } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
-import { format, startOfWeek, subDays } from 'date-fns'
+import { format, subDays } from 'date-fns'
 import {
   ChefHat, ShoppingCart, Clock, Users, Flame,
-  CheckCircle, Circle, Plus, Zap, Pencil, Trash2, X, CalendarDays,
+  CheckCircle, Circle, Plus, Pencil, Trash2, X, CalendarDays,
   Coffee, Soup, Moon, Cookie, GlassWater, Search, BookOpen, ChevronDown, MessageSquareText, Share2, ScanLine,
 } from 'lucide-react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -23,7 +22,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useAppStore, type SavedMealTemplate } from '@/store/useAppStore'
 import { getTodayISO } from '@/lib/utils'
 import { buildSocialDraftFromRecipe, buildSocialDraftFromSavedMeal } from '@/lib/social-feed'
-import type { Recipe, PlannedSlot, CustomMealIngredient } from '@/types'
+import type { Recipe, CustomMealIngredient } from '@/types'
 import type { BarcodeFoodLookupResult } from '@/lib/barcode-food'
 import { generateGroceryItems, categorizeIngredient, estimatePrice } from '@/lib/grocery-generator'
 import type { MealLogEntry } from '@/lib/content-library'
@@ -42,6 +41,7 @@ const CodeScannerDialog = dynamic(
 const MEAL_TYPES = ['breakfast', 'lunch', 'dinner', 'snack', 'drink'] as const
 type MealType = (typeof MEAL_TYPES)[number]
 type MealSource = 'search' | 'saved' | 'recent' | 'recipe' | 'manual'
+type RecentMealFilter = 'all' | 'same' | 'saved' | 'recipe'
 type SearchMeasureUnit = 'serving' | 'g' | 'oz' | 'ml' | 'fl_oz'
 const DAYS_OF_WEEK = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const
 const DAY_LABELS: Record<string, string> = { monday: 'Mon', tuesday: 'Tue', wednesday: 'Wed', thursday: 'Thu', friday: 'Fri', saturday: 'Sat', sunday: 'Sun' }
@@ -49,6 +49,19 @@ const DAY_FULL: Record<string, string> = { monday: 'Monday', tuesday: 'Tuesday',
 const PLAN_SLOTS = ['breakfast', 'lunch', 'dinner', 'snack'] as const
 const SLOT_ICONS: Record<string, React.ComponentType<{ className?: string }>> = { breakfast: Coffee, lunch: Soup, dinner: Moon, snack: Cookie }
 const SLOT_COLORS: Record<string, string> = { breakfast: 'text-amber-400', lunch: 'text-sky-400', dinner: 'text-violet-400', snack: 'text-emerald-400' }
+const MEAL_TYPE_LABELS: Record<MealType, string> = {
+  breakfast: 'Breakfast',
+  lunch: 'Lunch',
+  dinner: 'Dinner',
+  snack: 'Snack',
+  drink: 'Drink',
+}
+const RECENT_MEAL_SOURCE_LABELS: Record<NonNullable<MealLogEntry['entry_source']>, string> = {
+  search: 'Logged food',
+  manual: 'Manual meal',
+  recipe: 'Recipe',
+  saved: 'Saved meal',
+}
 const FOOD_UNIT_OPTIONS = [
   'serving', 'g', 'kg', 'oz', 'lb', 'cup', 'tbsp', 'tsp', 'ml', 'l',
   'piece', 'slice', 'bowl', 'handful', 'pinch', 'dash', 'scoop',
@@ -188,6 +201,12 @@ function normalizeFoodText(text: string) {
     .trim()
 }
 
+function normalizeIsoDateParam(value: string | null) {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null
+  const parsed = new Date(`${value}T12:00:00`)
+  return Number.isNaN(parsed.getTime()) ? null : value
+}
+
 function fmtMacro(n: number): string {
   if (!Number.isFinite(n) || n <= 0) return '0'
   if (n >= 1) return String(Math.round(n))
@@ -233,6 +252,11 @@ function renderMacroSummary(macros?: { calories?: number; protein_g?: number; ca
       ))}
     </div>
   )
+}
+
+function getRecentMealSourceLabel(entry: MealLogEntry) {
+  if (entry.recipe) return RECENT_MEAL_SOURCE_LABELS.recipe
+  return RECENT_MEAL_SOURCE_LABELS[entry.entry_source ?? 'search']
 }
 
 function buildItemMacros(calories: number, extras?: { protein_g?: number; carbs_g?: number; fat_g?: number; fiber_g?: number }): { calories: number; protein_g: number; carbs_g: number; fat_g: number; fiber_g?: number } {
@@ -1048,7 +1072,7 @@ function scaleRecipeMacros(recipe: Recipe, mode: RecipeAmountMode, rawValue: str
   }
 }
 
-function AddToTodayButton({ recipe }: { recipe: Recipe }) {
+function AddToTodayButton({ recipe, targetDate }: { recipe: Recipe; targetDate?: string }) {
   const { addMealEntry } = useAppStore()
   const [mealType, setMealType] = useState<string>(recipe.meal_type)
   const defaults = useMemo(() => getRecipeAmountDefaults(recipe), [recipe])
@@ -1110,7 +1134,7 @@ function AddToTodayButton({ recipe }: { recipe: Recipe }) {
             toast.error(`Enter a ${amountMode === 'servings' ? 'serving amount' : 'unit amount'} greater than 0.`)
             return
           }
-          addMealEntry(getTodayISO(), {
+          addMealEntry(targetDate ?? getTodayISO(), {
             id: `m-${Date.now()}`,
             meal_type: mealType as MealType,
             name: recipe.name,
@@ -1159,11 +1183,9 @@ function MealEditorModal({
   const allRecipes = useMemo(() => [...customRecipes, ...recipeLibrary], [customRecipes, recipeLibrary])
 
   const recentMeals = useMemo(() => {
-    const cutoff = format(subDays(new Date(), 7), 'yyyy-MM-dd')
     const rows: Array<{ key: string; date: string; entry: MealLogEntry }> = []
 
     for (const [date, entries] of Object.entries(mealEntries || {})) {
-      if (date < cutoff) continue
       for (const entry of entries || []) {
         const recipeId = entry.recipe?.id || ''
         const key = `${entry.entry_source || ''}|${recipeId}|${entry.name || ''}|${entry.meal_type || ''}|${entry.macros?.calories || 0}|${(entry.meal_items || []).length}`
@@ -1179,7 +1201,7 @@ function MealEditorModal({
       if (seen.has(row.key)) continue
       seen.add(row.key)
       out.push(row)
-      if (out.length >= 20) break
+      if (out.length >= 40) break
     }
     return out
   }, [mealEntries])
@@ -1194,11 +1216,9 @@ function MealEditorModal({
   const [savedMealModalFilterType, setSavedMealModalFilterType] = useState<string>('all')
   const [recipeSearch, setRecipeSearch] = useState('')
   const [recipeTypeFilter, setRecipeTypeFilter] = useState<string>('all')
-  // Saved-tab filter state
-  const [savedEntryFiltersOpen, setSavedEntryFiltersOpen] = useState(false)
-  const [savedEntryMealTypeFilter, setSavedEntryMealTypeFilter] = useState<string>('all')
-  const [savedEntryNutritionFilters, setSavedEntryNutritionFilters] = useState<string[]>([])
   const [mealType, setMealType] = useState<MealType>(initialMealType ?? 'breakfast')
+  const [recentSearch, setRecentSearch] = useState('')
+  const [recentFilter, setRecentFilter] = useState<RecentMealFilter>('same')
   const [recipeId, setRecipeId] = useState<string>('')
   const [recipeMealName, setRecipeMealName] = useState('')
   const [recipeAmountMode, setRecipeAmountMode] = useState<RecipeAmountMode>('servings')
@@ -1253,6 +1273,37 @@ function MealEditorModal({
     const parsed = Number(savedMealMultiplier)
     return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
   }, [savedMealMultiplier])
+
+  const filteredRecentMeals = useMemo(() => {
+    const query = normalizeFoodText(recentSearch)
+
+    return recentMeals.filter(({ entry }) => {
+      if (recentFilter === 'same' && entry.meal_type !== mealType) return false
+      if (recentFilter === 'saved' && entry.entry_source !== 'saved') return false
+      if (recentFilter === 'recipe' && !entry.recipe && entry.entry_source !== 'recipe') return false
+
+      if (!query) return true
+
+      const haystack = normalizeFoodText([
+        entry.name,
+        entry.meal_type,
+        getRecentMealSourceLabel(entry),
+        ...(entry.meal_items ?? []).map((item) => item.name),
+      ].join(' '))
+
+      return haystack.includes(query)
+    })
+  }, [mealType, recentFilter, recentMeals, recentSearch])
+
+  const selectedRecentCount = useMemo(
+    () => recentMeals.filter((row) => selectedRecentMealKeys[row.key]).length,
+    [recentMeals, selectedRecentMealKeys]
+  )
+
+  const visibleSelectedRecentCount = useMemo(
+    () => filteredRecentMeals.filter((row) => selectedRecentMealKeys[row.key]).length,
+    [filteredRecentMeals, selectedRecentMealKeys]
+  )
 
   const scaledSelectedSavedMeal = useMemo(
     () => selectedSavedMeal ? scaleSavedMealTemplate(selectedSavedMeal, savedMealMultiplierValue) : null,
@@ -1783,6 +1834,10 @@ function MealEditorModal({
       const storedItems = editingMeal.meal_items || []
 
       setSource(editSource)
+      setRecentSearch('')
+      setRecentFilter('same')
+      setRecentMultipliers({})
+      setSelectedRecentMealKeys({})
       setMealType(editingMeal.meal_type)
       setRecipeId(editingMeal.recipe?.id || '')
       setRecipeMealName(editingMeal.recipe ? editingMeal.name : '')
@@ -1855,6 +1910,10 @@ function MealEditorModal({
       )
     } else {
       setSource('search')
+      setRecentSearch('')
+      setRecentFilter('same')
+      setRecentMultipliers({})
+      setSelectedRecentMealKeys({})
       setSelectedSavedMealId('')
       setSavedMealMultiplier('1')
       setMealType(initialMealType ?? 'breakfast')
@@ -2741,76 +2800,230 @@ function MealEditorModal({
                   <p className="text-xs text-muted-foreground/60 mt-1">Log meals for a few days and they’ll show up here</p>
                 </div>
               ) : (
-                <div className="max-h-56 overflow-y-auto overscroll-contain space-y-2 pr-0.5">
-                  {recentMeals.map(({ key, date, entry }) => {
-                    const multiplierText = recentMultipliers[key] ?? '1'
-                    const multiplier = Number(multiplierText)
-                    const scaled = scaleMealLogEntry(entry, Number.isFinite(multiplier) ? multiplier : 0)
-                    const shortDate = format(new Date(date), 'MM/dd/yy')
-
-                    return (
-                      <div key={key} className="rounded-xl border border-border/50 bg-muted/20 p-3">
-                        <div className="min-w-0">
-                          <button
-                            type="button"
-                            onClick={() => setSelectedRecentMealKeys((prev) => ({ ...prev, [key]: !prev[key] }))}
-                            className="flex items-center gap-2 text-left w-full"
-                          >
-                            <span
-                              className={`w-4 h-4 rounded border shrink-0 ${
-                                selectedRecentMealKeys[key]
-                                  ? 'bg-primary border-primary'
-                                  : 'border-border bg-background'
-                              }`}
-                            />
-                            <p className="text-sm font-medium truncate">{entry.name}</p>
-                          </button>
-                          <p className="font-data text-[10px] text-muted-foreground/60 mt-0.5 tabular-nums whitespace-nowrap overflow-hidden text-ellipsis">
-                            {shortDate} · {entry.meal_type} · {scaled.macros.calories} kcal · <span className="text-emerald-500/70">{fmtMacro(scaled.macros.protein_g)}g P</span> · {fmtMacro(scaled.macros.carbs_g)}g C · {fmtMacro(scaled.macros.fat_g)}g F
-                          </p>
-                        </div>
-
-                        <div className="flex items-end gap-2 mt-3">
-                          <div className="w-24 shrink-0">
-                            <Label className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Servings</Label>
-                            <Input
-                              value={multiplierText}
-                              onChange={(e) => setRecentMultipliers((prev) => ({ ...prev, [key]: e.target.value }))}
-                              inputMode="decimal"
-                              className="h-8 mt-1"
-                            />
-                          </div>
-
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="flex-1 h-9"
-                            onClick={() => {
-                              const m = Number(multiplierText)
-                              if (!Number.isFinite(m) || m <= 0) {
-                                toast.error('Enter a serving size greater than 0.')
-                                return
-                              }
-                              const scaledEntry = scaleMealLogEntry(entry, m)
-                              onSave({
-                                meal_type: entry.meal_type,
-                                name: scaledEntry.name,
-                                macros: scaledEntry.macros,
-                                time: format(new Date(), 'h:mm a'),
-                                recipe: scaledEntry.recipe,
-                                recipe_amount: scaledEntry.recipe_amount,
-                                meal_items: scaledEntry.meal_items || [],
-                                entry_source: scaledEntry.entry_source,
-                                saved_meal_template_id: scaledEntry.saved_meal_template_id,
-                              })
-                            }}
-                          >
-                            Quick add
-                          </Button>
-                        </div>
+                <div className="space-y-3">
+                  <div className="rounded-2xl border border-border/60 bg-muted/20 p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="space-y-1">
+                        <p className="text-sm font-semibold">Recent meals</p>
+                        <p className="text-xs text-muted-foreground">
+                          Reuse meals you have already logged, then adjust the serving size before adding them again.
+                        </p>
                       </div>
-                    )
-                  })}
+                      {selectedRecentCount > 0 && (
+                        <Badge variant="secondary" className="rounded-full px-2.5 py-1 text-[11px]">
+                          {selectedRecentCount} selected
+                        </Badge>
+                      )}
+                    </div>
+
+                    <div className="relative mt-3">
+                      <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        value={recentSearch}
+                        onChange={(e) => setRecentSearch(e.target.value)}
+                        placeholder="Search meal names or ingredients..."
+                        type="search"
+                        inputMode="search"
+                        enterKeyHint="search"
+                        autoCapitalize="none"
+                        autoCorrect="off"
+                        className="h-9 pl-9 pr-8"
+                      />
+                      {recentSearch && (
+                        <button
+                          type="button"
+                          onClick={() => setRecentSearch('')}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      {([
+                        { value: 'same', label: `${MEAL_TYPE_LABELS[mealType]} only` },
+                        { value: 'all', label: 'All' },
+                        { value: 'saved', label: 'Saved meals' },
+                        { value: 'recipe', label: 'Recipes' },
+                      ] as const).map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => setRecentFilter(option.value)}
+                          className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                            recentFilter === option.value
+                              ? 'border-primary/50 bg-primary/10 text-primary'
+                              : 'border-border/60 bg-background/70 text-muted-foreground hover:text-foreground'
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="mt-3 flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                      <span>Showing {filteredRecentMeals.length} of {recentMeals.length}</span>
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          className="font-medium text-foreground/80 transition-colors hover:text-foreground"
+                          onClick={() => {
+                            setSelectedRecentMealKeys((prev) => {
+                              const next = { ...prev }
+                              filteredRecentMeals.forEach((row) => {
+                                next[row.key] = true
+                              })
+                              return next
+                            })
+                          }}
+                        >
+                          Select visible
+                        </button>
+                        <button
+                          type="button"
+                          className="font-medium text-foreground/80 transition-colors hover:text-foreground"
+                          onClick={() => {
+                            if (visibleSelectedRecentCount > 0) {
+                              setSelectedRecentMealKeys((prev) => {
+                                const next = { ...prev }
+                                filteredRecentMeals.forEach((row) => {
+                                  delete next[row.key]
+                                })
+                                return next
+                              })
+                              return
+                            }
+                            setSelectedRecentMealKeys({})
+                          }}
+                        >
+                          {visibleSelectedRecentCount > 0 ? 'Clear visible' : 'Clear all'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {filteredRecentMeals.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border/60 py-10 text-center">
+                      <p className="text-sm font-medium text-muted-foreground">No meals match that search</p>
+                      <p className="mt-1 text-xs text-muted-foreground/70">Try a different keyword or switch filters.</p>
+                    </div>
+                  ) : (
+                    <div className="max-h-[25rem] space-y-2 overflow-y-auto overscroll-contain pr-0.5">
+                      {filteredRecentMeals.map(({ key, date, entry }) => {
+                        const multiplierText = recentMultipliers[key] ?? '1'
+                        const multiplier = Number(multiplierText)
+                        const scaled = scaleMealLogEntry(entry, Number.isFinite(multiplier) ? multiplier : 0)
+                        const shortDate = format(new Date(date), 'MMM d')
+                        const isSelected = Boolean(selectedRecentMealKeys[key])
+                        const previewItems = (entry.meal_items ?? []).slice(0, 3).map((item) => item.name).filter(Boolean)
+                        const sourceLabel = getRecentMealSourceLabel(entry)
+
+                        return (
+                          <div
+                            key={key}
+                            className={`rounded-2xl border p-3 transition-colors ${
+                              isSelected
+                                ? 'border-primary/40 bg-primary/[0.06]'
+                                : 'border-border/50 bg-muted/20'
+                            }`}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => setSelectedRecentMealKeys((prev) => ({ ...prev, [key]: !prev[key] }))}
+                              className="w-full text-left"
+                            >
+                              <div className="flex items-start gap-3">
+                                <span
+                                  className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors ${
+                                    isSelected
+                                      ? 'border-primary bg-primary text-primary-foreground'
+                                      : 'border-border bg-background text-transparent'
+                                  }`}
+                                >
+                                  <CheckCircle className="h-3.5 w-3.5" />
+                                </span>
+
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex flex-wrap items-center gap-1.5">
+                                    <p className="truncate text-sm font-semibold">{entry.name}</p>
+                                    <Badge variant="outline" className="rounded-full px-2 py-0.5 text-[10px]">
+                                      {MEAL_TYPE_LABELS[entry.meal_type]}
+                                    </Badge>
+                                    <Badge variant="secondary" className="rounded-full px-2 py-0.5 text-[10px]">
+                                      {sourceLabel}
+                                    </Badge>
+                                  </div>
+
+                                  <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                                    <span>{shortDate}</span>
+                                    <span>{entry.time || 'Logged meal'}</span>
+                                    {previewItems.length > 0 && (
+                                      <span className="truncate">Includes {previewItems.join(', ')}</span>
+                                    )}
+                                  </div>
+
+                                  <div className="mt-2 flex flex-wrap gap-1.5 text-[11px]">
+                                    <span className="rounded-full bg-background/80 px-2.5 py-1 font-data text-foreground">
+                                      {Math.round(scaled.macros.calories)} kcal
+                                    </span>
+                                    <span className="rounded-full bg-emerald-500/10 px-2.5 py-1 font-data text-emerald-300">
+                                      {fmtMacro(scaled.macros.protein_g)}g P
+                                    </span>
+                                    <span className="rounded-full bg-background/80 px-2.5 py-1 font-data text-muted-foreground">
+                                      {fmtMacro(scaled.macros.carbs_g)}g C
+                                    </span>
+                                    <span className="rounded-full bg-background/80 px-2.5 py-1 font-data text-muted-foreground">
+                                      {fmtMacro(scaled.macros.fat_g)}g F
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            </button>
+
+                            <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end">
+                              <div className="sm:w-28">
+                                <Label className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Servings</Label>
+                                <Input
+                                  value={multiplierText}
+                                  onChange={(e) => setRecentMultipliers((prev) => ({ ...prev, [key]: e.target.value }))}
+                                  inputMode="decimal"
+                                  className="mt-1 h-8"
+                                />
+                              </div>
+
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="h-9 sm:flex-1"
+                                onClick={() => {
+                                  const m = Number(multiplierText)
+                                  if (!Number.isFinite(m) || m <= 0) {
+                                    toast.error('Enter a serving size greater than 0.')
+                                    return
+                                  }
+                                  const scaledEntry = scaleMealLogEntry(entry, m)
+                                  onSave({
+                                    meal_type: entry.meal_type,
+                                    name: scaledEntry.name,
+                                    macros: scaledEntry.macros,
+                                    time: format(new Date(), 'h:mm a'),
+                                    recipe: scaledEntry.recipe,
+                                    recipe_amount: scaledEntry.recipe_amount,
+                                    meal_items: scaledEntry.meal_items || [],
+                                    entry_source: scaledEntry.entry_source,
+                                    saved_meal_template_id: scaledEntry.saved_meal_template_id,
+                                  })
+                                }}
+                              >
+                                Quick add now
+                              </Button>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
             </TabsContent>
@@ -3240,7 +3453,9 @@ function MealEditorModal({
               : editingMeal
                 ? 'Save changes'
                 : source === 'recent'
-                  ? 'Add meals'
+                  ? selectedRecentCount > 0
+                    ? `Add ${selectedRecentCount} meal${selectedRecentCount === 1 ? '' : 's'}`
+                    : 'Add meals'
                   : 'Add meal'}
           </Button>
         </div>
@@ -3249,7 +3464,7 @@ function MealEditorModal({
   )
 }
 
-function RecipeDetailModal({ recipe, onClose }: { recipe: Recipe; onClose: () => void }) {
+function RecipeDetailModal({ recipe }: { recipe: Recipe }) {
   return (
     <DialogContent
       className="max-w-2xl max-h-[90vh] overflow-y-auto"
@@ -3575,8 +3790,6 @@ function EditSavedMealModal({
   const [manualIngCarbs, setManualIngCarbs] = useState('')
   const [manualIngFat, setManualIngFat] = useState('')
   const [foodCatalog] = useKnownFoodCatalog(open)
-  const queryRef = useRef<HTMLInputElement>(null)
-  const pendingAmountRef = useRef<HTMLInputElement>(null)
 
   // Load from meal whenever dialog opens
   useEffect(() => {
@@ -3631,7 +3844,6 @@ function EditSavedMealModal({
     setPendingUnit(food.default_serving_unit)
     setQuery('')
     setShowSugg(false)
-    setTimeout(() => pendingAmountRef.current?.focus(), 50)
   }
 
   const confirmPendingFood = () => {
@@ -3653,7 +3865,6 @@ function EditSavedMealModal({
     }])
     setPendingFood(null)
     setPendingAmount('')
-    queryRef.current?.focus()
   }
 
   const addManualIngredient = () => {
@@ -3846,7 +4057,6 @@ function EditSavedMealModal({
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
                 <Input
-                  ref={queryRef}
                   placeholder="Search food…"
                   value={query}
                   onChange={e => { setQuery(e.target.value); setPendingFood(null) }}
@@ -3901,7 +4111,6 @@ function EditSavedMealModal({
                     <p className="text-xs font-medium truncate">{pendingFood.name}</p>
                   </div>
                   <Input
-                    ref={pendingAmountRef}
                     type="number"
                     min={0}
                     step="any"
@@ -4078,7 +4287,9 @@ function ShareRecipeButton({ recipe }: { recipe: Recipe }) {
 }
 
 export default function MealsPage() {
+  const pathname = usePathname()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const {
     user,
     groceryList,
@@ -4123,6 +4334,7 @@ export default function MealsPage() {
   const [savedMealFilterTag, setSavedMealFilterTag] = useState<string>('all')
   const [activeTab, setActiveTab] = useState('today')
   const [loadingOlderMealHistory, setLoadingOlderMealHistory] = useState(false)
+  const [olderMealHistoryLoaded, setOlderMealHistoryLoaded] = useState(false)
   const [scannerOpen, setScannerOpen] = useState(false)
   const [scannerTarget, setScannerTarget] = useState<'today' | 'saved'>('today')
   const [scannerMealType, setScannerMealType] = useState<MealType>('breakfast')
@@ -4159,6 +4371,14 @@ export default function MealsPage() {
   const recipeLibrary = useRecipeLibrary(activeTab === 'recipes' || activeTab === 'planner')
   const [foodCatalog] = useKnownFoodCatalog(activeTab === 'grocery')
 
+  const today = getTodayISO()
+  const requestedLogDate = normalizeIsoDateParam(searchParams.get('date')) ?? today
+  const [activeLogDate, setActiveLogDate] = useState(requestedLogDate)
+
+  useEffect(() => {
+    setActiveLogDate(requestedLogDate)
+  }, [requestedLogDate])
+
   const loadOlderMealHistory = async () => {
     setLoadingOlderMealHistory(true)
     try {
@@ -4167,7 +4387,8 @@ export default function MealsPage() {
         scopes: ['metadata', 'meals', 'planner', 'recipes'],
         profile: 'default',
       })
-      toast.success('Loaded older meal history.')
+      setOlderMealHistoryLoaded(true)
+      toast.success('Loaded older meal history for your Recent meals archive.')
     } catch {
       toast.error('Could not load older meal history.')
     } finally {
@@ -4198,9 +4419,10 @@ export default function MealsPage() {
   const [plannerNutritionFilters, setPlannerNutritionFilters] = useState<string[]>([])
 
   const grocery = groceryList
-  const today = getTodayISO()
-  const todayMeals = getDailyMeals(today)
-  const todayTotals = getDailyTotals(today)
+  const todayMeals = getDailyMeals(activeLogDate)
+  const todayTotals = getDailyTotals(activeLogDate)
+  const isViewingToday = activeLogDate === today
+  const activeLogDateLabel = format(new Date(`${activeLogDate}T12:00:00`), 'EEEE, MMM d')
 
   // Group grocery items by category
   const groceryByCategory = grocery
@@ -4470,12 +4692,12 @@ export default function MealsPage() {
 
   const handleSaveMeal = (data: Omit<MealLogEntry, 'id'>) => {
     if (editingMeal) {
-      updateMealEntry(today, editingMeal.id, data)
+      updateMealEntry(activeLogDate, editingMeal.id, data)
       toast.success('Meal updated.')
       return
     }
 
-    addMealEntry(today, {
+    addMealEntry(activeLogDate, {
       id: `m-${Date.now()}`,
       ...data,
     })
@@ -4483,7 +4705,7 @@ export default function MealsPage() {
   }
 
   const handleDeleteMeal = (mealId: string) => {
-    removeMealEntry(today, mealId)
+    removeMealEntry(activeLogDate, mealId)
     toast.success('Meal removed.')
   }
 
@@ -4499,7 +4721,7 @@ export default function MealsPage() {
   const handleAddScannedMealToToday = (item: BarcodeFoodLookupResult, mealType: MealType) => {
     const displayName = formatScannedFoodName(item)
 
-    addMealEntry(today, {
+    addMealEntry(activeLogDate, {
       id: `m-${Date.now()}`,
       meal_type: mealType,
       name: displayName,
@@ -4547,7 +4769,7 @@ export default function MealsPage() {
   const handleAddSavedMealToToday = (meal: SavedMealTemplate) => {
     const selectedMealType = savedMealTargets[meal.id] ?? meal.meal_type
 
-    addMealEntry(today, {
+    addMealEntry(activeLogDate, {
       id: `m-${Date.now()}`,
       meal_type: selectedMealType,
       name: meal.name,
@@ -4581,6 +4803,39 @@ export default function MealsPage() {
     toast.success('Meal saved for later.')
   }
 
+  useEffect(() => {
+    const editMealId = searchParams.get('editMeal')
+    const shouldOpenEditor = searchParams.get('open') === '1'
+    const requestedMealType = searchParams.get('mealType')
+
+    if (!user) return
+    if (!editMealId && !shouldOpenEditor) return
+    if (editMealId && todayMeals.length === 0) return
+
+    setActiveTab('today')
+
+    if (editMealId) {
+      const targetMeal = todayMeals.find((meal) => meal.id === editMealId)
+      if (targetMeal) {
+        openEdit(targetMeal)
+      } else {
+        toast.error('That meal entry could not be found for this day.')
+      }
+    } else {
+      const mealType = MEAL_TYPES.includes(requestedMealType as MealType)
+        ? requestedMealType as MealType
+        : undefined
+      openAdd(mealType)
+    }
+
+    const params = new URLSearchParams(searchParams.toString())
+    params.delete('open')
+    params.delete('editMeal')
+    params.delete('mealType')
+    const nextQuery = params.toString()
+    router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname)
+  }, [pathname, router, searchParams, todayMeals, user])
+
   if (!user) return null
 
   return (
@@ -4594,7 +4849,9 @@ export default function MealsPage() {
             <div>
               <h2 className="font-display text-4xl font-black tracking-tight text-foreground sm:text-5xl">Meals</h2>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-                See today&apos;s intake at a glance, move through meals in order, and expand each entry only when you need the item-level detail.
+                {isViewingToday
+                  ? 'See today&apos;s intake at a glance, move through meals in order, and expand each entry only when you need the item-level detail.'
+                  : `Review and update ${activeLogDateLabel}'s meals with the same logging tools you use today.`}
               </p>
             </div>
           </div>
@@ -4618,7 +4875,7 @@ export default function MealsPage() {
         <div className="overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <TabsList className="inline-flex h-auto min-w-max items-center gap-2 rounded-full border border-border/60 bg-muted/30 p-1">
             {[
-              { value: 'today', label: "Today's Meals", count: todayMeals.length },
+              { value: 'today', label: isViewingToday ? "Today's Meals" : 'Selected Day', count: todayMeals.length },
               { value: 'saved', label: 'Saved Meals', count: null },
               { value: 'recipes', label: 'Recipes', count: null },
               { value: 'planner', label: 'Meal Planner', count: planFilledSlots > 0 ? planFilledSlots : null },
@@ -4730,7 +4987,6 @@ export default function MealsPage() {
                 (() => {
                   const type = mealTypePresentation(meal.meal_type)
                   const selectedTarget = savedMealTargets[meal.id] ?? meal.meal_type
-                  const selectedTargetType = mealTypePresentation(selectedTarget)
                   const MealTypeIcon = type.icon
                   const isExpanded = expandedSavedMeals[meal.id] || false
 
@@ -4862,18 +5118,38 @@ export default function MealsPage() {
 
         {/* Today log tab */}
         <TabsContent value="today" className="mt-8 space-y-8">
+          {!isViewingToday && (
+            <div className="flex flex-col gap-3 rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-medium">Viewing {activeLogDateLabel}</p>
+                <p className="text-xs text-muted-foreground">Meals you add, edit, scan, or delete here will update that calendar day.</p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => router.replace(pathname)}
+                className="shrink-0"
+              >
+                Back to Today
+              </Button>
+            </div>
+          )}
           <div className="flex items-center justify-between rounded-2xl border border-border/60 bg-card/70 px-4 py-3">
             <div>
-              <p className="text-sm font-medium">Today opens with recent meal history for speed.</p>
-              <p className="text-xs text-muted-foreground">Load older entries only when you need the deeper archive.</p>
+              <p className="text-sm font-medium">{olderMealHistoryLoaded ? 'Older meal history is loaded.' : 'Recent meals open fast for speed.'}</p>
+              <p className="text-xs text-muted-foreground">
+                {olderMealHistoryLoaded
+                  ? 'The Recent tab in the meal editor now includes your deeper meal archive.'
+                  : 'Load older entries when you want the Recent tab to include older meals too.'}
+              </p>
             </div>
             <Button
               variant="outline"
               size="sm"
               onClick={() => void loadOlderMealHistory()}
-              disabled={loadingOlderMealHistory}
+              disabled={loadingOlderMealHistory || olderMealHistoryLoaded}
             >
-              {loadingOlderMealHistory ? 'Loading…' : 'Load older'}
+              {loadingOlderMealHistory ? 'Loading…' : olderMealHistoryLoaded ? 'Older meals loaded' : 'Load older'}
             </Button>
           </div>
           {MEAL_TYPES.map((mealType) => (
@@ -4985,7 +5261,7 @@ export default function MealsPage() {
                     >
                       <RecipeCard recipe={recipe} onClick={() => setSelectedRecipe(recipe)} />
                       <div className="px-4 pb-4 space-y-1.5">
-                        <AddToTodayButton recipe={recipe} />
+                        <AddToTodayButton recipe={recipe} targetDate={activeLogDate} />
                         <div className="flex gap-1.5">
                           <ShareRecipeButton recipe={recipe} />
                           <Button
@@ -5037,7 +5313,7 @@ export default function MealsPage() {
               >
                 <RecipeCard recipe={recipe} onClick={() => setSelectedRecipe(recipe)} />
                 <div className="px-4 pb-4">
-                  <AddToTodayButton recipe={recipe} />
+                  <AddToTodayButton recipe={recipe} targetDate={activeLogDate} />
                 </div>
               </motion.div>
             ))}
@@ -5783,7 +6059,7 @@ export default function MealsPage() {
       {/* Recipe detail modal */}
       <Dialog open={!!selectedRecipe} onOpenChange={() => setSelectedRecipe(null)}>
         {selectedRecipe && (
-          <RecipeDetailModal recipe={selectedRecipe} onClose={() => setSelectedRecipe(null)} />
+          <RecipeDetailModal recipe={selectedRecipe} />
         )}
       </Dialog>
 

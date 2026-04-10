@@ -9,7 +9,7 @@ import { useAuthInit } from '@/hooks/useAuthInit'
 const CANONICAL_APP_ORIGIN = process.env.NEXT_PUBLIC_APP_URL || 'https://rivorafit.com'
 
 function HomePageContent() {
-  const { isAuthenticated, isDemoMode } = useAppStore()
+  const { isAuthenticated } = useAppStore()
   const router = useRouter()
   const searchParams = useSearchParams()
   const { loading } = useAuthInit()

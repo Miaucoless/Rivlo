@@ -10,7 +10,6 @@ import type {
   SavedMealTemplate,
   SocialFeedFilter,
   SocialFeedSort,
-  SocialMealIngredient,
   SocialPost,
   SocialPostDraft,
   SocialPostUser,

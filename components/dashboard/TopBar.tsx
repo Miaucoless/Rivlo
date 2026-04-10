@@ -1,7 +1,6 @@
 'use client'
 
 import { useDeferredValue, useEffect, useMemo, useRef, useState, useTransition, useCallback } from 'react'
-import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
   Bell, Sun, Moon, Search, ChevronRight, Sparkles, CheckCheck, Settings,
@@ -28,6 +27,7 @@ import {
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { createClient } from '@/lib/supabase'
 import { getCloudHydrationProfileForPath, getCloudHydrationScopesForPath } from '@/lib/cloud-sync'
+import { isConversationNotification } from '@/lib/notifications'
 import type { GroceryList, SavedMealTemplate } from '@/types'
 
 type Friendship = {
@@ -99,7 +99,6 @@ export function TopBar() {
     syncStatus,
     lastSyncedAt,
     pendingCloudWrites,
-    flushPendingCloudWrites,
     addSavedMeal,
     setGroceryList,
   } = useAppStore()
@@ -109,8 +108,6 @@ export function TopBar() {
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false)
   const [isFriendsOpen, setIsFriendsOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
-  const searchInputRef = useRef<HTMLInputElement>(null)
-
   // Friends panel state
   const [friends, setFriends] = useState<Friendship[]>([])
   const [friendsLoading, setFriendsLoading] = useState(false)
@@ -320,16 +317,6 @@ export function TopBar() {
           : 'Ready'
 
   useEffect(() => {
-    if (!isSearchOpen) return
-
-    const timer = window.setTimeout(() => {
-      searchInputRef.current?.focus()
-    }, 20)
-
-    return () => window.clearTimeout(timer)
-  }, [isSearchOpen])
-
-  useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault()
@@ -364,9 +351,8 @@ export function TopBar() {
     })
   }, [deferredSearchQuery])
 
-  const unreadCount = notifications.filter((item) => !item.read).length
-  const unreadSharedCount = notifications.filter((item) =>
-    !item.read && item.action_url?.startsWith('/dashboard/shared?conversation=')
+  const unreadConversationCount = notifications.filter((item) =>
+    !item.read && isConversationNotification(item)
   ).length
 
   const openRoute = (href: string) => {
@@ -382,9 +368,6 @@ export function TopBar() {
 
   const openNotifications = (open: boolean) => {
     setIsNotificationsOpen(open)
-    if (open) {
-      markAllNotificationsRead()
-    }
   }
 
   return (
@@ -446,7 +429,7 @@ export function TopBar() {
             onClick={() => router.push('/dashboard/shared')}
           >
             <MessageSquareText className="w-4 h-4" />
-            {unreadSharedCount > 0 && (
+            {unreadConversationCount > 0 && (
               <span className="absolute top-1 right-1 flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
             )}
           </Button>
@@ -481,7 +464,7 @@ export function TopBar() {
             onClick={() => openNotifications(true)}
           >
             <Bell className="w-4 h-4" />
-            {unreadCount > 0 && (
+            {unreadConversationCount > 0 && (
               <span className="absolute top-1 right-1 flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
             )}
           </Button>
@@ -520,7 +503,6 @@ export function TopBar() {
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                ref={searchInputRef}
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
                 placeholder="Search pages, tools, and shortcuts"
@@ -931,7 +913,7 @@ export function TopBar() {
                 { label: 'Shared With Me', href: '/dashboard/shared', icon: MessageSquareText },
               ].map(({ label, href, icon: Icon }) => {
                 const isActive = pathname === href || pathname.startsWith(href + '/')
-                const hasUnreadShared = href === '/dashboard/shared' && unreadSharedCount > 0
+                const hasUnreadShared = href === '/dashboard/shared' && unreadConversationCount > 0
                 return (
                   <button
                     key={href}

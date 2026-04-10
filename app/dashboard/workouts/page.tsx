@@ -4,11 +4,11 @@ import React from 'react'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence, Reorder, useDragControls } from 'framer-motion'
 import {
   ArrowLeft, BookOpen, Check, CheckCircle, ChevronDown, ChevronUp, Circle, Copy, Dumbbell, Eye, GripVertical, Loader2, Pause, Pencil, Play, PlayCircle, Plus, Search,
-  SlidersHorizontal, Sparkles, Trash2, Trophy, X, MessageSquareText, Zap,
+  SlidersHorizontal, Trash2, Trophy, X, MessageSquareText, Zap,
 } from 'lucide-react'
 import { WorkoutTimerBar } from '@/components/workout/WorkoutTimerBar'
 import { WorkoutTimerStrip } from '@/components/workout/WorkoutTimerStrip'
@@ -22,13 +22,12 @@ import { Label } from '@/components/ui/label'
 import { Progress } from '@/components/ui/progress'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Textarea } from '@/components/ui/textarea'
 import { useAppStore } from '@/store/useAppStore'
 import { EXERCISE_LIBRARY, WORKOUTS } from '@/lib/content-library'
 import { EXERCISE_CLASSIFICATIONS } from '@/lib/exercise-classifications'
 import { buildSocialDraftFromWorkout } from '@/lib/social-feed'
 import type { Exercise, ExerciseLibraryItem, ExerciseSetMetric, Gender, JournalEntry, MuscleGroup, SplitDayType, SplitSchedule, UserProfile, WeekDay, Workout, WorkoutExercise, WorkoutLog, WorkoutSet, WorkoutSplit } from '@/types'
-import { cn, formatVolumeValue, getTodayISO, getWeightUnitLabel, kgToLbs, lbsToKg } from '@/lib/utils'
+import { cn, getTodayISO, getWeightUnitLabel, kgToLbs, lbsToKg } from '@/lib/utils'
 import { buildDefaultSchedule, getTodayWeekDay, getWorkoutsForDayType, SPLIT_DAY_LABELS, SPLIT_DAY_OPTIONS, WEEK_DAYS, WEEK_DAY_LABELS } from '@/lib/split-schedule'
 import { createUserWorkoutTemplate, fetchUserWorkoutTemplates, updateUserWorkoutTemplate } from '@/lib/workout-templates'
 import { toast } from 'sonner'
@@ -97,6 +96,12 @@ function formatWorkoutTime(iso?: string) {
   const date = new Date(iso)
   if (Number.isNaN(date.getTime())) return '—'
   return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+}
+
+function normalizeIsoDateParam(value: string | null) {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null
+  const parsed = new Date(`${value}T12:00:00`)
+  return Number.isNaN(parsed.getTime()) ? null : value
 }
 
 function applyWorkoutDateToTimestamp(date: string, sourceIso?: string, fallback?: Date) {
@@ -1091,28 +1096,6 @@ function summarizeExercises(exercises: WorkoutExercise[], metProfile: MetProfile
     totalVolumeKg: Math.round(totalVolumeKg),
     durationMin: Math.max(5, Math.round(totalDurationSeconds / 60)),
   }
-}
-
-function buildEditableExercisesFromLog(log: WorkoutLog): EditableWorkoutExercise[] {
-  return createActiveExercisesFromWorkoutLog(log).map((exercise, exerciseIndex) => ({
-    exercise: exercise.exercise,
-    sets: exercise.sets.map((set) => ({
-      set_number: set.set_number,
-      set_type: set.set_type,
-      drop_from_set_number: set.drop_from_set_number,
-      drop_set_index: set.drop_set_index,
-      reps: set.actual_reps ?? set.reps ?? 0,
-      weight_kg: set.actual_weight ?? set.weight_kg ?? 0,
-      incline_pct: set.actual_incline_pct ?? set.incline_pct,
-      speed_mph: set.actual_speed_mph ?? set.speed_mph,
-      machine_level: set.actual_machine_level ?? set.machine_level,
-      resistance_level: set.actual_resistance_level ?? set.resistance_level,
-      watts: set.actual_watts ?? set.watts,
-      cadence_rpm: set.actual_cadence_rpm ?? set.cadence_rpm,
-      rest_seconds: set.rest_seconds,
-    })),
-    instanceId: `logged-${exercise.exercise.id}-${exerciseIndex}-${Date.now()}`,
-  }))
 }
 
 function SavedWorkoutCard({
@@ -2162,45 +2145,12 @@ function ActiveWorkoutModal({
   const [exerciseSearch, setExerciseSearch] = useState('')
   const [isCompleting, setIsCompleting] = useState(false)
   const [apiLiveSuggestions, setApiLiveSuggestions] = useState<ExerciseLibraryItem[]>([])
-  const [timeUnits, setTimeUnits] = useState<Record<string, 'sec' | 'min'>>({})
   const [previewExercise, setPreviewExercise] = useState<Exercise | null>(null)
   const [startedAt, setStartedAt] = useState<string | null>(isEditMode ? (lockedTiming?.startedAt ?? null) : (initialStartedAt ?? null))
   const [nowMs, setNowMs] = useState(() => Date.now())
   const [restEndsAtMs, setRestEndsAtMs] = useState<number | null>(null)
   const [showSaveRoutineName, setShowSaveRoutineName] = useState(false)
   const [saveRoutineName, setSaveRoutineName] = useState(`${workout.name} (${getTodayISO()})`)
-
-  const getTimeUnit = (key: string, defaultUnit: 'sec' | 'min') => timeUnits[key] ?? defaultUnit
-  const toggleTimeUnit = (key: string, defaultUnit: 'sec' | 'min') =>
-    setTimeUnits((prev) => ({ ...prev, [key]: (prev[key] ?? defaultUnit) === 'sec' ? 'min' : 'sec' }))
-
-  // Cardio duration stored as minutes in actual_reps
-  const displayCardio = (valueMin: number | undefined, unit: 'sec' | 'min') => {
-    if (valueMin === undefined || valueMin === 0) return ''
-    return unit === 'sec' ? String(Math.round(valueMin * 60)) : String(valueMin)
-  }
-  const parseCardio = (input: string, unit: 'sec' | 'min') => {
-    const v = parseFloat(input) || 0
-    return unit === 'sec' ? Math.round((v / 60) * 100) / 100 : v
-  }
-
-  // Interval work duration stored in seconds in interval_duration_sec
-  const displayWork = (valueSec: number | undefined, unit: 'sec' | 'min') => {
-    if (valueSec === undefined || valueSec === 0) return ''
-    return unit === 'min' ? String(Math.round((valueSec / 60) * 100) / 100) : String(valueSec)
-  }
-  const parseWork = (input: string, unit: 'sec' | 'min') => {
-    const v = parseFloat(input) || 0
-    return unit === 'min' ? Math.round(v * 60) : v
-  }
-
-  // Rest stored in seconds
-  const displayRest = (valueSec: number, unit: 'sec' | 'min') =>
-    unit === 'min' ? String(Math.round((valueSec / 60) * 100) / 100) : String(valueSec)
-  const parseRest = (input: string, unit: 'sec' | 'min') => {
-    const v = parseFloat(input) || 0
-    return unit === 'min' ? Math.round(v * 60) : v
-  }
 
   useEffect(() => {
     if (initialExercises && initialExercises.length > 0) {
@@ -3292,6 +3242,7 @@ function ExercisePreviewDialog({ exercise, onClose }: { exercise: Exercise | nul
 }
 
 export default function WorkoutsPage() {
+  const pathname = usePathname()
   const router = useRouter()
   const searchParams = useSearchParams()
   const {
@@ -3343,8 +3294,7 @@ export default function WorkoutsPage() {
   const [savedWorkoutFilterOpen, setSavedWorkoutFilterOpen] = useState(false)
 
   const [exerciseMuscleFilter, setExerciseMuscleFilter] = useState<MuscleGroup | 'all'>('all')
-  const [exerciseEquipmentFilter, setExerciseEquipmentFilter] = useState<string>('all')
-  const [exerciseFilterOpen, setExerciseFilterOpen] = useState(false)
+  const [exerciseEquipmentFilter] = useState<string>('all')
 
   const [manualSearch, setManualSearch] = useState('')
   const [loadingOlderHistory, setLoadingOlderHistory] = useState(false)
@@ -3387,6 +3337,8 @@ export default function WorkoutsPage() {
     )
   }, [isDemoMode, remoteCustomWorkouts, customWorkouts])
   const shouldResumeFromQuery = searchParams.get('resume') === '1'
+  const requestedWorkoutDate = normalizeIsoDateParam(searchParams.get('date'))
+  const defaultManualWorkoutDate = requestedWorkoutDate ?? getTodayISO()
 
   const openPublishComposerForWorkout = useCallback((workout: Workout) => {
     setSocialComposerPrefill(buildSocialDraftFromWorkout(workout))
@@ -3401,6 +3353,10 @@ export default function WorkoutsPage() {
     if (!dayType || dayType === 'rest') return []
     return getWorkoutsForDayType(dayType, workoutLibrary)
   }, [user?.split_schedule, user?.workout_split, workoutLibrary])
+
+  useEffect(() => {
+    setManualWorkoutDate((current) => current === defaultManualWorkoutDate ? current : defaultManualWorkoutDate)
+  }, [defaultManualWorkoutDate])
   const todayWeekDay = getTodayWeekDay()
   const todaySplitDayType = (user?.split_schedule ?? buildDefaultSchedule(user?.workout_split ?? 'ppl'))[todayWeekDay]
   const splitPillLabel = todaySplitDayType ? SPLIT_DAY_LABELS[todaySplitDayType] : 'Set split'
@@ -3541,7 +3497,6 @@ export default function WorkoutsPage() {
     })
   }, [accountCustomWorkouts, savedWorkoutSearch, savedWorkoutSplit, savedWorkoutMuscle, showAcftKeyInstructions, workoutLogs])
 
-  const totalCaloriesBurned = workoutLogs.reduce((sum, log) => sum + (log.calories_burned_kcal || 0), 0)
   const todayLoggedWorkouts = workoutLogs.filter((log) => log.date === getTodayISO())
   const isActiveWorkout = manualExercises.length > 0 || workoutStarted
   const totalManualSets = manualExercises.reduce((s, e) => s + e.sets.length, 0)
@@ -3953,28 +3908,6 @@ export default function WorkoutsPage() {
     )
   }
 
-  const loadWorkoutIntoManual = (workout: Workout) => {
-    const exercises: EditableWorkoutExercise[] = workout.exercises.map((we) => ({
-      ...we,
-      instanceId: crypto.randomUUID(),
-    }))
-    setManualExercises(exercises)
-    if (!sessionStartedAt) setSessionStartedAt(Date.now())
-  }
-
-  const updateManualExerciseSetMetric = (instanceId: string, metric: ExerciseSetMetric) => {
-    setManualExercises((current) =>
-      current.map((exercise) =>
-        exercise.instanceId === instanceId
-          ? {
-              ...exercise,
-              exercise: { ...exercise.exercise, set_metric: metric },
-            }
-          : exercise
-      )
-    )
-  }
-
   const addSetToManualExercise = (instanceId: string) => {
     setManualExercises((current) =>
       current.map((exercise) => {
@@ -4102,8 +4035,8 @@ export default function WorkoutsPage() {
       return
     }
 
-    if (editingLoggedWorkoutId && !manualWorkoutDate) {
-      toast.error('Choose a workout date before updating the log.')
+    if (!manualWorkoutDate) {
+      toast.error(editingLoggedWorkoutId ? 'Choose a workout date before updating the log.' : 'Choose a workout date before logging it.')
       return
     }
 
@@ -4123,21 +4056,17 @@ export default function WorkoutsPage() {
       user_id: user.id,
       workout_id: workout.id,
       workout,
-      date: editingLoggedWorkoutId ? manualWorkoutDate : getTodayISO(),
-      started_at: editingLoggedWorkoutId
-        ? applyWorkoutDateToTimestamp(
-            manualWorkoutDate,
-            existingLog?.started_at,
-            new Date(Date.now() - Math.max(1, manualSummary.durationMin) * 60000),
-          )
-        : new Date(Date.now() - Math.max(1, manualSummary.durationMin) * 60000).toISOString(),
-      completed_at: editingLoggedWorkoutId
-        ? applyWorkoutDateToTimestamp(
-            manualWorkoutDate,
-            existingLog?.completed_at,
-            new Date(),
-          )
-        : new Date().toISOString(),
+      date: manualWorkoutDate,
+      started_at: applyWorkoutDateToTimestamp(
+        manualWorkoutDate,
+        existingLog?.started_at,
+        new Date(Date.now() - Math.max(1, manualSummary.durationMin) * 60000),
+      ),
+      completed_at: applyWorkoutDateToTimestamp(
+        manualWorkoutDate,
+        existingLog?.completed_at,
+        new Date(),
+      ),
       duration_min: manualSummary.durationMin,
       calories_burned_kcal: manualSummary.caloriesBurned,
       total_volume_kg: manualSummary.totalVolumeKg,
@@ -4196,7 +4125,7 @@ export default function WorkoutsPage() {
       setManualSearch('')
       setManualAction('log')
       setManualWorkoutName('')
-      setManualWorkoutDate(getTodayISO())
+      setManualWorkoutDate(defaultManualWorkoutDate)
       setManualExercises([])
       setEditingLoggedWorkoutId(null)
       setPendingExercise(null)
@@ -4211,7 +4140,7 @@ export default function WorkoutsPage() {
     setEditingLoggedWorkoutSession(null)
     setManualAction('log')
     setManualWorkoutName('')
-    setManualWorkoutDate(getTodayISO())
+    setManualWorkoutDate(defaultManualWorkoutDate)
     setManualExercises([])
     setPendingExercise(null)
     setManualSearch('')
@@ -4220,7 +4149,7 @@ export default function WorkoutsPage() {
     setSessionPausedAt(null)
   }
 
-  const loadLoggedWorkoutForEdit = (logId: string) => {
+  const loadLoggedWorkoutForEdit = useCallback((logId: string) => {
     const target = workoutLogs.find((log) => log.id === logId)
     if (!target) return
 
@@ -4233,7 +4162,35 @@ export default function WorkoutsPage() {
       log: target,
       exercises: createActiveExercisesFromWorkoutLog(target),
     })
-  }
+  }, [workoutLogs])
+
+  useEffect(() => {
+    const editLogId = searchParams.get('editLog')
+    const shouldOpenLog = searchParams.get('open') === '1'
+
+    if (!user) return
+    if (!editLogId && !shouldOpenLog) return
+    if (editLogId && workoutLogs.length === 0) return
+
+    setTab('log')
+
+    if (editLogId) {
+      loadLoggedWorkoutForEdit(editLogId)
+    } else {
+      setWorkoutStarted(true)
+      setManualAction('log')
+      setEditingLoggedWorkoutId(null)
+      setEditingLoggedWorkoutSession(null)
+      setManualExercises([])
+      setPendingExercise(null)
+    }
+
+    const params = new URLSearchParams(searchParams.toString())
+    params.delete('open')
+    params.delete('editLog')
+    const nextQuery = params.toString()
+    router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname)
+  }, [loadLoggedWorkoutForEdit, pathname, router, searchParams, user, workoutLogs])
 
   const handleSaveWorkout = async (workout: Workout) => {
     if (!user) return
@@ -5133,6 +5090,22 @@ export default function WorkoutsPage() {
 
               {/* Sticky bottom action bar */}
               <div className="sticky bottom-0 z-20 -mx-4 px-4 pb-5 pt-3 bg-background/95 backdrop-blur-sm border-t border-border/50">
+                <div className="mb-3 rounded-2xl border border-border/60 bg-muted/10 p-4">
+                  <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-sm font-semibold">Workout date</p>
+                      <p className="text-xs text-muted-foreground">
+                        Finish this session for the day you actually trained.
+                      </p>
+                    </div>
+                    <Input
+                      type="date"
+                      value={manualWorkoutDate}
+                      onChange={(event) => setManualWorkoutDate(event.target.value)}
+                      className="h-10 w-full sm:w-[180px]"
+                    />
+                  </div>
+                </div>
                 {/* Save as template expand panel */}
                 {manualAction === 'save' && (
                   <div className="mb-3 rounded-2xl border border-border/60 bg-muted/10 p-4">

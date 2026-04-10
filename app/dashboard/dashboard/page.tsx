@@ -9,7 +9,7 @@ import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Flame, Zap, Apple, Dumbbell, Plus, ScanLine, Search,
-  ChevronDown, ChevronUp, Sparkles, Bell, CheckCircle2, Circle, Trash2, Clock3,
+  ChevronDown, ChevronUp, Sparkles, CheckCircle2, Circle, Trash2, Clock3,
 } from 'lucide-react'
 import { format, subDays } from 'date-fns'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -879,8 +879,6 @@ export default function DashboardPage() {
 
   if (!user) return null
 
-  const unitSystem = user.unit_system || 'imperial'
-
   const today = getTodayISO()
   const todayTotals = getDailyTotals(today)
   const todayMeals = getDailyMeals(today)
@@ -891,8 +889,6 @@ export default function DashboardPage() {
   // Calorie progress
   const caloriePct = percentage(todayTotals.calories, user.calorie_target)
   const proteinPct = percentage(todayTotals.protein_g, user.protein_target_g)
-  const carbsPct = percentage(todayTotals.carbs_g, user.carb_target_g)
-  const fatPct = percentage(todayTotals.fat_g, user.fat_target_g)
 
   // Remaining
   const caloriesLeft = Math.max(0, user.calorie_target - todayTotals.calories)

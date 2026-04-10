@@ -3,6 +3,7 @@
 import React from 'react'
 
 import { useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth,
@@ -10,7 +11,7 @@ import {
 } from 'date-fns'
 import {
   ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Dumbbell, Apple, Scale, BookOpen, Circle, Zap,
-  Flame, Clock, Pill, Plus, Trash2, Bell, CheckCircle2, Share2,
+  Flame, Clock, Pill, Trash2, Bell, CheckCircle2, Share2, Pencil,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -87,6 +88,7 @@ function sortCalendarReminders(a: CalendarReminder, b: CalendarReminder) {
 }
 
 export default function CalendarPage() {
+  const router = useRouter()
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState<Date | null>(new Date())
   const [expandedType, setExpandedType] = useState<'meal' | 'supplement' | null>(null)
@@ -187,6 +189,18 @@ export default function CalendarPage() {
     : draftForCalendarPost?.type === 'workout'
       ? 'workout post'
       : 'day post'
+
+  const openMealsForDate = (params?: Record<string, string>) => {
+    if (!selectedDateStr) return
+    const query = new URLSearchParams({ date: selectedDateStr, ...(params ?? {}) })
+    router.push(`/dashboard/meals?${query.toString()}`)
+  }
+
+  const openWorkoutsForDate = (params?: Record<string, string>) => {
+    if (!selectedDateStr) return
+    const query = new URLSearchParams({ date: selectedDateStr, ...(params ?? {}) })
+    router.push(`/dashboard/workouts?${query.toString()}`)
+  }
 
   const openNewReminder = () => {
     setEditingReminder(null)
@@ -408,6 +422,14 @@ export default function CalendarPage() {
                 </CardTitle>
                 {selectedDate ? (
                   <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                    <Button variant="outline" size="sm" onClick={() => openMealsForDate({ open: '1' })} className="h-9 gap-2 px-3">
+                      <Apple className="w-4 h-4" />
+                      Add Meal
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => openWorkoutsForDate({ open: '1' })} className="h-9 gap-2 px-3">
+                      <Dumbbell className="w-4 h-4" />
+                      Add Workout
+                    </Button>
                     {hasPostableContent ? (
                       <Button variant="outline" size="sm" onClick={openPostDialog} className="h-9 gap-2 px-3">
                         <Share2 className="w-4 h-4" />
@@ -499,13 +521,25 @@ export default function CalendarPage() {
                                     </span>
                                   </div>
 
-                                  <div className="flex gap-4 text-sm">
-                                    <span className="flex items-center gap-1.5 text-muted-foreground">
-                                      <Clock className="w-4 h-4" /> {durationLabel}
-                                    </span>
-                                    <span className="flex items-center gap-1.5 text-orange-400">
-                                      <Flame className="w-4 h-4" /> {log.calories_burned_kcal || 0} kcal
-                                    </span>
+                                <div className="flex gap-4 text-sm">
+                                  <span className="flex items-center gap-1.5 text-muted-foreground">
+                                    <Clock className="w-4 h-4" /> {durationLabel}
+                                  </span>
+                                  <span className="flex items-center gap-1.5 text-orange-400">
+                                    <Flame className="w-4 h-4" /> {log.calories_burned_kcal || 0} kcal
+                                  </span>
+                                </div>
+
+                                  <div className="flex flex-wrap gap-2">
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-8 gap-1.5"
+                                      onClick={() => openWorkoutsForDate({ editLog: log.id })}
+                                    >
+                                      <Pencil className="h-3.5 w-3.5" />
+                                      Edit Workout
+                                    </Button>
                                   </div>
 
                                   {/* Exercises */}
@@ -584,11 +618,11 @@ export default function CalendarPage() {
 
                             {/* Meal detail expansion */}
                             {event.type === 'meal' && isExpanded && selectedMeals.length > 0 && (
-                              <div className="mt-3 space-y-3" onClick={e => e.stopPropagation()}>
+                              <div className="mt-3 min-w-0 space-y-3 overflow-hidden" onClick={e => e.stopPropagation()}>
                                 {/* Daily totals */}
                                 <div className="rounded-lg border border-border/50 bg-primary/5 px-3 py-2">
                                   <p className="text-xs font-semibold text-primary mb-1">Daily Totals</p>
-                                  <div className="flex items-center gap-3 text-[11px]">
+                                  <div className="flex flex-wrap items-center gap-2 text-[11px]">
                                     <span className="font-data">{selectedMeals.reduce((sum, meal) => sum + meal.macros.calories, 0)} kcal</span>
                                     <span className="text-border/30">·</span>
                                     <span className="font-data text-emerald-500">{selectedMeals.reduce((sum, meal) => sum + meal.macros.protein_g, 0)}g protein</span>
@@ -614,25 +648,38 @@ export default function CalendarPage() {
                                   
                                   return (
                                     <div key={mealType} className="space-y-2">
-                                      <div className="flex items-center gap-2 px-1">
+                                      <div className="flex flex-wrap items-center gap-2 px-1">
                                         <div className={`w-2 h-2 rounded-full ${config.dot}`} />
                                         <p className="text-xs font-semibold capitalize">{config.label}</p>
-                                        <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground ml-auto">
+                                        <div className="ml-auto flex flex-wrap items-center justify-end gap-1.5 text-[10px] text-muted-foreground">
                                           <span className="font-data">{typeTotalCalories} kcal</span>
                                           <span className="text-border/30">·</span>
                                           <span className="font-data text-emerald-500">{typeTotalProtein}g</span>
                                         </div>
                                       </div>
-                                      <div className="space-y-1">
+                                      <div className="space-y-1 pl-4">
                                         {mealsByType.map((meal) => (
-                                          <div key={meal.id} className="rounded-lg border border-border/30 bg-muted/10 px-3 py-2 ml-4">
-                                            <div className="flex items-center justify-between gap-3">
-                                              <p className="text-sm font-medium truncate">{meal.name}</p>
-                                              <span className="text-[11px] text-muted-foreground shrink-0">{meal.time}</span>
+                                          <div key={meal.id} className="min-w-0 rounded-lg border border-border/30 bg-muted/10 px-3 py-2">
+                                            <div className="flex min-w-0 items-start justify-between gap-3">
+                                              <div className="min-w-0 flex-1">
+                                                <p className="truncate text-sm font-medium">{meal.name}</p>
+                                                <p className="mt-0.5 text-[11px] text-muted-foreground">
+                                                  <span className="font-data">{meal.macros.calories}</span> kcal · <span className="font-data text-emerald-500">{meal.macros.protein_g}g</span> protein
+                                                </p>
+                                              </div>
+                                              <span className="shrink-0 text-[11px] text-muted-foreground">{meal.time}</span>
                                             </div>
-                                            <p className="mt-0.5 text-[11px] text-muted-foreground">
-                                              <span className="font-data">{meal.macros.calories}</span> kcal · <span className="font-data text-emerald-500">{meal.macros.protein_g}g</span> protein
-                                            </p>
+                                            <div className="mt-2 flex flex-wrap justify-end gap-2">
+                                              <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="h-7 gap-1.5 px-2.5 text-[11px]"
+                                                onClick={() => openMealsForDate({ editMeal: meal.id })}
+                                              >
+                                                <Pencil className="h-3 w-3" />
+                                                Edit
+                                              </Button>
+                                            </div>
                                           </div>
                                         ))}
                                       </div>

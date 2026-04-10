@@ -75,33 +75,6 @@ export interface ResolvedFoodEntry {
   macros: Macros
 }
 
-type OpenFoodFactsProduct = {
-  code?: string
-  product_name?: string
-  product_name_en?: string
-  brands?: string
-  serving_size?: string
-  nutriments?: {
-    [key: string]: number | string | undefined
-  }
-}
-
-type UsdaSearchFood = {
-  fdcId?: number
-  description?: string
-  brandOwner?: string
-  servingSize?: number
-  servingSizeUnit?: string
-  foodNutrients?: Array<{
-    nutrientId?: number
-    value?: number
-  }>
-}
-
-type UsdaSearchResponse = {
-  foods?: UsdaSearchFood[]
-}
-
 const UNIT_ALIASES: Record<string, string[]> = {
   serving: ['serving', 'servings', 'srv'],
   cup: ['cup', 'cups', 'c'],
@@ -214,25 +187,8 @@ const LIVE_CACHE = new Map<string, FoodCatalogItem>()
 const LIVE_FETCHED_QUERIES = new Map<string, number>()
 const FETCH_TTL_MS = 5 * 60 * 1000
 
-function toNumber(value: unknown) {
-  if (typeof value === 'number') {
-    return Number.isFinite(value) ? value : undefined
-  }
-  if (typeof value === 'string') {
-    const parsed = Number(value)
-    return Number.isFinite(parsed) ? parsed : undefined
-  }
-  return undefined
-}
-
-function kcalFromKj(kj?: number) {
-  if (kj === undefined) return undefined
-  return kj / 4.184
-}
-
 function getMultiplier(item: FoodCatalogItem, amount: number, unit: string) {
   const canonical = canonicalUnit(unit)
-  const itemUnit = canonicalUnit(item.default_serving_unit)
   
   // Standard unit conversions to grams
   const unitToGrams: Record<string, number> = {
@@ -338,129 +294,7 @@ export function resolveFoodsFromText(input: string) {
   return { resolved, unresolved }
 }
 
-function parseServingSizeText(servingSize?: string) {
-  if (!servingSize) {
-    return { amount: 1, unit: 'serving', label: '1 serving', gramsPerServing: undefined as number | undefined }
-  }
-
-  const cleaned = servingSize.trim()
-  const baseMatch = cleaned.match(/((?:\d+\s+\d+\/\d+)|(?:\d+\/\d+)|(?:\d*\.?\d+))\s*([a-zA-Z]+)/)
-  const gramsMatch = cleaned.match(/(\d+(?:\.\d+)?)\s*g/i)
-
-  return {
-    amount: baseMatch ? parseFraction(baseMatch[1]) : 1,
-    unit: baseMatch ? canonicalUnit(baseMatch[2]) : 'serving',
-    label: cleaned,
-    gramsPerServing: gramsMatch ? Number(gramsMatch[1]) : undefined,
-  }
-}
-
-function normalizeRemoteProduct(product: OpenFoodFactsProduct): FoodCatalogItem | null {
-  const rawName = (product.product_name_en || product.product_name || '').trim()
-  if (!rawName) return null
-
-  const serving = parseServingSizeText(product.serving_size)
-  const nutriments = product.nutriments || {}
-
-  const byServing = {
-    calories: toNumber(nutriments['energy-kcal_serving']) ?? toNumber(nutriments['energy-kcal']),
-    protein_g: toNumber(nutriments.proteins_serving) ?? toNumber(nutriments.proteins),
-    carbs_g: toNumber(nutriments.carbohydrates_serving) ?? toNumber(nutriments.carbohydrates),
-    fat_g: toNumber(nutriments.fat_serving) ?? toNumber(nutriments.fat),
-  }
-
-  const by100g = {
-    calories:
-      toNumber(nutriments['energy-kcal_100g']) ??
-      kcalFromKj(toNumber(nutriments.energy_100g)) ??
-      toNumber(nutriments['energy-kcal']),
-    protein_g: toNumber(nutriments.proteins_100g) ?? toNumber(nutriments.proteins),
-    carbs_g: toNumber(nutriments.carbohydrates_100g) ?? toNumber(nutriments.carbohydrates),
-    fat_g: toNumber(nutriments.fat_100g) ?? toNumber(nutriments.fat),
-  }
-
-  const hasServingMacros = typeof byServing.calories === 'number' && Number.isFinite(byServing.calories)
-
-  const has100gMacros = typeof by100g.calories === 'number' && Number.isFinite(by100g.calories)
-
-  if (!hasServingMacros && !has100gMacros) return null
-
-  const macros = hasServingMacros
-    ? {
-        calories: byServing.calories as number,
-        protein_g: byServing.protein_g ?? 0,
-        carbs_g: byServing.carbs_g ?? 0,
-        fat_g: byServing.fat_g ?? 0,
-      }
-    : {
-        calories: by100g.calories as number,
-        protein_g: by100g.protein_g ?? 0,
-        carbs_g: by100g.carbs_g ?? 0,
-        fat_g: by100g.fat_g ?? 0,
-      }
-
-  const nameWithBrand = product.brands ? `${rawName} (${product.brands})` : rawName
-
-  return {
-    id: `off-${product.code || normalize(nameWithBrand).replace(/\s+/g, '-')}`,
-    name: nameWithBrand,
-    aliases: [rawName],
-    default_serving_amount: hasServingMacros ? serving.amount : 100,
-    default_serving_unit: hasServingMacros ? serving.unit : 'g',
-    default_serving_label: hasServingMacros ? serving.label : '100 g',
-    grams_per_serving: serving.gramsPerServing,
-    macros_per_serving: macros,
-  }
-}
-
-function getUsdaNutrient(food: UsdaSearchFood, nutrientId: number) {
-  const match = (food.foodNutrients || []).find((n) => n.nutrientId === nutrientId)
-  return typeof match?.value === 'number' && Number.isFinite(match.value) ? match.value : undefined
-}
-
-function normalizeUsdaFood(food: UsdaSearchFood): FoodCatalogItem | null {
-  const name = (food.description || '').trim()
-  if (!name) return null
-
-  const calories = getUsdaNutrient(food, 1008)
-  const protein = getUsdaNutrient(food, 1003)
-  const carbs = getUsdaNutrient(food, 1005)
-  const fat = getUsdaNutrient(food, 1004)
-
-  if (
-    calories === undefined ||
-    protein === undefined ||
-    carbs === undefined ||
-    fat === undefined
-  ) {
-    return null
-  }
-
-  const servingAmount =
-    typeof food.servingSize === 'number' && Number.isFinite(food.servingSize) && food.servingSize > 0
-      ? food.servingSize
-      : 100
-
-  const servingUnit = canonicalUnit(food.servingSizeUnit || 'g')
-  const brandSuffix = food.brandOwner ? ` (${food.brandOwner})` : ''
-
-  return {
-    id: `usda-${food.fdcId || normalize(name).replace(/\s+/g, '-')}`,
-    name: `${name}${brandSuffix}`,
-    aliases: [name],
-    default_serving_amount: servingAmount,
-    default_serving_unit: servingUnit,
-    default_serving_label: `${servingAmount} ${servingUnit}`,
-    macros_per_serving: {
-      calories,
-      protein_g: protein,
-      carbs_g: carbs,
-      fat_g: fat,
-    },
-  }
-}
-
-export function getAvailableUnits(item: FoodCatalogItem): string[] {
+export function getAvailableUnits(_item: FoodCatalogItem): string[] {
   // Return comprehensive unit options for ALL foods
   return [
     'serving', 'g', 'kg', 'oz', 'lb', 'cup', 'tbsp', 'tsp', 'ml', 'l', 

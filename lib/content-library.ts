@@ -8,14 +8,12 @@ import type {
   Workout,
   ExerciseLibraryItem,
   WeightEntry,
-  WorkoutLog,
   JournalEntry,
   WeeklyMealPlan,
   GroceryList,
   Recipe,
 } from '@/types'
-import { getTodayISO, formatDate } from './utils'
-import { format, subDays, subWeeks } from 'date-fns'
+import { format, subDays } from 'date-fns'
 
 export const DEMO_USER: UserProfile = {
   id: 'demo-user-001',

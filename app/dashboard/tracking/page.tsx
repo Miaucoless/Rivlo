@@ -375,7 +375,7 @@ function EditWeightDialog({ entry, open, setOpen }: { entry: any; open: boolean;
 
 export default function TrackingPage() {
   const { user, weightHistory, workoutLogs, getDailyTotals, removeWeightEntry } = useAppStore()
-  const [timeRange, setTimeRange] = useState<'2w' | '1m' | '3m' | 'all'>('1m')
+  const [timeRange] = useState<'2w' | '1m' | '3m' | 'all'>('1m')
   const [editingEntry, setEditingEntry] = useState<any>(null)
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [nutritionMetric, setNutritionMetric] = useState<'calories' | 'protein'>('calories')

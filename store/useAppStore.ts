@@ -24,7 +24,6 @@ import type {
   NotificationPreferenceKey,
   NotificationPreferences,
   SupplementEntry,
-  SavedMealItem,
   SavedMealTemplate,
   Recipe,
   CalendarReminder,

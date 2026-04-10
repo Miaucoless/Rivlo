@@ -502,7 +502,7 @@ function IntelligencePreview() {
   )
 }
 
-function FeatureRow({ feature, index }: { feature: Feature; index: number }) {
+function FeatureRow({ feature }: { feature: Feature }) {
   const rowRef = useRef<HTMLElement | null>(null)
   const tone = toneClasses[feature.tone]
   const { scrollYProgress } = useScroll({
@@ -620,8 +620,8 @@ export function FeaturesSection() {
         </motion.div>
 
         <div className="space-y-1">
-          {features.map((feature, index) => (
-            <FeatureRow key={feature.id} feature={feature} index={index} />
+          {features.map((feature) => (
+            <FeatureRow key={feature.id} feature={feature} />
           ))}
         </div>
       </div>

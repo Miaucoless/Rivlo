@@ -35,13 +35,6 @@ interface FormData {
   avoided_foods_input: string
 }
 
-type ChoiceCard = {
-  value: string
-  label: string
-  description: string
-  emoji: string
-}
-
 const ONBOARDING_PROGRESS_STORAGE_KEY = 'rivora-onboarding-progress-v1'
 
 type SavedOnboardingProgress = {

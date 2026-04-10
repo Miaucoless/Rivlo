@@ -6,12 +6,11 @@ import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { format } from 'date-fns'
 import {
-  BookOpen, Plus, Edit2, Trash2, Tag, Smile, Zap, Search,
-  ChevronRight, X, Save, Heart, Battery, Dumbbell, Apple, Pill, Link2, PenLine,
+  BookOpen, Plus, Edit2, Trash2, Tag, Search,
+  X, Save, Heart, Battery, Dumbbell, Apple, Pill, Link2, PenLine,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -42,10 +41,6 @@ const PROMPTS = [
 
 const MOOD_EMOJIS: Record<MoodLevel, string> = {
   1: '😞', 2: '😕', 3: '😐', 4: '🙂', 5: '😄',
-}
-
-const ENERGY_EMOJIS: Record<EnergyLevel, string> = {
-  1: '🪫', 2: '😴', 3: '⚡', 4: '🔥', 5: '⚡⚡',
 }
 
 function MoodSelector({ value, onChange }: { value: MoodLevel; onChange: (v: MoodLevel) => void }) {
@@ -103,12 +98,10 @@ const LINK_TYPE_CONFIG = {
 function JournalEditorDialog({
   entry,
   onSave,
-  onClose,
   children,
 }: {
   entry?: JournalEntry
   onSave: (data: Partial<JournalEntry>) => void
-  onClose?: () => void
   children?: React.ReactNode
 }) {
   const { workoutLogs, getDailyMeals, supplements } = useAppStore()
@@ -718,7 +711,6 @@ export default function JournalPage() {
           <JournalEditorDialog
             entry={editEntry}
             onSave={(data) => handleUpdate(editEntry.id, data)}
-            onClose={() => setEditEntry(null)}
           />
         </Dialog>
       )}
