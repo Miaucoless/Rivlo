@@ -133,6 +133,17 @@ export interface SavedMealTemplate {
   macros: { calories: number; protein_g: number; carbs_g: number; fat_g: number; fiber_g?: number }
   items: SavedMealItem[]
   updated_at: string
+  saved_from?: LibrarySaveOrigin
+}
+
+export interface LibrarySaveOrigin {
+  source: 'feed' | 'shared'
+  label?: string
+  post_id?: string
+  share_id?: string
+  friend_share_id?: string
+  username?: string
+  saved_at?: string
 }
 
 export interface CustomMealIngredient {
@@ -263,6 +274,7 @@ export interface Workout {
   split_type: WorkoutSplit
   source?: 'premade' | 'custom'
   updated_at?: string
+  saved_from?: LibrarySaveOrigin
 }
 
 export interface WorkoutLog {

@@ -1101,6 +1101,7 @@ function summarizeExercises(exercises: WorkoutExercise[], metProfile: MetProfile
 function SavedWorkoutCard({
   workout,
   averageDurationMin,
+  completedUseCount,
   onStart,
   onPreview,
   onEdit,
@@ -1109,6 +1110,7 @@ function SavedWorkoutCard({
 }: {
   workout: Workout
   averageDurationMin?: number
+  completedUseCount: number
   onStart: (workout: Workout) => void
   onPreview: (workout: Workout) => void
   onEdit: (workout: Workout) => void
@@ -1153,8 +1155,8 @@ function SavedWorkoutCard({
           <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Time</p>
         </div>
         <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5">
-          <p className="font-data text-lg font-semibold">{workout.muscle_groups.length}</p>
-          <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Focus</p>
+          <p className="font-data text-lg font-semibold">{completedUseCount}</p>
+          <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Completed</p>
         </div>
       </div>
 
@@ -3541,6 +3543,17 @@ export default function WorkoutsPage() {
     )
   }, [workoutLogs])
 
+  const completedUsesByWorkoutId = useMemo(() => {
+    const counts = new Map<string, number>()
+
+    workoutLogs.forEach((log) => {
+      if (!log.completed_at) return
+      counts.set(log.workout_id, (counts.get(log.workout_id) ?? 0) + 1)
+    })
+
+    return counts
+  }, [workoutLogs])
+
   useEffect(() => {
     if (typeof window === 'undefined') return
 
@@ -5434,7 +5447,7 @@ export default function WorkoutsPage() {
               ) : (
                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                   {filteredSavedWorkouts.map((workout) => (
-                    <SavedWorkoutCard key={workout.id} workout={workout} averageDurationMin={averageDurationByWorkoutId.get(workout.id)} onStart={startWorkout} onPreview={setPreviewWorkout} onEdit={(item) => { setEditingWorkout(item); setBuilderOpen(true) }} onPublish={openPublishComposerForWorkout} onDelete={handleDeleteWorkout} />
+                    <SavedWorkoutCard key={workout.id} workout={workout} averageDurationMin={averageDurationByWorkoutId.get(workout.id)} completedUseCount={completedUsesByWorkoutId.get(workout.id) ?? 0} onStart={startWorkout} onPreview={setPreviewWorkout} onEdit={(item) => { setEditingWorkout(item); setBuilderOpen(true) }} onPublish={openPublishComposerForWorkout} onDelete={handleDeleteWorkout} />
                   ))}
                 </div>
               )}
@@ -5578,7 +5591,7 @@ export default function WorkoutsPage() {
             ) : (
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 {filteredPremadeWorkouts.map((workout) => (
-                  <SavedWorkoutCard key={workout.id} workout={{ ...workout, source: 'premade' }} averageDurationMin={averageDurationByWorkoutId.get(workout.id)} onStart={startWorkout} onPreview={setPreviewWorkout} onEdit={(item) => { setEditingWorkout(item); setBuilderOpen(true) }} />
+                  <SavedWorkoutCard key={workout.id} workout={{ ...workout, source: 'premade' }} averageDurationMin={averageDurationByWorkoutId.get(workout.id)} completedUseCount={completedUsesByWorkoutId.get(workout.id) ?? 0} onStart={startWorkout} onPreview={setPreviewWorkout} onEdit={(item) => { setEditingWorkout(item); setBuilderOpen(true) }} />
                 ))}
               </div>
             )}

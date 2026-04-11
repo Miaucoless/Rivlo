@@ -687,7 +687,7 @@ export function sortSocialPosts(posts: SocialPost[], sort: SocialFeedSort) {
 
     if (sort === 'trending') {
       const score = (post: SocialPost) =>
-        (post.stats.used * 1.2) + (post.stats.saved * 0.9) + (post.stats.remixed * 1.4) + (post.stats.completed * 1.1)
+        (post.stats.used * 1.2) + (post.stats.saved * 0.9) + ((post.stats.remixed ?? 0) * 1.4) + (post.stats.completed * 1.1)
       return score(b) - score(a)
     }
 
@@ -760,6 +760,13 @@ export function buildSavedMealFromPost(post: SocialPost, servingsMultiplier: num
       macros: undefined,
     })) ?? [],
     updated_at: new Date().toISOString(),
+    saved_from: {
+      source: 'feed',
+      label: post.title,
+      post_id: post.id,
+      username: post.user.username,
+      saved_at: new Date().toISOString(),
+    },
   }
 }
 
@@ -858,6 +865,13 @@ export function buildWorkoutFromPost(
     split_type: options.splitType,
     source: 'custom',
     updated_at: new Date().toISOString(),
+    saved_from: {
+      source: 'feed',
+      label: post.title,
+      post_id: post.id,
+      username: post.user.username,
+      saved_at: new Date().toISOString(),
+    },
   }
 }
 

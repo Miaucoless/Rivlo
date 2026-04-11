@@ -110,7 +110,7 @@ export default function CalendarPage() {
   const [selectedWorkoutPostIds, setSelectedWorkoutPostIds] = useState<string[]>([])
   const [selectedSupplementPostIds, setSelectedSupplementPostIds] = useState<string[]>([])
 
-  const { getCalendarEvents, getDailyMeals, workoutLogs, supplements, calendarReminders, addCalendarReminder, updateCalendarReminder, toggleCalendarReminderComplete, removeCalendarReminder, createSocialPost, user } = useAppStore()
+  const { getCalendarEvents, getDailyMeals, workoutLogs, supplements, calendarReminders, addCalendarReminder, updateCalendarReminder, toggleCalendarReminderComplete, removeCalendarReminder, createSocialPost, user, removeMealEntry } = useAppStore()
   const unitSystem = user?.unit_system || 'imperial'
 
   const events = getCalendarEvents()
@@ -200,6 +200,14 @@ export default function CalendarPage() {
     if (!selectedDateStr) return
     const query = new URLSearchParams({ date: selectedDateStr, ...(params ?? {}) })
     router.push(`/dashboard/workouts?${query.toString()}`)
+  }
+
+  const handleDeleteMeal = (meal: MealLogEntry) => {
+    if (!selectedDateStr) return
+    const confirmed = window.confirm(`Delete "${meal.name}" from ${format(new Date(`${selectedDateStr}T12:00:00`), 'MMMM d')}?`)
+    if (!confirmed) return
+    removeMealEntry(selectedDateStr, meal.id)
+    toast.success('Meal deleted from calendar day.')
   }
 
   const openNewReminder = () => {
@@ -295,7 +303,7 @@ export default function CalendarPage() {
   }).length
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-6 overflow-x-hidden">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -304,9 +312,9 @@ export default function CalendarPage() {
         </div>
       </div>
 
-      <div className="grid lg:grid-cols-3 gap-6">
+      <div className="grid min-w-0 gap-6 lg:grid-cols-3">
         {/* Calendar */}
-        <div className="lg:col-span-2">
+        <div className="min-w-0 lg:col-span-2">
           <Card>
             <CardHeader className="pb-3">
               {/* Month navigation */}
@@ -406,9 +414,9 @@ export default function CalendarPage() {
         </div>
 
         {/* Selected day detail */}
-        <div className="lg:sticky lg:top-24 lg:self-start lg:max-h-[calc(100vh-7.5rem)] lg:overflow-hidden">
-          <div className="flex flex-col gap-4 lg:max-h-[calc(100vh-7.5rem)]">
-          <Card className="overflow-hidden lg:flex-1 lg:min-h-0">
+        <div className="min-w-0 lg:sticky lg:top-24 lg:self-start lg:max-h-[calc(100vh-7.5rem)] lg:overflow-hidden">
+          <div className="flex min-w-0 flex-col gap-4 lg:max-h-[calc(100vh-7.5rem)]">
+          <Card className="min-w-0 overflow-hidden lg:flex-1 lg:min-h-0">
             <CardHeader className="pb-3 border-b border-border/50">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <CardTitle className="flex min-w-0 items-start gap-2 text-sm">
@@ -444,7 +452,7 @@ export default function CalendarPage() {
                 ) : null}
               </div>
             </CardHeader>
-            <CardContent className="p-0 lg:min-h-0">
+            <CardContent className="min-w-0 p-0 lg:min-h-0">
               <AnimatePresence mode="wait">
                 {selectedEvents.length > 0 || selectedReminders.length > 0 ? (
                   <motion.div
@@ -591,17 +599,19 @@ export default function CalendarPage() {
                         const isExpandable = event.type === 'meal' || event.type === 'supplement'
                         const isExpanded = expandedType === event.type
                         return (
-                          <button
+                          <div
                             key={i}
-                            type="button"
-                            onClick={() => {
-                              if (isExpandable) {
-                                setExpandedType((current) => (current === event.type ? null : event.type as 'meal' | 'supplement'))
-                              }
-                            }}
-                            className={`w-full p-4 text-left transition-all hover:bg-muted/20 ${isExpandable ? 'cursor-pointer' : 'cursor-default'}`}
+                            className={`min-w-0 p-4 transition-all ${isExpandable ? 'hover:bg-muted/20' : ''}`}
                           >
-                            <div className="flex items-start gap-2.5">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (isExpandable) {
+                                  setExpandedType((current) => (current === event.type ? null : event.type as 'meal' | 'supplement'))
+                                }
+                              }}
+                              className={`flex w-full min-w-0 items-start gap-2.5 text-left ${isExpandable ? 'cursor-pointer' : 'cursor-default'}`}
+                            >
                               <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${config?.bg}`}>
                                 <Icon className="w-3.5 h-3.5" />
                               </div>
@@ -614,11 +624,11 @@ export default function CalendarPage() {
                                   </p>
                                 )}
                               </div>
-                            </div>
+                            </button>
 
                             {/* Meal detail expansion */}
                             {event.type === 'meal' && isExpanded && selectedMeals.length > 0 && (
-                              <div className="mt-3 min-w-0 space-y-3 overflow-hidden" onClick={e => e.stopPropagation()}>
+                              <div className="mt-3 w-full min-w-0 max-w-full space-y-3 overflow-hidden">
                                 {/* Daily totals */}
                                 <div className="rounded-lg border border-border/50 bg-primary/5 px-3 py-2">
                                   <p className="text-xs font-semibold text-primary mb-1">Daily Totals</p>
@@ -648,26 +658,26 @@ export default function CalendarPage() {
                                   
                                   return (
                                     <div key={mealType} className="space-y-2">
-                                      <div className="flex flex-wrap items-center gap-2 px-1">
+                                      <div className="flex min-w-0 flex-wrap items-center gap-2 px-1">
                                         <div className={`w-2 h-2 rounded-full ${config.dot}`} />
                                         <p className="text-xs font-semibold capitalize">{config.label}</p>
-                                        <div className="ml-auto flex flex-wrap items-center justify-end gap-1.5 text-[10px] text-muted-foreground">
+                                        <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-1.5 text-[10px] text-muted-foreground">
                                           <span className="font-data">{typeTotalCalories} kcal</span>
                                           <span className="text-border/30">·</span>
                                           <span className="font-data text-emerald-500">{typeTotalProtein}g</span>
                                         </div>
                                       </div>
-                                      <div className="space-y-1 pl-4">
+                                      <div className="space-y-1 sm:pl-4">
                                         {mealsByType.map((meal) => (
                                           <div key={meal.id} className="min-w-0 rounded-lg border border-border/30 bg-muted/10 px-3 py-2">
-                                            <div className="flex min-w-0 items-start justify-between gap-3">
+                                            <div className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
                                               <div className="min-w-0 flex-1">
                                                 <p className="truncate text-sm font-medium">{meal.name}</p>
                                                 <p className="mt-0.5 text-[11px] text-muted-foreground">
                                                   <span className="font-data">{meal.macros.calories}</span> kcal · <span className="font-data text-emerald-500">{meal.macros.protein_g}g</span> protein
                                                 </p>
                                               </div>
-                                              <span className="shrink-0 text-[11px] text-muted-foreground">{meal.time}</span>
+                                              <span className="shrink-0 text-[11px] text-muted-foreground sm:text-right">{meal.time}</span>
                                             </div>
                                             <div className="mt-2 flex flex-wrap justify-end gap-2">
                                               <Button
@@ -677,7 +687,16 @@ export default function CalendarPage() {
                                                 onClick={() => openMealsForDate({ editMeal: meal.id })}
                                               >
                                                 <Pencil className="h-3 w-3" />
-                                                Edit
+                                                Edit items
+                                              </Button>
+                                              <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-7 gap-1.5 px-2.5 text-[11px] text-destructive/80 hover:text-destructive"
+                                                onClick={() => handleDeleteMeal(meal)}
+                                              >
+                                                <Trash2 className="h-3 w-3" />
+                                                Delete
                                               </Button>
                                             </div>
                                           </div>
@@ -691,7 +710,7 @@ export default function CalendarPage() {
 
                             {/* Supplement detail expansion */}
                             {event.type === 'supplement' && isExpanded && selectedSupplements.length > 0 && (
-                              <div className="mt-3 max-h-44 space-y-1.5 overflow-y-auto pr-1" onClick={e => e.stopPropagation()}>
+                              <div className="mt-3 max-h-44 min-w-0 space-y-1.5 overflow-y-auto pr-1">
                                 {selectedSupplements.map((s) => (
                                   <div key={s.id} className="rounded-lg border border-border/50 bg-muted/20 px-3 py-2">
                                     <p className="text-sm font-medium">{s.name}</p>
@@ -702,7 +721,7 @@ export default function CalendarPage() {
                                 ))}
                               </div>
                             )}
-                          </button>
+                          </div>
                         )
                       })}
 

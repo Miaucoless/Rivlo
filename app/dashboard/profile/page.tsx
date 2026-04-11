@@ -21,7 +21,7 @@ import { SocialPostComposerDialog } from '@/components/feed/SocialPostComposerDi
 import { SocialPostDetailDialog } from '@/components/feed/SocialPostDetailDialog'
 import { DEFAULT_SOCIAL_POSTS, buildSocialDraftFromPost, getSocialCreators } from '@/lib/social-feed'
 import { getFollowerCount, getFollowingCount, mergeSocialProfiles } from '@/lib/social-connections'
-import type { SocialFollowRelationship, SocialPost, SocialPostUser } from '@/types'
+import type { SavedMealTemplate, SocialFollowRelationship, SocialPost, SocialPostUser, Workout } from '@/types'
 import { XpBadge } from '@/components/ui/XpBadge'
 import { XpProgressBar } from '@/components/xp/XpProgressBar'
 
@@ -290,35 +290,58 @@ export default function ProfilePage() {
     () => mergeSocialProfiles(socialPosts, [...getSocialCreators(), ...remoteProfiles], user),
     [remoteProfiles, socialPosts, user]
   )
-  const currentSocialUser = useMemo<SocialPostUser>(() => ({
-    id: user.id,
-    name: user.name,
-    username: user.username || fallbackUsername(user.name),
-    avatar_url: user.avatar_url,
-    banner_url: user.banner_url,
-    bio: user.bio,
-    profile_visibility: user.profile_visibility ?? 'public',
-  }), [user])
+  const currentSocialUser = useMemo<SocialPostUser | null>(() => {
+    if (!user) return null
+
+    return {
+      id: user.id,
+      name: user.name,
+      username: user.username || fallbackUsername(user.name),
+      avatar_url: user.avatar_url,
+      banner_url: user.banner_url,
+      bio: user.bio,
+      profile_visibility: user.profile_visibility ?? 'public',
+    }
+  }, [user])
   const peopleById = useMemo(() => new Map(socialProfiles.map((profile) => [profile.id, profile])), [socialProfiles])
   const followerCount = getFollowerCount(allFollows, user?.id ?? '')
   const followingCount = getFollowingCount(allFollows, user?.id ?? '')
   const followers = useMemo(() => allFollows
     .filter((item) => item.followingId === user?.id && item.status === 'accepted')
     .map((item) => peopleById.get(item.followerId))
-    .filter(Boolean), [allFollows, peopleById, user?.id])
+    .filter(isSocialPostUser), [allFollows, peopleById, user?.id])
   const following = useMemo(() => allFollows
     .filter((item) => item.followerId === user?.id && item.status === 'accepted')
     .map((item) => peopleById.get(item.followingId))
-    .filter(Boolean), [allFollows, peopleById, user?.id])
+    .filter(isSocialPostUser), [allFollows, peopleById, user?.id])
   const savedPosts = useMemo(
     () => socialSavedPostIds
       .map((postId) => browseablePosts.find((post) => post.id === postId))
       .filter(Boolean) as SocialPost[],
     [browseablePosts, socialSavedPostIds]
   )
-  const repostedPosts = useMemo(() => [...ownPosts].filter((post) => post.stats.remixed > 0).sort((a, b) => b.stats.remixed - a.stats.remixed), [ownPosts])
+  const externalSavedMeals = useMemo(() => savedMeals.filter(isExternalSavedMeal), [savedMeals])
+  const externalSavedWorkouts = useMemo(() => customWorkouts.filter(isExternalSavedWorkout), [customWorkouts])
+  const externalSavedMealPostIds = useMemo(() => new Set(externalSavedMeals.map((meal) => meal.saved_from?.post_id).filter(isString)), [externalSavedMeals])
+  const externalSavedWorkoutPostIds = useMemo(() => new Set(externalSavedWorkouts.map((workout) => workout.saved_from?.post_id).filter(isString)), [externalSavedWorkouts])
+  const savedMealPosts = useMemo(
+    () => savedPosts.filter((post) => post.type === 'meal' && post.mealData && !externalSavedMealPostIds.has(post.id)),
+    [externalSavedMealPostIds, savedPosts]
+  )
+  const savedWorkoutPosts = useMemo(
+    () => savedPosts.filter((post) => post.type === 'workout' && post.workoutData && !externalSavedWorkoutPostIds.has(post.id)),
+    [externalSavedWorkoutPostIds, savedPosts]
+  )
+  const profileMealsCount = externalSavedMeals.length + savedMealPosts.length
+  const profileWorkoutsCount = externalSavedWorkouts.length + savedWorkoutPosts.length
+  const repostedPosts = useMemo(
+    () => [...ownPosts]
+      .filter((post) => (post.stats.remixed ?? 0) > 0)
+      .sort((a, b) => (b.stats.remixed ?? 0) - (a.stats.remixed ?? 0)),
+    [ownPosts]
+  )
 
-  if (!user) return null
+  if (!user || !currentSocialUser) return null
 
   const handleAvatarSelect = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -673,8 +696,8 @@ export default function ProfilePage() {
           <TabsTrigger value="comments" className="shrink-0 rounded-none border-b-2 border-transparent px-0 pb-3 pt-0 data-[state=active]:border-primary data-[state=active]:bg-transparent">Comments</TabsTrigger>
           <TabsTrigger value="saves" className="shrink-0 rounded-none border-b-2 border-transparent px-0 pb-3 pt-0 data-[state=active]:border-primary data-[state=active]:bg-transparent">Saves</TabsTrigger>
           <TabsTrigger value="reposts" className="shrink-0 rounded-none border-b-2 border-transparent px-0 pb-3 pt-0 data-[state=active]:border-primary data-[state=active]:bg-transparent">Reposts</TabsTrigger>
-          <TabsTrigger value="saved-meals" className="shrink-0 rounded-none border-b-2 border-transparent px-0 pb-3 pt-0 data-[state=active]:border-primary data-[state=active]:bg-transparent">Saved Meals</TabsTrigger>
-          <TabsTrigger value="saved-workouts" className="shrink-0 rounded-none border-b-2 border-transparent px-0 pb-3 pt-0 data-[state=active]:border-primary data-[state=active]:bg-transparent">Saved Workouts</TabsTrigger>
+          <TabsTrigger value="saved-meals" className="shrink-0 rounded-none border-b-2 border-transparent px-0 pb-3 pt-0 data-[state=active]:border-primary data-[state=active]:bg-transparent">Meals</TabsTrigger>
+          <TabsTrigger value="saved-workouts" className="shrink-0 rounded-none border-b-2 border-transparent px-0 pb-3 pt-0 data-[state=active]:border-primary data-[state=active]:bg-transparent">Workouts</TabsTrigger>
         </TabsList>
 
         <TabsContent value="posts" className="mt-0">
@@ -816,19 +839,46 @@ export default function ProfilePage() {
         </TabsContent>
 
         <TabsContent value="saved-meals" className="mt-0">
-          {savedMeals.length === 0 ? (
+          {profileMealsCount === 0 ? (
             <EmptyState
-              title="No saved meals yet"
-              detail="Meals you save to your account will show up here for quick access."
+              title="No feed or shared meals yet"
+              detail="Meals saved from feed posts or imported from Shared With Me will show up here."
             />
           ) : (
             <div className="grid gap-4 lg:grid-cols-2">
-              {savedMeals.map((meal) => (
+              {savedMealPosts.map((post) => {
+                const mealData = post.mealData
+                if (!mealData) return null
+
+                return (
+                  <Card key={`feed-${post.id}`} className="border-border/60">
+                    <CardContent className="space-y-4 p-5">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Saved from @{post.user.username}</p>
+                          <h3 className="mt-1 font-semibold">{post.title}</h3>
+                        </div>
+                        <div className="rounded-full border border-border/60 bg-muted/30 px-3 py-1 text-xs text-muted-foreground">
+                          Feed
+                        </div>
+                      </div>
+                      <p className="line-clamp-2 text-sm text-muted-foreground">{post.caption}</p>
+                      <div className="grid grid-cols-4 gap-2 text-center">
+                        <MiniStat label="Cal" value={Math.round(mealData.calories)} />
+                        <MiniStat label="Protein" value={`${Math.round(mealData.protein)}g`} />
+                        <MiniStat label="Carbs" value={`${Math.round(mealData.carbs)}g`} />
+                        <MiniStat label="Fat" value={`${Math.round(mealData.fat)}g`} />
+                      </div>
+                    </CardContent>
+                  </Card>
+                )
+              })}
+              {externalSavedMeals.map((meal) => (
                 <Card key={meal.id} className="border-border/60">
                   <CardContent className="space-y-4 p-5">
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">{meal.meal_type}</p>
+                        <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">{saveOriginLabel(meal.saved_from)}</p>
                         <h3 className="mt-1 font-semibold">{meal.name}</h3>
                       </div>
                       <div className="rounded-full border border-border/60 bg-muted/30 px-3 py-1 text-xs text-muted-foreground">
@@ -849,19 +899,51 @@ export default function ProfilePage() {
         </TabsContent>
 
         <TabsContent value="saved-workouts" className="mt-0">
-          {customWorkouts.length === 0 ? (
+          {profileWorkoutsCount === 0 ? (
             <EmptyState
-              title="No saved workouts yet"
-              detail="Saved and custom workouts will show up here so your profile reflects what you actually use."
+              title="No feed or shared workouts yet"
+              detail="Workouts saved from feed posts or imported from Shared With Me will show up here."
             />
           ) : (
             <div className="grid gap-4 lg:grid-cols-2">
-              {customWorkouts.map((workout) => (
+              {savedWorkoutPosts.map((post) => {
+                const workoutData = post.workoutData
+                if (!workoutData) return null
+
+                return (
+                  <Card key={`feed-${post.id}`} className="border-border/60">
+                    <CardContent className="space-y-4 p-5">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Saved from @{post.user.username}</p>
+                          <h3 className="mt-1 font-semibold">{post.title}</h3>
+                        </div>
+                        <div className="rounded-full border border-border/60 bg-muted/30 px-3 py-1 text-xs text-muted-foreground">
+                          Feed
+                        </div>
+                      </div>
+                      <p className="line-clamp-2 text-sm text-muted-foreground">{post.caption}</p>
+                      <div className="flex flex-wrap gap-2">
+                        {workoutData.focus.slice(0, 4).map((focus) => (
+                          <div key={focus} className="rounded-full border border-border/60 bg-muted/30 px-3 py-1 text-xs text-muted-foreground">
+                            {focus}
+                          </div>
+                        ))}
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-center">
+                        <MiniStat label="Exercises" value={workoutData.exercises.length} />
+                        <MiniStat label="Level" value={workoutData.level} />
+                      </div>
+                    </CardContent>
+                  </Card>
+                )
+              })}
+              {externalSavedWorkouts.map((workout) => (
                 <Card key={workout.id} className="border-border/60">
                   <CardContent className="space-y-4 p-5">
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">{workout.day_label}</p>
+                        <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">{saveOriginLabel(workout.saved_from)}</p>
                         <h3 className="mt-1 font-semibold">{workout.name}</h3>
                       </div>
                       <div className="rounded-full border border-border/60 bg-muted/30 px-3 py-1 text-xs text-muted-foreground">
@@ -1010,4 +1092,35 @@ function fallbackUsername(name: string) {
 
 function capitalize(value: string) {
   return value.charAt(0).toUpperCase() + value.slice(1)
+}
+
+function isString(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0
+}
+
+function isSocialPostUser(value: SocialPostUser | undefined): value is SocialPostUser {
+  return Boolean(value)
+}
+
+function isExternalSavedMeal(meal: SavedMealTemplate) {
+  return (
+    meal.saved_from?.source === 'feed' ||
+    meal.saved_from?.source === 'shared' ||
+    meal.id.startsWith('social-meal-')
+  )
+}
+
+function isExternalSavedWorkout(workout: Workout) {
+  return (
+    workout.saved_from?.source === 'feed' ||
+    workout.saved_from?.source === 'shared' ||
+    workout.id.startsWith('social-workout-') ||
+    workout.day_label === 'Social Save'
+  )
+}
+
+function saveOriginLabel(source?: SavedMealTemplate['saved_from'] | Workout['saved_from']) {
+  if (!source) return 'Feed save'
+  if (source.source === 'shared') return source.username ? `Shared by ${source.username}` : 'Shared with me'
+  return source.username ? `Saved from @${source.username}` : 'Feed save'
 }

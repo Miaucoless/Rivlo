@@ -63,6 +63,9 @@ function normalizeGroceryListRow(row: Record<string, unknown>, userId: string): 
 function normalizeSavedMealTemplate(raw: unknown, fallbackName: string): SavedMealTemplate {
   const meal = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {}
   const rawItems = Array.isArray(meal.items) ? meal.items : []
+  const savedFrom = meal.saved_from && typeof meal.saved_from === 'object'
+    ? meal.saved_from as SavedMealTemplate['saved_from']
+    : undefined
 
   return {
     id: typeof meal.id === 'string' && meal.id ? meal.id : crypto.randomUUID(),
@@ -111,6 +114,20 @@ function normalizeSavedMealTemplate(raw: unknown, fallbackName: string): SavedMe
       }
     }),
     updated_at: typeof meal.updated_at === 'string' && meal.updated_at ? meal.updated_at : new Date().toISOString(),
+    saved_from: savedFrom,
+  }
+}
+
+function buildSharedSaveOrigin(
+  item: { id: string; item_name: string },
+  friendShareId: unknown
+): NonNullable<SavedMealTemplate['saved_from']> {
+  return {
+    source: 'shared',
+    label: item.item_name,
+    share_id: item.id,
+    friend_share_id: typeof friendShareId === 'string' ? friendShareId : undefined,
+    saved_at: new Date().toISOString(),
   }
 }
 
@@ -213,7 +230,11 @@ export async function POST(
       const existingSavedMeals = Array.isArray(appStateRow?.saved_meals) ? appStateRow.saved_meals : []
       const matchingMeal = existingSavedMeals.find((meal) => (meal as { id?: string }).id === existing.result_id)
       if (matchingMeal && typeof matchingMeal === 'object') {
-        existingImportedItem = normalizeSavedMealTemplate(matchingMeal, item.item_name) as unknown as Record<string, unknown>
+        const normalizedMeal = normalizeSavedMealTemplate(matchingMeal, item.item_name)
+        existingImportedItem = {
+          ...normalizedMeal,
+          saved_from: normalizedMeal.saved_from ?? buildSharedSaveOrigin(item, friend_share_id),
+        } as unknown as Record<string, unknown>
       }
     }
 
@@ -225,7 +246,10 @@ export async function POST(
         .maybeSingle()
 
       if (existingWorkout && typeof existingWorkout === 'object') {
-        existingImportedItem = existingWorkout as Record<string, unknown>
+        existingImportedItem = {
+          ...(existingWorkout as Record<string, unknown>),
+          saved_from: buildSharedSaveOrigin(item, friend_share_id),
+        }
       }
     }
 
@@ -317,12 +341,14 @@ export async function POST(
       split_type: inserted.split_type,
       source: inserted.source,
       updated_at: inserted.updated_at,
+      saved_from: buildSharedSaveOrigin(item, friend_share_id),
     } : null
   } else if (item.item_type === 'saved_meal') {
     const newMeal = normalizeSavedMealTemplate({
       ...data,
       id: crypto.randomUUID(),
       updated_at: new Date().toISOString(),
+      saved_from: buildSharedSaveOrigin(item, friend_share_id),
     }, item.item_name)
     try {
       await mergeSavedMealIntoUserState(db, user.id, newMeal as unknown as Record<string, unknown>)

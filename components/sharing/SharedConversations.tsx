@@ -358,6 +358,25 @@ function normalizeImportedSavedMeal(raw: unknown): SavedMealTemplate | null {
       }
     }),
     updated_at: typeof meal.updated_at === 'string' && meal.updated_at ? meal.updated_at : new Date().toISOString(),
+    saved_from: meal.saved_from && typeof meal.saved_from === 'object'
+      ? meal.saved_from as SavedMealTemplate['saved_from']
+      : undefined,
+  }
+}
+
+function withSharedSaveOrigin<T extends SavedMealTemplate | Workout>(
+  item: T,
+  entry: Pick<Extract<TimelineEntry, { type: 'share' }>, 'friend_share_id' | 'share_id' | 'item_name'>
+): T {
+  return {
+    ...item,
+    saved_from: {
+      source: 'shared',
+      label: entry.item_name,
+      share_id: entry.share_id,
+      friend_share_id: entry.friend_share_id,
+      saved_at: new Date().toISOString(),
+    },
   }
 }
 
@@ -735,12 +754,12 @@ export function SharedConversations() {
     try {
       if (isDemoMode) {
         if (previewEntry.item_type === 'saved_meal' && previewEntry.item_data) {
-          const meal = previewEntry.item_data as SavedMealTemplate
+          const meal = withSharedSaveOrigin(previewEntry.item_data as unknown as SavedMealTemplate, previewEntry)
           if (!savedMeals.some((savedMeal) => savedMeal.id === meal.id)) addSavedMeal(meal)
         }
 
         if (previewEntry.item_type === 'workout' && previewEntry.item_data) {
-          const workout = previewEntry.item_data as Workout
+          const workout = withSharedSaveOrigin(previewEntry.item_data as unknown as Workout, previewEntry)
           if (!customWorkouts.some((savedWorkout) => savedWorkout.id === workout.id)) addCustomWorkout(workout)
         }
 
@@ -775,11 +794,11 @@ export function SharedConversations() {
 
       if (data.item_type === 'saved_meal' && data.imported_item) {
         const importedMeal = normalizeImportedSavedMeal(data.imported_item)
-        if (importedMeal && !savedMeals.some((meal) => meal.id === importedMeal.id)) addSavedMeal(importedMeal)
+        if (importedMeal && !savedMeals.some((meal) => meal.id === importedMeal.id)) addSavedMeal(withSharedSaveOrigin(importedMeal, previewEntry))
       }
 
       if (data.item_type === 'workout' && data.imported_item) {
-        const importedWorkout = data.imported_item as Workout
+        const importedWorkout = withSharedSaveOrigin(data.imported_item as Workout, previewEntry)
         if (!customWorkouts.some((workout) => workout.id === importedWorkout.id)) addCustomWorkout(importedWorkout)
       }
 
